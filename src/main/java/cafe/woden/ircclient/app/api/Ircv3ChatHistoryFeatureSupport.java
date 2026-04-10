@@ -4,14 +4,16 @@ import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Shared chathistory availability support for outbound commands and history loading. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class Ircv3ChatHistoryFeatureSupport implements Ircv3FeatureAvailabilitySupport {
 
   private static final String FEATURE_ID = "chathistory";
@@ -22,29 +24,15 @@ public final class Ircv3ChatHistoryFeatureSupport implements Ircv3FeatureAvailab
   private static final String REMOTE_HISTORY_UNAVAILABLE_MESSAGE =
       "remote history is not available on this server.";
 
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+
+  @Qualifier("ircNegotiatedFeaturePort")
+  @NonNull
   private final IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
+
+  @Qualifier("ircClientService")
+  @NonNull
   private final IrcBouncerPlaybackPort bouncerPlaybackPort;
-
-  public Ircv3ChatHistoryFeatureSupport(IrcNegotiatedFeaturePort ircNegotiatedFeaturePort) {
-    this(null, ircNegotiatedFeaturePort, null);
-  }
-
-  public Ircv3ChatHistoryFeatureSupport(
-      IrcNegotiatedFeaturePort ircNegotiatedFeaturePort,
-      IrcBouncerPlaybackPort bouncerPlaybackPort) {
-    this(null, ircNegotiatedFeaturePort, bouncerPlaybackPort);
-  }
-
-  @Autowired
-  public Ircv3ChatHistoryFeatureSupport(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort ircNegotiatedFeaturePort,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlaybackPort) {
-    this.backendCapabilityPolicy = backendCapabilityPolicy;
-    this.ircNegotiatedFeaturePort = ircNegotiatedFeaturePort;
-    this.bouncerPlaybackPort = bouncerPlaybackPort;
-  }
 
   @Override
   public String featureId() {
@@ -57,7 +45,7 @@ public final class Ircv3ChatHistoryFeatureSupport implements Ircv3FeatureAvailab
     if (sid.isEmpty()) {
       return false;
     }
-    return ircNegotiatedFeaturePort != null && ircNegotiatedFeaturePort.isChatHistoryAvailable(sid);
+    return ircNegotiatedFeaturePort.isChatHistoryAvailable(sid);
   }
 
   public boolean isRemoteHistoryAvailable(String serverId) {
@@ -76,7 +64,7 @@ public final class Ircv3ChatHistoryFeatureSupport implements Ircv3FeatureAvailab
     if (sid.isEmpty()) {
       return false;
     }
-    return bouncerPlaybackPort != null && bouncerPlaybackPort.isZncPlaybackAvailable(sid);
+    return bouncerPlaybackPort.isZncPlaybackAvailable(sid);
   }
 
   @Override
@@ -93,18 +81,12 @@ public final class Ircv3ChatHistoryFeatureSupport implements Ircv3FeatureAvailab
   }
 
   public String unavailableMessage(String serverId) {
-    if (backendCapabilityPolicy != null) {
-      return backendCapabilityPolicy.featureUnavailableMessage(
-          serverId, negotiationUnavailableMessage());
-    }
-    return negotiationUnavailableMessage();
+    return backendCapabilityPolicy.featureUnavailableMessage(
+        serverId, negotiationUnavailableMessage());
   }
 
   public String unavailableReasonForHelp(String serverId) {
-    if (backendCapabilityPolicy != null) {
-      return backendCapabilityPolicy.unavailableReasonForHelp(serverId, requirementHint());
-    }
-    return requirementHint();
+    return backendCapabilityPolicy.unavailableReasonForHelp(serverId, requirementHint());
   }
 
   private static String normalizeServerId(String serverId) {

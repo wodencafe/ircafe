@@ -11,11 +11,8 @@ import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.io.BufferedWriter;
 import java.net.InetAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
@@ -28,23 +25,14 @@ class DccOfferCommandSupportTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final DccTransferStore dccTransferStore = mock(DccTransferStore.class);
   private final ExecutorService io = mock(ExecutorService.class);
-
-  private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, DccChatSession> chatSessions = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, ServerSocket> outgoingChatListeners =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, ServerSocket> outgoingSendListeners =
-      new ConcurrentHashMap<>();
+  private final DccRuntimeRegistry dccRuntimeRegistry = new DccRuntimeRegistry();
 
   private final DccCommandSupport dccCommandSupport =
       new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
   private final DccChatSessionSupport dccChatSessionSupport =
-      new DccChatSessionSupport(ui, mediatorIrc, io, dccCommandSupport, chatSessions);
+      new DccChatSessionSupport(ui, mediatorIrc, io, dccCommandSupport, dccRuntimeRegistry);
   private final DccFileTransferIoSupport dccFileTransferIoSupport =
-      new DccFileTransferIoSupport(ui, dccCommandSupport, 20_000, 30_000, 64 * 1024);
+      new DccFileTransferIoSupport(ui, dccCommandSupport);
   private final DccOfferCommandSupport support =
       new DccOfferCommandSupport(
           ui,
@@ -54,14 +42,7 @@ class DccOfferCommandSupportTest {
           dccCommandSupport,
           dccChatSessionSupport,
           dccFileTransferIoSupport,
-          pendingChatOffers,
-          pendingSendOffers,
-          chatSessions,
-          outgoingChatListeners,
-          outgoingSendListeners,
-          120_000,
-          20_000,
-          30_000);
+          dccRuntimeRegistry);
 
   @Test
   void acceptChatOfferReportsWhenNoPendingOfferExists() {
@@ -75,33 +56,39 @@ class DccOfferCommandSupportTest {
   @Test
   void listDccStateReportsCountsAndEntries() throws Exception {
     TargetRef out = new TargetRef("libera", "#chat");
-    chatSessions.put(
-        DccCommandSupport.peerKey("libera", "carol"),
-        new DccChatSession(
-            "libera",
-            "carol",
-            mock(Socket.class),
-            mock(BufferedWriter.class),
-            new Object(),
-            new AtomicBoolean(false)));
-    pendingChatOffers.put(
-        DccCommandSupport.peerKey("libera", "alice"),
-        new PendingChatOffer(
-            "libera",
-            "alice",
-            InetAddress.getByName("203.0.113.7"),
-            4000,
-            Instant.parse("2026-03-20T00:00:00Z")));
-    pendingSendOffers.put(
-        DccCommandSupport.peerKey("libera", "bob"),
-        new PendingSendOffer(
-            "libera",
-            "bob",
-            "notes.txt",
-            InetAddress.getByName("203.0.113.8"),
-            5000,
-            2048L,
-            Instant.parse("2026-03-20T00:00:01Z")));
+    dccRuntimeRegistry
+        .chatSessions()
+        .put(
+            DccCommandSupport.peerKey("libera", "carol"),
+            new DccChatSession(
+                "libera",
+                "carol",
+                mock(Socket.class),
+                mock(BufferedWriter.class),
+                new Object(),
+                new AtomicBoolean(false)));
+    dccRuntimeRegistry
+        .pendingChatOffers()
+        .put(
+            DccCommandSupport.peerKey("libera", "alice"),
+            new PendingChatOffer(
+                "libera",
+                "alice",
+                InetAddress.getByName("203.0.113.7"),
+                4000,
+                Instant.parse("2026-03-20T00:00:00Z")));
+    dccRuntimeRegistry
+        .pendingSendOffers()
+        .put(
+            DccCommandSupport.peerKey("libera", "bob"),
+            new PendingSendOffer(
+                "libera",
+                "bob",
+                "notes.txt",
+                InetAddress.getByName("203.0.113.8"),
+                5000,
+                2048L,
+                Instant.parse("2026-03-20T00:00:01Z")));
 
     support.listDccState("libera", out);
 

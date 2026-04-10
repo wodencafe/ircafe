@@ -25,28 +25,28 @@ class ServerTreeTreeInteractionBindingsFactoryTest {
     AtomicInteger refreshCalls = new AtomicInteger();
 
     TreeNodeActions<TargetRef> nodeActions =
-        ServerTreeTreeInteractionBindingsFactory.create(
-            new ServerTreeTreeInteractionBindingsFactory.Inputs(
-                new ServerTreeNodeActionsFactory(),
-                tree,
-                model,
-                node -> false,
-                node -> false,
-                ref -> false,
-                node -> null,
-                node -> "",
-                node -> "",
-                ref -> false,
-                ref -> {},
-                ref -> {},
-                node -> false,
-                node -> false,
-                node -> "",
-                serverId -> {},
-                serverId -> {},
-                serverId -> {},
-                refreshCalls::incrementAndGet,
-                () -> {}));
+        new ServerTreeTreeInteractionBindingsFactory(new ServerTreeNodeActionsFactory())
+            .create(
+                new ServerTreeTreeInteractionBindingsFactory.Inputs(
+                    tree,
+                    model,
+                    node -> false,
+                    node -> false,
+                    ref -> false,
+                    node -> null,
+                    node -> "",
+                    node -> "",
+                    ref -> false,
+                    ref -> {},
+                    ref -> {},
+                    node -> false,
+                    node -> false,
+                    node -> "",
+                    serverId -> {},
+                    serverId -> {},
+                    serverId -> {},
+                    refreshCalls::incrementAndGet,
+                    () -> {}));
 
     assertNotNull(nodeActions);
     assertNotNull(

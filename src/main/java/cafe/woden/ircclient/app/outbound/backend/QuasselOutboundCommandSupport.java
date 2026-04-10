@@ -8,21 +8,18 @@ import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselOutboundCommandSupport {
   private final ServerCatalog serverCatalog;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-
-  QuasselOutboundCommandSupport(
-      ServerCatalog serverCatalog, OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
-    this.serverCatalog = serverCatalog;
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-  }
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
 
   boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag, UiPort ui) {
     return ensureQuasselServerBackend(serverId, out, null, statusTag, ui);

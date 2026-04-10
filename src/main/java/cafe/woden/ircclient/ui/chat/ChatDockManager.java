@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
@@ -57,7 +56,6 @@ public class ChatDockManager {
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
   private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final Function<String, String> currentNickLookup;
   private final BackendUiProfileProvider backendUiProfileProvider;
@@ -96,7 +94,7 @@ public class ChatDockManager {
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       IrcCurrentNickPort currentNickPort,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
@@ -114,8 +112,8 @@ public class ChatDockManager {
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
-    this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
-    this.readMarkerFeatureSupport = new Ircv3ReadMarkerFeatureSupport(this.readMarkerPort);
+    this.readMarkerFeatureSupport =
+        java.util.Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
     this.currentNickLookup =
         currentNickPort == null
             ? serverId -> ""
@@ -408,7 +406,7 @@ public class ChatDockManager {
             activationBus::activate,
             outboundBus,
             typingPort,
-            readMarkerPort,
+            readMarkerFeatureSupport,
             messageActionCapabilityPolicy,
             redactionAuditService,
             backendUiProfileProvider::profileForServer,

@@ -17,7 +17,8 @@ class OutboundBackendFeatureRegistryTest {
   @Test
   void adapterDefaultsToNoFeaturesWhenBackendHasNoAdapter() {
     OutboundBackendFeatureRegistry registry =
-        new OutboundBackendFeatureRegistry(List.of(new MatrixOutboundBackendFeatureAdapter()));
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.outboundBackendFeatureRegistry(
+            List.of(new MatrixOutboundBackendFeatureAdapter()));
 
     OutboundBackendFeatureAdapter ircAdapter =
         registry.adapterFor(IrcProperties.Server.Backend.IRC);
@@ -28,7 +29,7 @@ class OutboundBackendFeatureRegistryTest {
   @Test
   void matrixAndQuasselAdaptersExposeBackendSpecificFeatures() {
     OutboundBackendFeatureRegistry registry =
-        new OutboundBackendFeatureRegistry(
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.outboundBackendFeatureRegistry(
             List.of(
                 new MatrixOutboundBackendFeatureAdapter(),
                 new QuasselOutboundBackendFeatureAdapter()));
@@ -64,7 +65,9 @@ class OutboundBackendFeatureRegistryTest {
 
     assertThrows(
         IllegalStateException.class,
-        () -> new OutboundBackendFeatureRegistry(List.of(first, second)));
+        () ->
+            cafe.woden.ircclient.app.outbound.TestBackendSupport.outboundBackendFeatureRegistry(
+                List.of(first, second)));
   }
 
   @Test
@@ -83,7 +86,8 @@ class OutboundBackendFeatureRegistryTest {
         };
 
     OutboundBackendFeatureRegistry registry =
-        new OutboundBackendFeatureRegistry(List.of(pluginAdapter));
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.outboundBackendFeatureRegistry(
+            List.of(pluginAdapter));
 
     assertTrue(registry.adapterFor("plugin").supportsSemanticUpload());
   }

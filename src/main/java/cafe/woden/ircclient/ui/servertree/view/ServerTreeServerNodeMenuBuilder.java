@@ -23,8 +23,10 @@ import javax.swing.JPopupMenu;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /** Builds server-node and interceptor-group context menus for server tree. */
+@Component
 public final class ServerTreeServerNodeMenuBuilder {
 
   private static final Logger log = LoggerFactory.getLogger(ServerTreeServerNodeMenuBuilder.class);
@@ -308,13 +310,8 @@ public final class ServerTreeServerNodeMenuBuilder {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeServerNodeMenuBuilder(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  JPopupMenu buildServerNodeMenu(DefaultMutableTreeNode node) {
+  JPopupMenu buildServerNodeMenu(Context context, DefaultMutableTreeNode node) {
+    Objects.requireNonNull(context, "context");
     String serverId = Objects.toString(node.getUserObject(), "").trim();
     if (serverId.isEmpty()) return null;
 
@@ -407,13 +404,14 @@ public final class ServerTreeServerNodeMenuBuilder {
       menu.add(startupAutoConnect);
     }
 
-    addEphemeralAutoConnectToggleIfNeeded(menu, serverId);
+    addEphemeralAutoConnectToggleIfNeeded(context, menu, serverId);
 
     return menu;
   }
 
-  JPopupMenu buildInterceptorsGroupMenu(DefaultMutableTreeNode node) {
-    String scopeServerId = interceptorScopeServerIdForNode(node);
+  JPopupMenu buildInterceptorsGroupMenu(Context context, DefaultMutableTreeNode node) {
+    Objects.requireNonNull(context, "context");
+    String scopeServerId = interceptorScopeServerIdForNode(context, node);
     if (scopeServerId.isEmpty()) return null;
 
     JPopupMenu menu = new JPopupMenu();
@@ -426,7 +424,7 @@ public final class ServerTreeServerNodeMenuBuilder {
     return menu;
   }
 
-  private String interceptorScopeServerIdForNode(DefaultMutableTreeNode node) {
+  private String interceptorScopeServerIdForNode(Context context, DefaultMutableTreeNode node) {
     if (node == null) return "";
     Object userObject = node.getUserObject();
     if (userObject instanceof ServerTreeNodeData nodeData) {
@@ -439,7 +437,8 @@ public final class ServerTreeServerNodeMenuBuilder {
     return InterceptorScope.normalizeScopeServerId(serverId);
   }
 
-  private void addEphemeralAutoConnectToggleIfNeeded(JPopupMenu menu, String serverId) {
+  private void addEphemeralAutoConnectToggleIfNeeded(
+      Context context, JPopupMenu menu, String serverId) {
     String backendId = normalizeBackendId(context.backendIdForEphemeralServer(serverId));
     if (backendId.isEmpty()) return;
 

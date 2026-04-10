@@ -16,7 +16,6 @@ import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -27,11 +26,10 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
-import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeCompositionAssembler;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborators;
-import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
@@ -61,7 +59,6 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibility
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutOrchestrator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
@@ -101,12 +98,11 @@ import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeSettingsSynchronizer;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellRenderer;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeHeaderControls;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -135,6 +131,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Function;
 import javax.swing.Action;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.JViewport;
@@ -205,8 +202,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private AutoCloseable treeWheelSelectionDecorator;
 
-  private final ServerTreeNodeActionsFactory nodeActionsFactory =
-      new ServerTreeNodeActionsFactory();
   private final TreeNodeActions<TargetRef> nodeActions;
   private final ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator =
       new ServerTreeSelectionBroadcastCoordinator();
@@ -244,7 +239,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         public String getToolTipText(MouseEvent event) {
           return ServerTreeDockable.this.tooltipResolver == null
               ? null
-              : ServerTreeDockable.this.tooltipResolver.toolTipForEvent(event);
+              : ServerTreeDockable.this.tooltipResolver.apply(event);
         }
       };
   private final JScrollPane treeScroll = new JScrollPane(tree);
@@ -271,7 +266,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeUiHooks uiHooks;
   private final ServerTreeRuntimeState runtimeState;
-  private final ServerTreeEdtExecutor edtExecutor = new ServerTreeEdtExecutor();
+
   private final Timer typingActivityTimer;
   private final Set<DefaultMutableTreeNode> typingActivityNodes = new HashSet<>();
   private final ServerTreeTypingActivityManager typingActivityManager;
@@ -302,8 +297,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeStatusLabelManager statusLabelManager;
   private final ServerTreeNetworkGroupManager networkGroupManager;
   private final ServerTreeServerStateCleaner serverStateCleaner;
-  private final ServerTreeServerNodeBuilder serverNodeBuilder;
-
   private final ServerTreeServerLifecycleFacade serverLifecycleFacade;
   private final ServerTreeServerParentResolver serverParentResolver;
   private final ServerTreeServerLabelPolicy serverLabelPolicy;
@@ -341,8 +334,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
 
-  private final ServerTreeTooltipResolver tooltipResolver;
-  private final ServerTreeContextMenuBuilder contextMenuBuilder;
+  private final Function<MouseEvent, String> tooltipResolver;
+  private final Function<TreePath, JPopupMenu> contextMenuBuilder;
   private final ServerTreeExternalStreamBinder externalStreamBinder;
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
@@ -358,67 +351,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile BiFunction<String, String, String> quasselNetworkTooltipProvider =
       (serverId, networkToken) -> "";
   private boolean startupSelectionCompleted = false;
-
-  public ServerTreeDockable(
-      ServerCatalog serverCatalog,
-      ServerTreeRuntimeConfigPort runtimeConfig,
-      LogProperties logProps,
-      SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect,
-      ConnectButton connectBtn,
-      DisconnectButton disconnectBtn,
-      NotificationStore notificationStore,
-      InterceptorStore interceptorStore,
-      UiSettingsBus settingsBus,
-      ServerDialogs serverDialogs) {
-    this(
-        serverCatalog,
-        runtimeConfig,
-        logProps,
-        null,
-        sojuAutoConnect,
-        zncAutoConnect,
-        connectBtn,
-        disconnectBtn,
-        notificationStore,
-        interceptorStore,
-        settingsBus,
-        serverDialogs,
-        null,
-        null,
-        Ircv3ExtensionCatalog.builtInCatalog());
-  }
-
-  public ServerTreeDockable(
-      ServerCatalog serverCatalog,
-      ServerTreeRuntimeConfigPort runtimeConfig,
-      LogProperties logProps,
-      GenericBouncerAutoConnectStore genericAutoConnect,
-      SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect,
-      ConnectButton connectBtn,
-      DisconnectButton disconnectBtn,
-      NotificationStore notificationStore,
-      InterceptorStore interceptorStore,
-      UiSettingsBus settingsBus,
-      ServerDialogs serverDialogs) {
-    this(
-        serverCatalog,
-        runtimeConfig,
-        logProps,
-        genericAutoConnect,
-        sojuAutoConnect,
-        zncAutoConnect,
-        connectBtn,
-        disconnectBtn,
-        notificationStore,
-        interceptorStore,
-        settingsBus,
-        serverDialogs,
-        null,
-        null,
-        Ircv3ExtensionCatalog.builtInCatalog());
-  }
 
   @org.springframework.beans.factory.annotation.Autowired
   public ServerTreeDockable(
@@ -436,7 +368,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerDialogs serverDialogs,
       BackendUiProfileProvider backendUiProfileProvider,
       JfrRuntimeEventsService jfrRuntimeEventsService,
-      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
+      ServerTreeNetworkInfoDialogBuilder networkInfoDialogBuilder,
+      ServerTreeCellPresentationPolicy cellPresentationPolicy,
+      ServerTreeEdtExecutor edtExecutor,
+      ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
 
     this.runtimeConfig = runtimeConfig;
@@ -471,8 +406,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             OTHER_GROUP_LABEL,
             uiHooks::isServerNode);
     ServerTreeLayoutCollaborators layoutCollaborators =
-        ServerTreeLayoutCollaboratorsFactory.create(
-            runtimeConfig,
+        compositionAssembler.createLayoutCollaborators(
             runtimeConfig,
             ServerTreeBuiltInVisibilityCoordinator.context(
                 ServerTreeDockable::normalizeServerId, servers::keySet, this::syncUiLeafVisibility),
@@ -569,25 +503,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             autoConnectStoreByBackendId);
 
     this.networkInfoDialogBuilder =
-        new ServerTreeNetworkInfoDialogBuilder(
-            runtimeConfig,
-            ServerTreeNetworkInfoDialogBuilder.context(
-                uiHooks::connectionStateForServer,
-                runtimeState::desiredOnlineForServer,
-                serverId ->
-                    backendUiProfileProvider == null
-                        ? ""
-                        : backendUiProfileProvider.backendIdForServer(serverId),
-                serverId ->
-                    backendUiProfileProvider == null
-                        ? ""
-                        : backendUiProfileProvider.backendDisplayNameForServer(serverId),
-                serverLabelPolicy::prettyServerLabel,
-                runtimeState::connectionDiagnosticsTipForServer,
-                (serverId, capability, enable) ->
-                    requestEmitter.emitIrcv3CapabilityToggle(
-                        new Ircv3CapabilityToggleRequest(serverId, capability, enable))),
-            ircv3ExtensionCatalog);
+        Objects.requireNonNull(networkInfoDialogBuilder, "networkInfoDialogBuilder");
     this.interceptorActions =
         new ServerTreeInterceptorActions(
             this,
@@ -650,7 +566,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this::rootSiblingNodeKindForNode,
             networkGroupManager::backendIdForNetworksGroupNode);
     ServerTreeStateInteractionCollaborators stateInteractionCollaborators =
-        ServerTreeStateInteractionCollaboratorsFactory.create(
+        compositionAssembler.createStateInteractionCollaborators(
             new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
                 tree,
                 model,
@@ -686,7 +602,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverActionOverlay = stateInteractionCollaborators.serverActionOverlay();
     this.serverRuntimeUiUpdater = stateInteractionCollaborators.serverRuntimeUiUpdater();
     this.serverStateCleaner = stateInteractionCollaborators.serverStateCleaner();
-    this.serverNodeBuilder = new ServerTreeServerNodeBuilder();
     this.serverParentResolver =
         new ServerTreeServerParentResolver(
             originByServerIdByBackendId,
@@ -867,7 +782,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.rowInteractionHandler = stateInteractionCollaborators.rowInteractionHandler();
     ServerTreeViewInteractionCollaborators viewInteractionCollaborators =
-        ServerTreeViewInteractionCollaboratorsFactory.create(
+        compositionAssembler.createViewInteractionCollaborators(
             new ServerTreeViewInteractionCollaboratorsFactory.Inputs(
                 tree,
                 rowInteractionHandler,
@@ -916,9 +831,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
     this.contextMenuBuilder = viewInteractionCollaborators.contextMenuBuilder();
     ServerTreeLifecycleSettingsCollaborators lifecycleSettingsCollaborators =
-        ServerTreeLifecycleSettingsCollaboratorsFactory.create(
+        compositionAssembler.createLifecycleSettingsCollaborators(
             new ServerTreeLifecycleSettingsCollaboratorsFactory.Inputs(
-                serverNodeBuilder,
                 CHANNEL_LIST_LABEL,
                 WEECHAT_FILTERS_LABEL,
                 IGNORES_LABEL,
@@ -966,7 +880,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverLifecycleFacade = lifecycleSettingsCollaborators.serverLifecycleFacade();
     this.settingsSynchronizer = lifecycleSettingsCollaborators.settingsSynchronizer();
     this.targetLifecycleCoordinator =
-        ServerTreeTargetLifecycleCoordinatorFactory.create(
+        compositionAssembler.createTargetLifecycleCoordinator(
             new ServerTreeTargetLifecycleCoordinatorFactory.Inputs(
                 servers,
                 leaves,
@@ -1012,7 +926,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeCellRenderer(
             IRC_ROOT_LABEL,
             APPLICATION_ROOT_LABEL,
-            ServerTreeCellRenderer.context(
+            cellPresentationPolicy,
+            ServerTreeCellPresentationPolicy.context(
                 () -> serverTreeNotificationBadgesEnabled,
                 () -> unreadBadgeScalePercent,
                 () -> typingIndicatorStyle,
@@ -1067,7 +982,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     tree.setCellRenderer(treeCellRenderer);
     ServerTreeChannelInteractionCollaborators channelInteractionCollaborators =
-        ServerTreeChannelInteractionCollaboratorsFactory.create(
+        compositionAssembler.createChannelInteractionCollaborators(
             new ServerTreeChannelInteractionCollaboratorsFactory.Inputs(
                 tree,
                 model,
@@ -1098,9 +1013,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.channelInteractionApi = channelInteractionCollaborators.channelInteractionApi();
     this.nodeActions =
-        ServerTreeTreeInteractionBindingsFactory.create(
+        compositionAssembler.createTreeInteractionBindings(
             new ServerTreeTreeInteractionBindingsFactory.Inputs(
-                nodeActionsFactory,
                 tree,
                 model,
                 uiHooks::isServerNode,
@@ -1169,7 +1083,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 rowInteractionHandler::maybeHandleDisconnectedWarningClick,
                 rowInteractionHandler::maybeSelectRowFromLeftClick,
                 rowInteractionHandler::treePathForRowHit,
-                contextMenuBuilder::build,
+                contextMenuBuilder,
                 () -> startupSelectionCompleted,
                 () -> startupSelectionCompleted = true,
                 this::isPathInCurrentTreeModel,
@@ -1522,7 +1436,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private void openServerInfoDialog(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    networkInfoDialogBuilder.open(this, sid, runtimeState.metadataForServer(sid));
+    networkInfoDialogBuilder.open(
+        this,
+        ServerTreeNetworkInfoDialogBuilder.context(
+            uiHooks::connectionStateForServer,
+            runtimeState::desiredOnlineForServer,
+            server ->
+                backendUiProfileProvider == null
+                    ? ""
+                    : backendUiProfileProvider.backendIdForServer(server),
+            server ->
+                backendUiProfileProvider == null
+                    ? ""
+                    : backendUiProfileProvider.backendDisplayNameForServer(server),
+            serverLabelPolicy::prettyServerLabel,
+            runtimeState::connectionDiagnosticsTipForServer,
+            (server, capability, enable) ->
+                requestEmitter.emitIrcv3CapabilityToggle(
+                    new Ircv3CapabilityToggleRequest(server, capability, enable))),
+        sid,
+        runtimeState.metadataForServer(sid));
   }
 
   public void setStatusText(String text) {

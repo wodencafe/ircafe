@@ -14,8 +14,10 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared hard-ignore command flow support for outbound ignore commands. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class IgnoreHardCommandSupport {

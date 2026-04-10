@@ -9,6 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -21,21 +24,31 @@ import org.junit.jupiter.api.Test;
 
 class ChatReadMarkerCoordinatorTest {
 
+  private static Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport(
+      IrcClientService irc, OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
+    return new Ircv3ReadMarkerFeatureSupport(
+        IrcReadMarkerPort.from(irc),
+        backendCapabilityPolicy,
+        new Ircv3CapabilityNameResolverPort() {});
+  }
+
   @Test
   void setFollowTailTransitionSendsReadMarkerWhenAvailable() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef target = new TargetRef("libera", "#ircafe");
     AtomicLong now = new AtomicLong(1_000L);
 
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.sendReadMarker("libera", "#ircafe", Instant.ofEpochMilli(1_000L)))
         .thenReturn(Completable.complete());
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> target,
             offset -> {},
             () -> {},
@@ -53,16 +66,18 @@ class ChatReadMarkerCoordinatorTest {
   void setFollowTailUsesCooldownToSuppressRapidRepeatMarkers() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef target = new TargetRef("libera", "#ircafe");
     AtomicLong now = new AtomicLong(1_000L);
 
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.sendReadMarker(any(), any(), any())).thenReturn(Completable.complete());
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> target,
             offset -> {},
             () -> {},
@@ -84,6 +99,8 @@ class ChatReadMarkerCoordinatorTest {
   void applyReadMarkerViewStateWithUnreadJumpDisablesFollowTailAndScrolls() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef target = new TargetRef("libera", "#ircafe");
     AtomicInteger scrolledOffset = new AtomicInteger(-1);
     AtomicInteger scrollStateUpdates = new AtomicInteger();
@@ -91,7 +108,7 @@ class ChatReadMarkerCoordinatorTest {
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> target,
             scrolledOffset::set,
             scrollStateUpdates::incrementAndGet,
@@ -110,17 +127,19 @@ class ChatReadMarkerCoordinatorTest {
   void applyReadMarkerViewStateSendsMarkerWhenAtBottomAndNoUnreadJump() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef target = new TargetRef("libera", "#ircafe");
     AtomicLong now = new AtomicLong(1_000L);
 
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.sendReadMarker("libera", "#ircafe", Instant.ofEpochMilli(1_000L)))
         .thenReturn(Completable.complete());
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> target,
             offset -> {},
             () -> {},
@@ -137,13 +156,15 @@ class ChatReadMarkerCoordinatorTest {
   void applyReadMarkerViewStateIgnoresTargetsThatAreNotActive() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef active = new TargetRef("libera", "#ircafe");
     TargetRef other = new TargetRef("libera", "#other");
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> active,
             offset -> {},
             () -> {},
@@ -159,17 +180,19 @@ class ChatReadMarkerCoordinatorTest {
   void normalizeReadMarkerCapabilityClearsServerStateAndMarkerUi() {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     IrcClientService irc = mock(IrcClientService.class);
+    OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+        mock(OutboundBackendCapabilityPolicy.class);
     TargetRef target = new TargetRef("libera", "#ircafe");
     AtomicLong now = new AtomicLong(1_000L);
 
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.sendReadMarker("libera", "#ircafe", Instant.ofEpochMilli(1_000L)))
         .thenReturn(Completable.complete());
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            IrcReadMarkerPort.from(irc),
+            readMarkerFeatureSupport(irc, backendCapabilityPolicy),
             () -> target,
             offset -> {},
             () -> {},

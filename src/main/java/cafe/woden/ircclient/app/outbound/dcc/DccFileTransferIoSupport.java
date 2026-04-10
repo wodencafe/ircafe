@@ -15,19 +15,21 @@ import java.nio.file.StandardOpenOption;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared DCC file-transfer socket I/O and progress reporting support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class DccFileTransferIoSupport {
 
   private static final String DCC_TAG = "(dcc)";
+  private static final int CONNECT_TIMEOUT_MS = 20_000;
+  private static final int IO_TIMEOUT_MS = 30_000;
+  private static final int BUFFER_SIZE = 64 * 1024;
 
   @NonNull private final UiPort ui;
   @NonNull private final DccCommandSupport dccCommandSupport;
-  private final int connectTimeoutMs;
-  private final int ioTimeoutMs;
-  private final int bufferSize;
 
   void sendFileToSocket(
       String sid,
@@ -42,7 +44,7 @@ final class DccFileTransferIoSupport {
     int lastReportedPercent = -1;
     try (BufferedInputStream in = new BufferedInputStream(Files.newInputStream(source));
         BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream())) {
-      byte[] buf = new byte[bufferSize];
+      byte[] buf = new byte[BUFFER_SIZE];
       int n;
       while ((n = in.read(buf)) >= 0) {
         out.write(buf, 0, n);
@@ -79,8 +81,8 @@ final class DccFileTransferIoSupport {
     int lastReportedPercent = -1;
 
     try (Socket socket = new Socket()) {
-      socket.connect(new InetSocketAddress(offer.host(), offer.port()), connectTimeoutMs);
-      socket.setSoTimeout(ioTimeoutMs);
+      socket.connect(new InetSocketAddress(offer.host(), offer.port()), CONNECT_TIMEOUT_MS);
+      socket.setSoTimeout(IO_TIMEOUT_MS);
 
       try (BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
           DataOutputStream ack =
@@ -89,7 +91,7 @@ final class DccFileTransferIoSupport {
               new BufferedOutputStream(
                   Files.newOutputStream(
                       destination, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE))) {
-        byte[] buf = new byte[bufferSize];
+        byte[] buf = new byte[BUFFER_SIZE];
         while (expected <= 0L || received < expected) {
           int max =
               (expected > 0L) ? (int) Math.min((long) buf.length, expected - received) : buf.length;

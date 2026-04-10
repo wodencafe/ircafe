@@ -2,49 +2,25 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
-import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InterfaceLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Negotiated-feature backed capability policy for transcript message actions. */
 @Component
 @InterfaceLayer
+@RequiredArgsConstructor
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
+  @Qualifier("ircNegotiatedFeaturePort")
   private final IrcNegotiatedFeaturePort irc;
-  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
-  private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
 
-  @Autowired
-  public IrcMessageActionCapabilityPolicy(
-      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
-      Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport,
-      Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport) {
-    this.irc = irc;
-    this.chatHistoryFeatureSupport =
-        chatHistoryFeatureSupport == null
-            ? new Ircv3ChatHistoryFeatureSupport(irc, bouncerPlayback)
-            : chatHistoryFeatureSupport;
-    this.messageRedactionFeatureSupport =
-        messageRedactionFeatureSupport == null
-            ? new Ircv3MessageRedactionFeatureSupport(irc)
-            : messageRedactionFeatureSupport;
-  }
-
-  @Deprecated(forRemoval = false)
-  public IrcMessageActionCapabilityPolicy(
-      IrcNegotiatedFeaturePort irc, IrcBouncerPlaybackPort bouncerPlayback) {
-    this(
-        irc,
-        bouncerPlayback,
-        new Ircv3ChatHistoryFeatureSupport(irc, bouncerPlayback),
-        new Ircv3MessageRedactionFeatureSupport(irc));
-  }
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
+  @NonNull private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
 
   @Override
   public boolean canReply(String serverId) {

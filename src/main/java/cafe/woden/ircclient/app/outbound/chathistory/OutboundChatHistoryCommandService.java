@@ -1,14 +1,10 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
 import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -18,60 +14,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /chathistory command flow and targeted /help chathistory output. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
-  private final IrcClientService irc;
-  private final TargetCoordinator targetCoordinator;
-  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
-  private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
-
-  @Deprecated(forRemoval = false)
-  @Autowired
-  public OutboundChatHistoryCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState) {
-    this(
-        irc,
-        ui,
-        connectionCoordinator,
-        targetCoordinator,
-        chatHistoryRequestRoutingState,
-        new Ircv3ChatHistoryFeatureSupport(IrcNegotiatedFeaturePort.from(irc)));
-  }
-
-  public OutboundChatHistoryCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
-      Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.chatHistoryFeatureSupport =
-        Objects.requireNonNull(chatHistoryFeatureSupport, "chatHistoryFeatureSupport");
-    this.chatHistoryRequestSupport =
-        new OutboundChatHistoryRequestSupport(
-            Objects.requireNonNull(ui, "ui"),
-            Objects.requireNonNull(connectionCoordinator, "connectionCoordinator"),
-            targetCoordinator,
-            Objects.requireNonNull(
-                chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState"),
-            this.chatHistoryFeatureSupport);
-  }
+  @NonNull private final IrcClientService irc;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
+  @NonNull private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
 
   @Override
   public void appendGeneralHelp(TargetRef out) {}

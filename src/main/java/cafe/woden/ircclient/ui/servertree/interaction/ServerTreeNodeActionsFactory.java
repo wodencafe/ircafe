@@ -11,8 +11,10 @@ import java.util.function.Predicate;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import org.springframework.stereotype.Component;
 
 /** Factory for building server-tree node actions wiring. */
+@Component
 public final class ServerTreeNodeActionsFactory {
 
   public record Inputs(

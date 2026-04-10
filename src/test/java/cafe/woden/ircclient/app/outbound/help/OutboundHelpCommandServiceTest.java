@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.app.outbound.support.OutboundCommandAvailabilitySupp
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
@@ -35,22 +37,26 @@ class OutboundHelpCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(
-          List.of(
-              new MatrixOutboundBackendFeatureAdapter(),
-              new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          irc);
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport =
+      new Ircv3ReadMarkerFeatureSupport(
+          IrcReadMarkerPort.from(irc),
+          outboundBackendCapabilityPolicy,
+          new Ircv3CapabilityNameResolverPort() {});
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
   private final OutboundHelpContributor uploadHelpContributor =
@@ -87,8 +93,7 @@ class OutboundHelpCommandServiceTest {
       };
   private final OutboundReadMarkerCommandService readMarkerCommandService =
       new OutboundReadMarkerCommandService(
-          IrcReadMarkerPort.from(irc),
-          outboundBackendCapabilityPolicy,
+          readMarkerFeatureSupport,
           outboundCommandAvailabilitySupport,
           outboundConnectionStatusSupport,
           ui,

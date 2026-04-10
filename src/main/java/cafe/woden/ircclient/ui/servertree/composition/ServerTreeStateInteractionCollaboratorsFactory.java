@@ -26,13 +26,13 @@ import java.util.function.IntSupplier;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles state/interaction collaborators for server tree construction. */
+@Component
 public final class ServerTreeStateInteractionCollaboratorsFactory {
 
-  private ServerTreeStateInteractionCollaboratorsFactory() {}
-
-  public static ServerTreeStateInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeStateInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     ServerTreeServerActionOverlay serverActionOverlay =

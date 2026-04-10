@@ -20,10 +20,21 @@ class IgnoreApiDependencySurfaceTest {
   }
 
   @Test
-  void outboundIgnoreCommandServiceDependsOnSplitIgnorePortsOnly() {
-    assertConstructorIncludes(OutboundIgnoreCommandService.class, IgnoreListQueryPort.class);
-    assertConstructorIncludes(OutboundIgnoreCommandService.class, IgnoreListCommandPort.class);
+  void outboundIgnoreCommandBeansDependOnSplitIgnorePortsOnly() {
+    Class<?> ignoreHardCommandSupport =
+        type("cafe.woden.ircclient.app.outbound.ignore.IgnoreHardCommandSupport");
+    Class<?> ignoreSoftCommandSupport =
+        type("cafe.woden.ircclient.app.outbound.ignore.IgnoreSoftCommandSupport");
+
+    assertConstructorIncludes(OutboundIgnoreCommandService.class, ignoreHardCommandSupport);
+    assertConstructorIncludes(OutboundIgnoreCommandService.class, ignoreSoftCommandSupport);
+    assertConstructorIncludes(ignoreHardCommandSupport, IgnoreListQueryPort.class);
+    assertConstructorIncludes(ignoreHardCommandSupport, IgnoreListCommandPort.class);
+    assertConstructorIncludes(ignoreSoftCommandSupport, IgnoreListQueryPort.class);
+    assertConstructorIncludes(ignoreSoftCommandSupport, IgnoreListCommandPort.class);
     assertNoIgnoreInternalsInTypeSurface(OutboundIgnoreCommandService.class);
+    assertNoIgnoreInternalsInTypeSurface(ignoreHardCommandSupport);
+    assertNoIgnoreInternalsInTypeSurface(ignoreSoftCommandSupport);
   }
 
   private static void assertConstructorIncludes(Class<?> type, Class<?> dependency) {
@@ -43,6 +54,14 @@ class IgnoreApiDependencySurfaceTest {
       assertTrue(
           name.startsWith("cafe.woden.ircclient.ignore.api"),
           () -> type.getSimpleName() + " should not reference ignore internals: " + name);
+    }
+  }
+
+  private static Class<?> type(String className) {
+    try {
+      return Class.forName(className);
+    } catch (ClassNotFoundException ex) {
+      throw new AssertionError("Expected class to exist: " + className, ex);
     }
   }
 }

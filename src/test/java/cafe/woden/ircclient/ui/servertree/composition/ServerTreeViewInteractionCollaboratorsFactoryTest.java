@@ -15,7 +15,13 @@ import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.JTree;
@@ -32,48 +38,55 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
     JTree tree = new JTree(model);
 
     ServerTreeViewInteractionCollaborators collaborators =
-        ServerTreeViewInteractionCollaboratorsFactory.create(
-            new ServerTreeViewInteractionCollaboratorsFactory.Inputs(
-                tree,
-                mock(ServerTreeRowInteractionHandler.class),
-                mock(ServerTreeUiHooks.class),
-                mock(ServerTreeNodeAccess.class),
-                mock(ServerTreeNetworkGroupManager.class),
-                mock(ServerTreeNodeClassifier.class),
-                mock(ServerTreeRuntimeState.class),
-                mock(ServerTreeServerLabelPolicy.class),
-                new HashMap<>(),
-                __ -> "",
-                new HashMap<>(),
-                Map.of(),
-                Map.of(),
-                () -> true,
-                mock(ServerTreeServerActionOverlay.class),
-                null,
-                () -> null,
-                () -> null,
-                __ -> {},
-                mock(ServerTreeRequestEmitter.class),
-                null,
-                mock(ServerTreeInterceptorActions.class),
-                null,
-                new javax.swing.JPanel(),
-                null,
-                mock(ServerTreeNodeBadgeUpdater.class),
-                mock(ServerTreeBouncerDetachPolicy.class),
-                __ -> false,
-                __ -> false,
-                (ref, enabled) -> {},
-                __ -> false,
-                (ref, enabled) -> {},
-                __ -> false,
-                (ref, enabled) -> {},
-                mock(ServerTreeRequestStreams.class),
-                __ -> false,
-                __ -> false,
-                __ -> false,
-                __ -> false,
-                (serverId, networkToken) -> ""));
+        new ServerTreeViewInteractionCollaboratorsFactory(
+                new ServerTreeContextMenuBuilder(
+                    new ServerTreeServerNodeMenuBuilder(),
+                    new ServerTreeTargetNodeMenuBuilder(),
+                    new ServerTreeQuasselNetworkNodeMenuBuilder()),
+                new ServerTreeTooltipResolver(),
+                new ServerTreeTooltipTextPolicy())
+            .create(
+                new ServerTreeViewInteractionCollaboratorsFactory.Inputs(
+                    tree,
+                    mock(ServerTreeRowInteractionHandler.class),
+                    mock(ServerTreeUiHooks.class),
+                    mock(ServerTreeNodeAccess.class),
+                    mock(ServerTreeNetworkGroupManager.class),
+                    mock(ServerTreeNodeClassifier.class),
+                    mock(ServerTreeRuntimeState.class),
+                    mock(ServerTreeServerLabelPolicy.class),
+                    new HashMap<>(),
+                    __ -> "",
+                    new HashMap<>(),
+                    Map.of(),
+                    Map.of(),
+                    () -> true,
+                    mock(ServerTreeServerActionOverlay.class),
+                    null,
+                    () -> null,
+                    () -> null,
+                    __ -> {},
+                    mock(ServerTreeRequestEmitter.class),
+                    null,
+                    mock(ServerTreeInterceptorActions.class),
+                    null,
+                    new javax.swing.JPanel(),
+                    null,
+                    mock(ServerTreeNodeBadgeUpdater.class),
+                    mock(ServerTreeBouncerDetachPolicy.class),
+                    __ -> false,
+                    __ -> false,
+                    (ref, enabled) -> {},
+                    __ -> false,
+                    (ref, enabled) -> {},
+                    __ -> false,
+                    (ref, enabled) -> {},
+                    mock(ServerTreeRequestStreams.class),
+                    __ -> false,
+                    __ -> false,
+                    __ -> false,
+                    __ -> false,
+                    (serverId, networkToken) -> ""));
 
     assertNotNull(collaborators.tooltipProvider());
     assertNotNull(collaborators.tooltipResolver());

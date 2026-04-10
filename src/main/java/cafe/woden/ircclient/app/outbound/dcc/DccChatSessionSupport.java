@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.outbound.dcc;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -17,8 +18,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** Shared active DCC chat session lifecycle support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class DccChatSessionSupport {
@@ -27,13 +31,21 @@ final class DccChatSessionSupport {
   private static final String DCC_ERR_TAG = "(dcc-error)";
 
   @NonNull private final UiPort ui;
-  @NonNull private final IrcMediatorInteractionPort mediatorIrc;
-  @NonNull private final ExecutorService io;
+
+  @Qualifier("ircMediatorInteractionPort")
+  @NonNull
+  private final IrcMediatorInteractionPort mediatorIrc;
+
+  @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR)
+  @NonNull
+  private final ExecutorService io;
+
   @NonNull private final DccCommandSupport dccCommandSupport;
-  @NonNull private final ConcurrentMap<String, DccChatSession> chatSessions;
+  @NonNull private final DccRuntimeRegistry dccRuntimeRegistry;
 
   boolean sendChatMessage(String sid, String nick, String message) {
     String key = DccCommandSupport.peerKey(sid, nick);
+    ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     DccChatSession session = chatSessions.get(key);
     if (session == null) {
       return false;
@@ -59,6 +71,7 @@ final class DccChatSessionSupport {
   void startChatSession(String sid, String nick, Socket socket, String connectedText)
       throws IOException {
     String key = DccCommandSupport.peerKey(sid, nick);
+    ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     DccChatSession previous = chatSessions.remove(key);
     if (previous != null) {
       closeQuietly(previous.socket());
@@ -110,6 +123,7 @@ final class DccChatSessionSupport {
 
   boolean closeChatSession(String sid, String nick, String message, boolean announce) {
     String key = DccCommandSupport.peerKey(sid, nick);
+    ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     DccChatSession session = chatSessions.remove(key);
     if (session == null) return false;
     session.closing().set(true);
@@ -131,6 +145,7 @@ final class DccChatSessionSupport {
   }
 
   void shutdown() {
+    ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     for (DccChatSession session : chatSessions.values()) {
       if (session != null) {
         session.closing().set(true);
@@ -142,6 +157,7 @@ final class DccChatSessionSupport {
 
   private void readDccChatLoop(String key, DccChatSession session) {
     TargetRef pm = dccCommandSupport.ensurePmTarget(session.serverId(), session.nick());
+    ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     try (BufferedReader reader =
         new BufferedReader(
             new InputStreamReader(session.socket().getInputStream(), StandardCharsets.UTF_8))) {

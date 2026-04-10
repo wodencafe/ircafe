@@ -11,10 +11,8 @@ import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.backend.MatrixOutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendFeatureRegistry;
-import cafe.woden.ircclient.app.outbound.backend.QuasselOutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
@@ -22,7 +20,6 @@ import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -35,31 +32,31 @@ class OutboundMonitorCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator =
       Mockito.mock(ConnectionCoordinator.class);
   private final ServerCatalog serverCatalog = Mockito.mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(
-          List.of(
-              new MatrixOutboundBackendFeatureAdapter(),
-              new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          irc);
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final MonitorRosterPort monitorRosterPort = Mockito.mock(MonitorRosterPort.class);
   private final MonitorFallbackPort monitorFallbackPort = Mockito.mock(MonitorFallbackPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
-
-  private final OutboundMonitorCommandService service =
-      new OutboundMonitorCommandService(
+  private final OutboundMonitorCommandSupport monitorCommandSupport =
+      new OutboundMonitorCommandSupport(
           irc,
           ui,
           targetCoordinator,
           connectionCoordinator,
-          monitorRosterPort,
           monitorFallbackPort,
           outboundBackendCapabilityPolicy);
+
+  private final OutboundMonitorCommandService service =
+      new OutboundMonitorCommandService(monitorRosterPort, monitorCommandSupport);
 
   @AfterEach
   void tearDown() {

@@ -24,9 +24,13 @@ class OutboundIgnoreCommandServicePortMockVerifyTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final IgnoreListQueryPort queryPort = mock(IgnoreListQueryPort.class);
   private final IgnoreListCommandPort commandPort = mock(IgnoreListCommandPort.class);
+  private final IgnoreHardCommandSupport ignoreHardCommandSupport =
+      new IgnoreHardCommandSupport(ui, targetCoordinator, queryPort, commandPort);
+  private final IgnoreSoftCommandSupport ignoreSoftCommandSupport =
+      new IgnoreSoftCommandSupport(ui, targetCoordinator, queryPort, commandPort);
 
   private final OutboundIgnoreCommandService service =
-      new OutboundIgnoreCommandService(ui, targetCoordinator, queryPort, commandPort);
+      new OutboundIgnoreCommandService(ignoreHardCommandSupport, ignoreSoftCommandSupport);
 
   @Test
   void ignoreListPathUsesCommandForPruneAndQueryForRenderingOnly() {

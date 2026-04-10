@@ -6,8 +6,10 @@ import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRoot
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import java.util.ArrayList;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Applies built-in layout and root-sibling ordering to a server subtree. */
+@Component
 public final class ServerTreeLayoutApplier {
 
   public interface BuiltInNodeResolver {

@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
 import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
-import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutOrchestrator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
@@ -9,15 +8,21 @@ import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutPersistenceCoor
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilityCoordinator;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Composition helper for creating layout/visibility collaborators used by server tree. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeLayoutCollaboratorsFactory {
 
-  private ServerTreeLayoutCollaboratorsFactory() {}
+  @NonNull private final ServerTreeLayoutApplier layoutApplier;
+  @NonNull private final ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator;
+  @NonNull private final ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator;
 
-  public static ServerTreeLayoutCollaborators create(
+  public ServerTreeLayoutCollaborators create(
       ServerTreeBuiltInVisibilityConfigPort builtInVisibilityConfig,
-      ServerTreeLayoutConfigPort layoutConfig,
       ServerTreeBuiltInVisibilityCoordinator.Context builtInVisibilityContext,
       ServerTreeLayoutPersistenceCoordinator.Context layoutPersistenceContext,
       ServerTreeBuiltInLayoutOrchestrator.Context builtInLayoutOrchestratorContext) {
@@ -25,7 +30,6 @@ public final class ServerTreeLayoutCollaboratorsFactory {
         new ServerTreeBuiltInVisibilityCoordinator(
             builtInVisibilityConfig,
             Objects.requireNonNull(builtInVisibilityContext, "builtInVisibilityContext"));
-    ServerTreeLayoutApplier layoutApplier = new ServerTreeLayoutApplier();
     ServerTreeLayoutPersistenceCoordinator layoutPersistenceCoordinator =
         new ServerTreeLayoutPersistenceCoordinator(
             Objects.requireNonNull(layoutPersistenceContext, "layoutPersistenceContext"));
@@ -35,10 +39,6 @@ public final class ServerTreeLayoutCollaboratorsFactory {
             layoutPersistenceCoordinator,
             Objects.requireNonNull(
                 builtInLayoutOrchestratorContext, "builtInLayoutOrchestratorContext"));
-    ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator =
-        new ServerTreeBuiltInLayoutCoordinator(layoutConfig);
-    ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator =
-        new ServerTreeRootSiblingOrderCoordinator(layoutConfig);
 
     return new ServerTreeLayoutCollaborators(
         builtInVisibilityCoordinator,

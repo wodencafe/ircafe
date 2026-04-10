@@ -17,7 +17,9 @@ class BackendUploadCommandRegistryTest {
   @Test
   void findsHandlerByBackend() {
     UploadCommandTranslationHandler matrix = handlerFor(IrcProperties.Server.Backend.MATRIX);
-    BackendUploadCommandRegistry registry = new BackendUploadCommandRegistry(List.of(matrix));
+    BackendUploadCommandRegistry registry =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.backendUploadCommandRegistry(
+            List.of(matrix));
 
     assertSame(matrix, registry.find(IrcProperties.Server.Backend.MATRIX));
     assertNull(registry.find(IrcProperties.Server.Backend.IRC));
@@ -30,14 +32,17 @@ class BackendUploadCommandRegistryTest {
 
     assertThrows(
         IllegalStateException.class,
-        () -> new BackendUploadCommandRegistry(List.of(first, second)));
+        () ->
+            cafe.woden.ircclient.app.outbound.TestBackendSupport.backendUploadCommandRegistry(
+                List.of(first, second)));
   }
 
   @Test
   void findsHandlerByCustomBackendId() {
     UploadCommandTranslationHandler pluginHandler = pluginHandler();
     BackendUploadCommandRegistry registry =
-        new BackendUploadCommandRegistry(List.of(pluginHandler));
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.backendUploadCommandRegistry(
+            List.of(pluginHandler));
 
     assertSame(pluginHandler, registry.find("plugin"));
   }

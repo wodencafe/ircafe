@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.outbound.dcc;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -24,30 +25,37 @@ import java.util.concurrent.ExecutorService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** Shared outgoing-offer, pending-acceptance, and DCC state-reporting support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class DccOfferCommandSupport {
 
   private static final String DCC_TAG = "(dcc)";
   private static final String DCC_ERR_TAG = "(dcc-error)";
+  private static final int OFFER_ACCEPT_TIMEOUT_MS = 120_000;
+  private static final int CONNECT_TIMEOUT_MS = 20_000;
+  private static final int IO_TIMEOUT_MS = 30_000;
 
   @NonNull private final UiPort ui;
-  @NonNull private final IrcMediatorInteractionPort mediatorIrc;
+
+  @Qualifier("ircMediatorInteractionPort")
+  @NonNull
+  private final IrcMediatorInteractionPort mediatorIrc;
+
   @NonNull private final ConnectionCoordinator connectionCoordinator;
-  @NonNull private final ExecutorService io;
+
+  @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR)
+  @NonNull
+  private final ExecutorService io;
+
   @NonNull private final DccCommandSupport dccCommandSupport;
   @NonNull private final DccChatSessionSupport dccChatSessionSupport;
   @NonNull private final DccFileTransferIoSupport dccFileTransferIoSupport;
-  @NonNull private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers;
-  @NonNull private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers;
-  @NonNull private final ConcurrentMap<String, DccChatSession> chatSessions;
-  @NonNull private final ConcurrentMap<String, ServerSocket> outgoingChatListeners;
-  @NonNull private final ConcurrentMap<String, ServerSocket> outgoingSendListeners;
-  private final int offerAcceptTimeoutMs;
-  private final int connectTimeoutMs;
-  private final int ioTimeoutMs;
+  @NonNull private final DccRuntimeRegistry dccRuntimeRegistry;
 
   void offerChat(CompositeDisposable disposables, String sid, TargetRef out, String nick) {
     String normalizedNick = DccCommandSupport.normalizeNick(nick);
@@ -80,8 +88,8 @@ final class DccOfferCommandSupport {
       ServerSocket listener = new ServerSocket();
       listener.setReuseAddress(true);
       listener.bind(new InetSocketAddress(0));
-      listener.setSoTimeout(offerAcceptTimeoutMs);
-      replaceListener(outgoingChatListeners, key, listener);
+      listener.setSoTimeout(OFFER_ACCEPT_TIMEOUT_MS);
+      replaceListener(outgoingChatListeners(), key, listener);
 
       int port = listener.getLocalPort();
       String ctcp = "\u0001DCC CHAT chat " + ipAsLong + " " + port + "\u0001";
@@ -124,7 +132,7 @@ final class DccOfferCommandSupport {
                         () -> awaitOutgoingChatConnection(sid, normalizedNick, key, listener));
                   },
                   err -> {
-                    removeListener(outgoingChatListeners, key, listener);
+                    removeListener(outgoingChatListeners(), key, listener);
                     ui.appendError(pm, DCC_ERR_TAG, String.valueOf(err));
                     dccCommandSupport.upsertTransfer(
                         sid,
@@ -205,8 +213,8 @@ final class DccOfferCommandSupport {
       ServerSocket listener = new ServerSocket();
       listener.setReuseAddress(true);
       listener.bind(new InetSocketAddress(0));
-      listener.setSoTimeout(offerAcceptTimeoutMs);
-      replaceListener(outgoingSendListeners, key, listener);
+      listener.setSoTimeout(OFFER_ACCEPT_TIMEOUT_MS);
+      replaceListener(outgoingSendListeners(), key, listener);
 
       int port = listener.getLocalPort();
       String ctcp =
@@ -252,7 +260,7 @@ final class DccOfferCommandSupport {
                                 sid, normalizedNick, key, listener, source, fileName, size));
                   },
                   err -> {
-                    removeListener(outgoingSendListeners, key, listener);
+                    removeListener(outgoingSendListeners(), key, listener);
                     ui.appendError(pm, DCC_ERR_TAG, String.valueOf(err));
                     dccCommandSupport.upsertTransfer(
                         sid,
@@ -286,7 +294,7 @@ final class DccOfferCommandSupport {
     }
 
     String key = DccCommandSupport.peerKey(sid, normalizedNick);
-    PendingChatOffer offer = pendingChatOffers.remove(key);
+    PendingChatOffer offer = pendingChatOffers().remove(key);
     if (offer == null) {
       ui.appendStatus(out, DCC_TAG, "No pending DCC CHAT offer from " + normalizedNick + ".");
       return;
@@ -311,8 +319,8 @@ final class DccOfferCommandSupport {
         () -> {
           Socket socket = new Socket();
           try {
-            socket.connect(new InetSocketAddress(offer.host(), offer.port()), connectTimeoutMs);
-            socket.setSoTimeout(ioTimeoutMs);
+            socket.connect(new InetSocketAddress(offer.host(), offer.port()), CONNECT_TIMEOUT_MS);
+            socket.setSoTimeout(IO_TIMEOUT_MS);
             dccChatSessionSupport.startChatSession(
                 sid, normalizedNick, socket, "connected (incoming)");
           } catch (Exception e) {
@@ -339,7 +347,7 @@ final class DccOfferCommandSupport {
     }
 
     String key = DccCommandSupport.peerKey(sid, normalizedNick);
-    PendingSendOffer offer = pendingSendOffers.get(key);
+    PendingSendOffer offer = pendingSendOffers().get(key);
     if (offer == null) {
       ui.appendStatus(out, DCC_TAG, "No pending DCC SEND offer from " + normalizedNick + ".");
       return;
@@ -356,7 +364,7 @@ final class DccOfferCommandSupport {
       return;
     }
 
-    pendingSendOffers.remove(key, offer);
+    pendingSendOffers().remove(key, offer);
     TargetRef pm = dccCommandSupport.ensurePmTarget(sid, normalizedNick);
     ui.appendStatus(pm, DCC_TAG, "Receiving " + offer.fileName() + " to " + destination + " …");
     String localPath = destination.toAbsolutePath().normalize().toString();
@@ -421,7 +429,7 @@ final class DccOfferCommandSupport {
                 Files.deleteIfExists(destination);
               } catch (Exception ignored) {
               }
-              pendingSendOffers.putIfAbsent(key, offer);
+              pendingSendOffers().putIfAbsent(key, offer);
               dccCommandSupport.upsertTransfer(
                   sid,
                   normalizedNick,
@@ -439,17 +447,17 @@ final class DccOfferCommandSupport {
 
   void listDccState(String sid, TargetRef out) {
     int activeChats = 0;
-    for (DccChatSession session : chatSessions.values()) {
+    for (DccChatSession session : chatSessions().values()) {
       if (sid.equals(session.serverId())) activeChats++;
     }
 
     int pendingChats = 0;
-    for (PendingChatOffer offer : pendingChatOffers.values()) {
+    for (PendingChatOffer offer : pendingChatOffers().values()) {
       if (sid.equals(offer.serverId())) pendingChats++;
     }
 
     int pendingSends = 0;
-    for (PendingSendOffer offer : pendingSendOffers.values()) {
+    for (PendingSendOffer offer : pendingSendOffers().values()) {
       if (sid.equals(offer.serverId())) pendingSends++;
     }
 
@@ -463,7 +471,7 @@ final class DccOfferCommandSupport {
             + ", pending sends="
             + pendingSends);
 
-    for (PendingChatOffer offer : pendingChatOffers.values()) {
+    for (PendingChatOffer offer : pendingChatOffers().values()) {
       if (!sid.equals(offer.serverId())) continue;
       ui.appendStatus(
           out,
@@ -476,7 +484,7 @@ final class DccOfferCommandSupport {
               + offer.port());
     }
 
-    for (PendingSendOffer offer : pendingSendOffers.values()) {
+    for (PendingSendOffer offer : pendingSendOffers().values()) {
       if (!sid.equals(offer.serverId())) continue;
       ui.appendStatus(
           out,
@@ -490,23 +498,23 @@ final class DccOfferCommandSupport {
               + ")");
     }
 
-    for (DccChatSession session : chatSessions.values()) {
+    for (DccChatSession session : chatSessions().values()) {
       if (!sid.equals(session.serverId())) continue;
       ui.appendStatus(out, DCC_TAG, "Active CHAT with " + session.nick());
     }
   }
 
   void shutdown() {
-    for (ServerSocket listener : outgoingChatListeners.values()) {
+    for (ServerSocket listener : outgoingChatListeners().values()) {
       closeQuietly(listener);
     }
-    for (ServerSocket listener : outgoingSendListeners.values()) {
+    for (ServerSocket listener : outgoingSendListeners().values()) {
       closeQuietly(listener);
     }
-    outgoingChatListeners.clear();
-    outgoingSendListeners.clear();
-    pendingChatOffers.clear();
-    pendingSendOffers.clear();
+    outgoingChatListeners().clear();
+    outgoingSendListeners().clear();
+    pendingChatOffers().clear();
+    pendingSendOffers().clear();
   }
 
   private void awaitOutgoingChatConnection(
@@ -538,7 +546,7 @@ final class DccOfferCommandSupport {
           null,
           DccTransferStore.ActionHint.NONE);
     } finally {
-      removeListener(outgoingChatListeners, key, listener);
+      removeListener(outgoingChatListeners(), key, listener);
     }
   }
 
@@ -553,7 +561,7 @@ final class DccOfferCommandSupport {
     TargetRef pm = dccCommandSupport.ensurePmTarget(sid, nick);
     try (ServerSocket ignored = listener;
         Socket socket = listener.accept()) {
-      socket.setSoTimeout(ioTimeoutMs);
+      socket.setSoTimeout(IO_TIMEOUT_MS);
       ui.appendStatus(pm, DCC_TAG, nick + " connected. Sending " + displayName + "…");
       dccCommandSupport.upsertTransfer(
           sid,
@@ -601,7 +609,7 @@ final class DccOfferCommandSupport {
           null,
           DccTransferStore.ActionHint.NONE);
     } finally {
-      removeListener(outgoingSendListeners, key, listener);
+      removeListener(outgoingSendListeners(), key, listener);
     }
   }
 
@@ -716,5 +724,25 @@ final class DccOfferCommandSupport {
       socket.close();
     } catch (Exception ignored) {
     }
+  }
+
+  private ConcurrentMap<String, PendingChatOffer> pendingChatOffers() {
+    return dccRuntimeRegistry.pendingChatOffers();
+  }
+
+  private ConcurrentMap<String, PendingSendOffer> pendingSendOffers() {
+    return dccRuntimeRegistry.pendingSendOffers();
+  }
+
+  private ConcurrentMap<String, DccChatSession> chatSessions() {
+    return dccRuntimeRegistry.chatSessions();
+  }
+
+  private ConcurrentMap<String, ServerSocket> outgoingChatListeners() {
+    return dccRuntimeRegistry.outgoingChatListeners();
+  }
+
+  private ConcurrentMap<String, ServerSocket> outgoingSendListeners() {
+    return dccRuntimeRegistry.outgoingSendListeners();
   }
 }

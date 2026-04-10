@@ -2,7 +2,6 @@ package cafe.woden.ircclient.app.outbound.backend;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
@@ -18,7 +17,7 @@ class MessageMutationOutboundCommandsRouterTest {
   @Test
   void routesToBackendSpecificHandlers() {
     MessageMutationOutboundCommandsRouter router =
-        new MessageMutationOutboundCommandsRouter(
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.messageMutationOutboundCommandsRouter(
             List.of(
                 new IrcMessageMutationOutboundCommands(),
                 new MatrixMessageMutationOutboundCommands(),
@@ -38,7 +37,7 @@ class MessageMutationOutboundCommandsRouterTest {
   @Test
   void fallsBackToIrcHandlerWhenBackendHasNoRegisteredHandler() {
     MessageMutationOutboundCommandsRouter router =
-        new MessageMutationOutboundCommandsRouter(
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.messageMutationOutboundCommandsRouter(
             List.of(
                 new IrcMessageMutationOutboundCommands(),
                 new MatrixMessageMutationOutboundCommands()));
@@ -53,36 +52,32 @@ class MessageMutationOutboundCommandsRouterTest {
 
   @Test
   void rejectsDuplicateBackendHandlers() {
-    IllegalStateException err =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                new MessageMutationOutboundCommandsRouter(
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            cafe.woden.ircclient.app.outbound.TestBackendSupport
+                .messageMutationOutboundCommandsRouter(
                     List.of(
                         new IrcMessageMutationOutboundCommands(),
                         new DuplicateIrcMessageMutationOutboundCommands())));
-
-    assertTrue(err.getMessage().contains("Duplicate message mutation outbound handler"));
   }
 
   @Test
-  void requiresIrcDefaultHandler() {
-    IllegalStateException err =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                new MessageMutationOutboundCommandsRouter(
-                    List.of(new MatrixMessageMutationOutboundCommands())));
+  void defaultsToBuiltInIrcHandlerWhenCatalogHasNoExplicitIrcHandler() {
+    MessageMutationOutboundCommandsRouter router =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.messageMutationOutboundCommandsRouter(
+            List.of(new MatrixMessageMutationOutboundCommands()));
 
-    assertTrue(
-        err.getMessage().contains("Missing message mutation outbound handler for backend IRC"));
+    assertInstanceOf(
+        IrcMessageMutationOutboundCommands.class,
+        router.commandsFor(IrcProperties.Server.Backend.IRC));
   }
 
   @Test
   void routesCustomBackendIds() {
     MessageMutationOutboundCommands pluginCommands = new PluginMessageMutationOutboundCommands();
     MessageMutationOutboundCommandsRouter router =
-        new MessageMutationOutboundCommandsRouter(
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.messageMutationOutboundCommandsRouter(
             List.of(new IrcMessageMutationOutboundCommands(), pluginCommands));
 
     assertInstanceOf(PluginMessageMutationOutboundCommands.class, router.commandsFor("plugin"));

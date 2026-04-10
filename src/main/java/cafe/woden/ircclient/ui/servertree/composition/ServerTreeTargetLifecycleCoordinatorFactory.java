@@ -22,15 +22,15 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /**
  * Factory that assembles target lifecycle coordinator dependencies for server tree construction.
  */
+@Component
 public final class ServerTreeTargetLifecycleCoordinatorFactory {
 
-  private ServerTreeTargetLifecycleCoordinatorFactory() {}
-
-  public static ServerTreeTargetLifecycleCoordinator create(Inputs inputs) {
+  public ServerTreeTargetLifecycleCoordinator create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     return new ServerTreeTargetLifecycleCoordinator(
         Objects.requireNonNull(in.servers(), "servers"),

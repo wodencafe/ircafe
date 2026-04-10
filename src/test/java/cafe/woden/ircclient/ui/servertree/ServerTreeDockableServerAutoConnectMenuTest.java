@@ -14,7 +14,6 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.lang.reflect.Field;
@@ -24,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -297,7 +297,7 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
   private static ServerTreeDockable newDockable(
       ServerCatalog serverCatalog, RuntimeConfigStore runtimeConfig) {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         serverCatalog,
         runtimeConfig,
         null,
@@ -335,9 +335,9 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
     Field menuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     menuBuilderField.setAccessible(true);
-    ServerTreeContextMenuBuilder menuBuilder =
-        (ServerTreeContextMenuBuilder) menuBuilderField.get(dockable);
-    return menuBuilder.build(new TreePath(serverNode.getPath()));
+    Function<TreePath, JPopupMenu> menuBuilder =
+        (Function<TreePath, JPopupMenu>) menuBuilderField.get(dockable);
+    return menuBuilder.apply(new TreePath(serverNode.getPath()));
   }
 
   private static JCheckBoxMenuItem findCheckBoxMenuItem(JPopupMenu menu, String text) {

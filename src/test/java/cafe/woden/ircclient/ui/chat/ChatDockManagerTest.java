@@ -9,10 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -51,7 +51,6 @@ class ChatDockManagerTest {
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     OutboundLineBus outboundBus = mock(OutboundLineBus.class);
     IrcTypingPort typingPort = mock(IrcTypingPort.class);
-    IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
@@ -70,7 +69,7 @@ class ChatDockManagerTest {
             spellcheckSettingsBus,
             outboundBus,
             typingPort,
-            readMarkerPort,
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
@@ -126,7 +125,7 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
-            mock(IrcReadMarkerPort.class),
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
@@ -160,7 +159,7 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
-            mock(IrcReadMarkerPort.class),
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
@@ -189,7 +188,7 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
-            mock(IrcReadMarkerPort.class),
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
@@ -222,7 +221,7 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
-            mock(IrcReadMarkerPort.class),
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             capabilityPolicy,
@@ -255,7 +254,7 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
-            mock(IrcReadMarkerPort.class),
+            mock(Ircv3ReadMarkerFeatureSupport.class),
             mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),

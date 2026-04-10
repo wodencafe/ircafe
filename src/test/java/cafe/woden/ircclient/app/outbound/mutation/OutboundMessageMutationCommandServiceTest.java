@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -26,7 +27,6 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,18 +38,19 @@ class OutboundMessageMutationCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(
-          List.of(
-              new MatrixOutboundBackendFeatureAdapter(),
-              new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          irc);
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
+  private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =
+      new Ircv3MessageRedactionFeatureSupport(outboundBackendCapabilityPolicy);
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
@@ -61,11 +62,8 @@ class OutboundMessageMutationCommandServiceTest {
       new OutboundRawLineCorrelationService(
           outboundBackendCapabilityPolicy, labeledResponseRoutingState);
   private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter =
-      new MessageMutationOutboundCommandsRouter(
-          List.of(
-              new IrcMessageMutationOutboundCommands(),
-              new MatrixMessageMutationOutboundCommands(),
-              new QuasselMessageMutationOutboundCommands()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport
+          .builtInMessageMutationOutboundCommandsRouter();
   private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
       new OutboundMessageMutationSendSupport(
           IrcTargetMembershipPort.from(irc),
@@ -80,6 +78,7 @@ class OutboundMessageMutationCommandServiceTest {
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           outboundBackendCapabilityPolicy,
+          messageRedactionFeatureSupport,
           outboundCommandAvailabilitySupport,
           ui,
           targetCoordinator,

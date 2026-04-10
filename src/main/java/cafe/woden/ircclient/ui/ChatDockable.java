@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
@@ -16,7 +17,6 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -212,6 +212,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ModeRoutingPort modeRoutingState,
       ServerIsupportStatePort serverIsupportState,
       BackendUiProfileProvider backendUiProfileProvider,
@@ -339,6 +340,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         createInputCoordinatorBundle(
             transcripts,
             irc,
+            readMarkerFeatureSupport,
             chatHistoryService,
             activationBus,
             outboundBus,
@@ -791,6 +793,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private InputCoordinatorBundle createInputCoordinatorBundle(
       ChatTranscriptStore transcripts,
       IrcClientService irc,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
@@ -806,7 +809,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             activationBus, outboundBus, transcripts, historyActionCoordinator);
     DccActionCoordinator dccActionCoordinator =
         createDccActionCoordinator(activationBus, outboundBus);
-    ChatReadMarkerCoordinator readMarkerCoordinator = createReadMarkerCoordinator(transcripts, irc);
+    ChatReadMarkerCoordinator readMarkerCoordinator =
+        createReadMarkerCoordinator(transcripts, readMarkerFeatureSupport);
     ChatActiveTargetCoordinator activeTargetCoordinator =
         createActiveTargetCoordinator(
             transcripts, typingCoordinator, readMarkerCoordinator, backendUiProfileProvider);
@@ -947,10 +951,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private ChatReadMarkerCoordinator createReadMarkerCoordinator(
-      ChatTranscriptStore transcripts, IrcClientService irc) {
+      ChatTranscriptStore transcripts, Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport) {
     return new ChatReadMarkerCoordinator(
         transcripts,
-        IrcReadMarkerPort.from(irc),
+        readMarkerFeatureSupport,
         () -> activeTarget,
         this::scrollToTranscriptOffset,
         this::updateScrollStateFromBar,

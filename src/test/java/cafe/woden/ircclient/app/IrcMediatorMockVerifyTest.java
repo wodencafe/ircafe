@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -51,6 +52,7 @@ import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -104,6 +106,8 @@ class IrcMediatorMockVerifyTest {
   private final ServerRegistry serverRegistry = mock(ServerRegistry.class);
   private final RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder =
       mock(MediatorConnectionSubscriptionBinder.class);
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder =
@@ -116,6 +120,9 @@ class IrcMediatorMockVerifyTest {
       mock(OutboundDccCommandService.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final UiSettingsPort uiSettingsPort = mock(UiSettingsPort.class);
+  private final cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort
+      ircv3CapabilityNameResolver =
+          new cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort() {};
   private final TrayNotificationsPort trayNotificationsPort = mock(TrayNotificationsPort.class);
   private final NotificationRuleMatcherPort notificationRuleMatcherPort =
       mock(NotificationRuleMatcherPort.class);
@@ -185,8 +192,12 @@ class IrcMediatorMockVerifyTest {
           serverRegistry);
   private final MediatorRosterStatusEventHandler mediatorRosterStatusEventHandler =
       new MediatorRosterStatusEventHandler(ui, targetCoordinator);
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport =
+      new Ircv3ReadMarkerFeatureSupport(
+          readMarkerPort, outboundBackendCapabilityPolicy, ircv3CapabilityNameResolver);
   private final MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler =
-      new MediatorIrcv3PresenceEventHandler(irc, typingPort, readMarkerPort, ui, uiSettingsPort);
+      new MediatorIrcv3PresenceEventHandler(
+          irc, typingPort, readMarkerFeatureSupport, ui, uiSettingsPort);
   private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler =
       new MediatorIrcv3EventHandler(ui, targetCoordinator);
   private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler =
@@ -209,7 +220,8 @@ class IrcMediatorMockVerifyTest {
           outboundCommandDispatcher,
           targetCoordinator,
           whoisRoutingState,
-          ctcpRoutingState);
+          ctcpRoutingState,
+          ircv3CapabilityNameResolver);
   private final cafe.woden.ircclient.app.api.InterceptorIngestPort interceptorIngestPort =
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
@@ -1087,7 +1099,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
-    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(outboundBackendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(
@@ -1108,7 +1120,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerWildcardAppliesZeroEpoch() throws Exception {
-    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(outboundBackendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(

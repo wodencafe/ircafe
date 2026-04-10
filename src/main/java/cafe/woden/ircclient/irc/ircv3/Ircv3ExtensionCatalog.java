@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Runtime IRCv3 metadata catalog backed by built-ins plus installed plugin providers. */
@@ -21,6 +22,7 @@ public final class Ircv3ExtensionCatalog {
 
   private final Ircv3ExtensionRegistry.Snapshot snapshot;
 
+  @Autowired
   public Ircv3ExtensionCatalog(InstalledPluginsPort installedPlugins) {
     this(buildSnapshot(installedPlugins));
   }

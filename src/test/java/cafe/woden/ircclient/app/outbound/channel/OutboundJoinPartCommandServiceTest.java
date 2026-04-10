@@ -32,10 +32,18 @@ class OutboundJoinPartCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
+  private final PartCommandSupport partCommandSupport =
+      new PartCommandSupport(
+          IrcTargetMembershipPort.from(irc),
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          commandTargetPolicy);
   private final OutboundJoinPartCommandService service =
       new OutboundJoinPartCommandService(
           IrcTargetMembershipPort.from(irc),
@@ -44,7 +52,8 @@ class OutboundJoinPartCommandServiceTest {
           targetCoordinator,
           commandTargetPolicy,
           runtimeConfig,
-          joinRoutingState);
+          joinRoutingState,
+          partCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

@@ -2,9 +2,13 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import org.junit.jupiter.api.Test;
@@ -26,8 +30,7 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("irc")).thenReturn(false);
     when(irc.isZncPlaybackAvailable("irc")).thenReturn(true);
 
-    IrcMessageActionCapabilityPolicy policy =
-        new IrcMessageActionCapabilityPolicy(IrcNegotiatedFeaturePort.from(irc), irc);
+    IrcMessageActionCapabilityPolicy policy = newPolicy(irc);
 
     assertTrue(policy.canReply("matrix"));
     assertTrue(policy.canReact("matrix"));
@@ -53,8 +56,7 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isZncPlaybackAvailable("broken")).thenThrow(new RuntimeException("boom"));
 
-    IrcMessageActionCapabilityPolicy policy =
-        new IrcMessageActionCapabilityPolicy(IrcNegotiatedFeaturePort.from(irc), irc);
+    IrcMessageActionCapabilityPolicy policy = newPolicy(irc);
 
     assertFalse(policy.canReply("broken"));
     assertFalse(policy.canLoadAroundMessage("broken"));
@@ -63,7 +65,13 @@ class IrcMessageActionCapabilityPolicyTest {
 
   @Test
   void nullIrcServiceDisablesAllCapabilities() {
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(null, null);
+    Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
+        mock(Ircv3ChatHistoryFeatureSupport.class);
+    Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =
+        mock(Ircv3MessageRedactionFeatureSupport.class);
+    IrcMessageActionCapabilityPolicy policy =
+        new IrcMessageActionCapabilityPolicy(
+            null, chatHistoryFeatureSupport, messageRedactionFeatureSupport);
 
     assertFalse(policy.canReply("any"));
     assertFalse(policy.canReact("any"));
@@ -72,5 +80,32 @@ class IrcMessageActionCapabilityPolicyTest {
     assertFalse(policy.canRedact("any"));
     assertFalse(policy.canLoadAroundMessage("any"));
     assertFalse(policy.canLoadNewerHistory("any"));
+  }
+
+  private static IrcMessageActionCapabilityPolicy newPolicy(IrcBackendClientService irc) {
+    IrcNegotiatedFeaturePort negotiatedFeaturePort = IrcNegotiatedFeaturePort.from(irc);
+    Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
+        new Ircv3ChatHistoryFeatureSupport(chatHistoryPolicy(irc), negotiatedFeaturePort, irc);
+    Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =
+        new Ircv3MessageRedactionFeatureSupport(messageRedactionPolicy(irc));
+    return new IrcMessageActionCapabilityPolicy(
+        negotiatedFeaturePort, chatHistoryFeatureSupport, messageRedactionFeatureSupport);
+  }
+
+  private static OutboundBackendCapabilityPolicy chatHistoryPolicy(IrcBackendClientService irc) {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.featureUnavailableMessage(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    when(policy.unavailableReasonForHelp(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    return policy;
+  }
+
+  private static OutboundBackendCapabilityPolicy messageRedactionPolicy(
+      IrcBackendClientService irc) {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.supportsMessageRedaction(anyString()))
+        .thenAnswer(invocation -> irc.isMessageRedactionAvailable(invocation.getArgument(0)));
+    return policy;
   }
 }

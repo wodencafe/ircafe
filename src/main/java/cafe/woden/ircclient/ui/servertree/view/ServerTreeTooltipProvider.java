@@ -1,10 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
-import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
-import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -234,10 +231,13 @@ public final class ServerTreeTooltipProvider {
 
   private final JTree tree;
   private final Context context;
+  private final ServerTreeTooltipTextPolicy tooltipTextPolicy;
 
-  public ServerTreeTooltipProvider(JTree tree, Context context) {
+  public ServerTreeTooltipProvider(
+      JTree tree, Context context, ServerTreeTooltipTextPolicy tooltipTextPolicy) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.context = Objects.requireNonNull(context, "context");
+    this.tooltipTextPolicy = Objects.requireNonNull(tooltipTextPolicy, "tooltipTextPolicy");
   }
 
   public String toolTipForEvent(MouseEvent event) {
@@ -255,169 +255,6 @@ public final class ServerTreeTooltipProvider {
     Object comp = path.getLastPathComponent();
     if (!(comp instanceof DefaultMutableTreeNode node)) return null;
 
-    if (context.isIrcRootNode(node)) {
-      return "Configured IRC servers and discovered bouncer networks.";
-    }
-
-    if (context.isApplicationRootNode(node)) {
-      return "Application diagnostics buffers.";
-    }
-
-    String networksGroupBackendId = normalizeBackendId(context.backendIdForNetworksGroupNode(node));
-    if (!networksGroupBackendId.isEmpty()) {
-      return ServerTreeBouncerBackends.networksGroupTooltip(networksGroupBackendId);
-    }
-
-    if (context.isInterceptorsGroupNode(node)) {
-      return "Interceptors for this server. Individual interceptor nodes show their own captured hit counts.";
-    }
-    if (context.isMonitorGroupNode(node)) {
-      return "Monitored nick presence for this server (IRC MONITOR, with ISON fallback when unavailable).";
-    }
-    if (context.isOtherGroupNode(node)) {
-      return "Built-in server utility nodes. Drag listed nodes in/out of this group to customize layout.";
-    }
-
-    Object uo = node.getUserObject();
-    if (uo instanceof ServerTreeQuasselNetworkNodeData networkNodeData) {
-      if (context.isQuasselEmptyStateNode(node) || networkNodeData.emptyState()) {
-        return "No Quassel networks are configured yet. Right-click and choose Add Quassel Network…";
-      }
-      if (context.isQuasselNetworkNode(node)) {
-        String sid = Objects.toString(networkNodeData.serverId(), "").trim();
-        String token = Objects.toString(networkNodeData.networkToken(), "").trim();
-        String tip = Objects.toString(context.quasselNetworkTooltip(sid, token), "").trim();
-        if (!tip.isEmpty()) return tip;
-        String state =
-            Boolean.FALSE.equals(networkNodeData.enabled())
-                ? "disabled"
-                : Boolean.TRUE.equals(networkNodeData.connected())
-                    ? "connected"
-                    : Boolean.FALSE.equals(networkNodeData.connected())
-                        ? "disconnected"
-                        : "status unknown";
-        return "Quassel network \""
-            + networkNodeData.label()
-            + "\" ("
-            + state
-            + ", token: "
-            + token
-            + ").";
-      }
-    }
-
-    if (uo instanceof ServerTreeNodeData nd && nd.ref != null) {
-      String nodeTip = tooltipForNodeData(nd);
-      if (nodeTip != null) {
-        return nodeTip;
-      }
-    }
-
-    if (uo instanceof String serverId && context.isServerNode(node)) {
-      String backendId = normalizeBackendId(context.backendIdForEphemeralServer(serverId));
-      if (!backendId.isEmpty()) {
-        return ephemeralServerTooltip(serverId, backendId);
-      }
-      return standardServerTooltip(serverId);
-    }
-
-    return null;
-  }
-
-  private String tooltipForNodeData(ServerTreeNodeData nodeData) {
-    if (nodeData.ref.isChannel() && nodeData.hasDetachedWarning()) {
-      return "Disconnected: " + nodeData.detachedWarning + " (click warning icon to clear).";
-    }
-    if (nodeData.ref.isApplicationUnhandledErrors()) {
-      return "Uncaught JVM exceptions captured by IRCafe.";
-    }
-    if (nodeData.ref.isApplicationAssertjSwing()) {
-      return "Diagnostic buffer for AssertJ Swing/watchdog output.";
-    }
-    if (nodeData.ref.isApplicationJhiccup()) {
-      return "Diagnostic buffer for jHiccup latency output.";
-    }
-    if (nodeData.ref.isApplicationInboundDedup()) {
-      return "Inbound duplicate message suppression diagnostics (msgid replay / resend telemetry).";
-    }
-    if (nodeData.ref.isApplicationPlugins()) {
-      return "Declared external plugin jars discovered from the plugin directory.";
-    }
-    if (nodeData.ref.isApplicationJfr()) {
-      return context.isApplicationJfrActive()
-          ? "Runtime JFR diagnostics are active (status gauges + JFR event stream)."
-          : "Runtime JFR diagnostics are disabled. Open the JFR view to enable.";
-    }
-    if (nodeData.ref.isApplicationSpring()) {
-      return "Spring framework lifecycle and availability event feed.";
-    }
-    if (nodeData.ref.isApplicationTerminal()) {
-      return "In-app terminal output mirrored from System.out/System.err.";
-    }
-    if (context.isBouncerControlStatusNode(nodeData)) {
-      return "Bouncer Control connection (used to discover bouncer networks).";
-    }
-    if (nodeData.ref.isInterceptor()) {
-      return "Custom interceptor rules, actions, and captured matches. Badge count shows stored hits for this interceptor.";
-    }
-    if (nodeData.ref.isWeechatFilters()) {
-      return "WeeChat-style local filters for this server (rules, placeholders, and scope overrides).";
-    }
-    if (nodeData.ref.isIgnores()) {
-      return "Manage hard and soft ignore rules for this server.";
-    }
-    return null;
-  }
-
-  private String ephemeralServerTooltip(String serverId, String backendId) {
-    String backend = normalizeBackendId(backendId);
-    ConnectionState state = context.connectionStateForServer(serverId);
-    boolean desired = context.desiredOnlineForServer(serverId);
-    String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
-    String intentTip =
-        " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
-    String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
-    String diagnostics = context.connectionDiagnosticsTipForServer(serverId);
-
-    String origin = Objects.toString(context.originByServerId(backend, serverId), "").trim();
-    String display = context.serverDisplayName(serverId);
-    boolean auto = !origin.isEmpty() && context.isAutoConnectEnabled(backend, origin, display);
-
-    String tip = stateTip + intentTip;
-    if (!queueTip.isBlank()) tip += " " + queueTip;
-    if (!diagnostics.isBlank()) tip += diagnostics;
-    tip += " " + ServerTreeBouncerBackends.ephemeralDiscoveryTooltip(backend);
-    if (auto) tip += " Auto-connect enabled.";
-    if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
-    if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
-    return tip;
-  }
-
-  private String standardServerTooltip(String serverId) {
-    ConnectionState state = context.connectionStateForServer(serverId);
-    boolean desired = context.desiredOnlineForServer(serverId);
-    String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
-    String diagnostics = context.connectionDiagnosticsTipForServer(serverId);
-    String action = ServerTreeConnectionStateViewModel.actionHint(state);
-    String backendDisplayName =
-        Objects.toString(context.backendDisplayNameForServer(serverId), "").trim();
-    String base =
-        "State: "
-            + ServerTreeConnectionStateViewModel.stateLabel(state)
-            + ". Intent: "
-            + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)
-            + ".";
-    if (!backendDisplayName.isEmpty()) {
-      base += " Backend: " + backendDisplayName + ".";
-    }
-    if (!queueTip.isBlank() && !diagnostics.isBlank())
-      return base + " " + queueTip + diagnostics + " " + action;
-    if (!queueTip.isBlank()) return base + " " + queueTip + " " + action;
-    if (!diagnostics.isBlank()) return base + diagnostics + " " + action;
-    return base + " " + action;
-  }
-
-  private static String normalizeBackendId(String backendId) {
-    return Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
+    return tooltipTextPolicy.toolTipForNode(context, node);
   }
 }

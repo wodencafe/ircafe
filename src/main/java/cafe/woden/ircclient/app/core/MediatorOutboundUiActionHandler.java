@@ -38,32 +38,6 @@ public class MediatorOutboundUiActionHandler {
   private final CtcpRoutingPort ctcpRoutingState;
   private final Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolver;
 
-  @Deprecated(forRemoval = false)
-  public MediatorOutboundUiActionHandler(
-      IrcMediatorInteractionPort irc,
-      UiPort ui,
-      CommandParser commandParser,
-      UserCommandAliasEngine userCommandAliasEngine,
-      IrcSessionRuntimeConfigPort runtimeConfig,
-      ConnectionCoordinator connectionCoordinator,
-      OutboundCommandDispatcher outboundCommandDispatcher,
-      TargetCoordinator targetCoordinator,
-      WhoisRoutingPort whoisRoutingState,
-      CtcpRoutingPort ctcpRoutingState) {
-    this(
-        irc,
-        ui,
-        commandParser,
-        userCommandAliasEngine,
-        runtimeConfig,
-        connectionCoordinator,
-        outboundCommandDispatcher,
-        targetCoordinator,
-        whoisRoutingState,
-        ctcpRoutingState,
-        new Ircv3CapabilityNameResolverPort() {});
-  }
-
   public void handleUserActionRequest(CompositeDisposable disposables, UserActionRequest req) {
     if (req == null) {
       return;

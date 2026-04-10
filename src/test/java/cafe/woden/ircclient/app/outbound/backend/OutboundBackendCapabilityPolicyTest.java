@@ -23,18 +23,17 @@ class OutboundBackendCapabilityPolicyTest {
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
   private final IrcBackendAvailabilityPort backendAvailability = irc;
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(
-          List.of(
-              new MatrixOutboundBackendFeatureAdapter(),
-              new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy policy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          backendAvailability);
+          backendAvailability,
+          AvailableBackendIdsPort.builtInsOnly());
 
   @Test
   void supportsMatrixSemanticUploadViaBackendAdapter() {
@@ -98,10 +97,15 @@ class OutboundBackendCapabilityPolicyTest {
     when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
 
     OutboundBackendFeatureRegistry registry =
-        new OutboundBackendFeatureRegistry(List.of(new PluginBackendFeatureAdapter()));
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.outboundBackendFeatureRegistry(
+            List.of(new PluginBackendFeatureAdapter()));
     OutboundBackendCapabilityPolicy customPolicy =
         new OutboundBackendCapabilityPolicy(
-            commandTargetPolicy, registry, IrcNegotiatedFeaturePort.from(irc), backendAvailability);
+            commandTargetPolicy,
+            registry,
+            IrcNegotiatedFeaturePort.from(irc),
+            backendAvailability,
+            AvailableBackendIdsPort.builtInsOnly());
 
     assertTrue(customPolicy.supportsSemanticUpload("plugin"));
     assertTrue(customPolicy.supportsSemanticUploadByBackendId("plugin-backend"));

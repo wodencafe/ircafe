@@ -1,7 +1,5 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
@@ -37,45 +35,6 @@ public final class ChatHistoryActionCoordinator {
   private final BiFunction<TargetRef, String, Integer> messageOffsetLookup;
   private final Runnable disableFollowTail;
   private final IntConsumer scrollToTranscriptOffset;
-
-  public ChatHistoryActionCoordinator(
-      IrcNegotiatedFeaturePort irc,
-      IrcBouncerPlaybackPort bouncerPlayback,
-      ChatHistoryService chatHistoryService,
-      Supplier<TargetRef> activeTargetSupplier,
-      Consumer<TargetRef> activateTarget,
-      Runnable activateInputSurface,
-      Runnable focusInput,
-      Runnable armTailPinOnNextAppendIfAtBottom,
-      Consumer<String> outboundEmitter,
-      ReplyComposeStarter beginReplyCompose,
-      BiConsumer<String, String> openQuickReactionPicker,
-      Consumer<String> setDraftText,
-      Supplier<String> historyLatestCommandSupplier,
-      Function<String, String> historyAroundByMessageIdCommandBuilder,
-      BiFunction<TargetRef, String, String> messagePreviewLookup,
-      BiFunction<TargetRef, String, Integer> messageOffsetLookup,
-      Runnable disableFollowTail,
-      IntConsumer scrollToTranscriptOffset) {
-    this(
-        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback),
-        chatHistoryService,
-        activeTargetSupplier,
-        activateTarget,
-        activateInputSurface,
-        focusInput,
-        armTailPinOnNextAppendIfAtBottom,
-        outboundEmitter,
-        beginReplyCompose,
-        openQuickReactionPicker,
-        setDraftText,
-        historyLatestCommandSupplier,
-        historyAroundByMessageIdCommandBuilder,
-        messagePreviewLookup,
-        messageOffsetLookup,
-        disableFollowTail,
-        scrollToTranscriptOffset);
-  }
 
   public ChatHistoryActionCoordinator(
       MessageActionCapabilityPolicy capabilityPolicy,

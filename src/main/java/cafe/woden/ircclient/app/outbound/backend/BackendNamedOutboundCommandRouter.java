@@ -11,6 +11,9 @@ import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -18,29 +21,20 @@ import org.springframework.stereotype.Component;
 /** Routes parsed backend-specific command names to backend command handlers. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public final class BackendNamedOutboundCommandRouter {
 
-  private final BackendNamedCommandExecutorCatalog commandExecutors;
-  private final TargetCoordinator targetCoordinator;
-  private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final BackendNamedCommandExecutorCatalog commandExecutors;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+
+  @Qualifier("ircMediatorInteractionPort")
+  @NonNull
   private final IrcMediatorInteractionPort mediatorIrc;
-  private final UiPort ui;
+
+  @NonNull private final UiPort ui;
   private final BackendNamedCommandExecutionContext pluginExecutionContext =
       new RouterCommandExecutionContext();
-
-  BackendNamedOutboundCommandRouter(
-      BackendNamedCommandExecutorCatalog commandExecutors,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      UiPort ui) {
-    this.commandExecutors = Objects.requireNonNull(commandExecutors, "commandExecutors");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
-    this.ui = Objects.requireNonNull(ui, "ui");
-  }
 
   public void handle(CompositeDisposable disposables, ParsedInput.BackendNamed command) {
     String name = BackendNamedCommandRegistrationSupport.normalizeCommandName(command.command());

@@ -8,7 +8,6 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -38,9 +37,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.event.TableModelEvent;
 import javax.swing.table.DefaultTableModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import net.miginfocom.swing.MigLayout;
+import org.springframework.stereotype.Component;
 
 /** Builds and shows the server "Network Info" dialog for {@link ServerTreeDockable}. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeNetworkInfoDialogBuilder {
 
   public interface Context {
@@ -123,27 +127,14 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
 
   private final IrcSessionRuntimeConfigPort runtimeConfig;
-  private final Context context;
-  private final Ircv3ExtensionCatalog ircv3ExtensionCatalog;
+  @NonNull private final Ircv3ExtensionCatalog ircv3ExtensionCatalog;
 
-  public ServerTreeNetworkInfoDialogBuilder(
-      IrcSessionRuntimeConfigPort runtimeConfig, Context context) {
-    this(runtimeConfig, context, Ircv3ExtensionCatalog.builtInCatalog());
-  }
-
-  public ServerTreeNetworkInfoDialogBuilder(
-      IrcSessionRuntimeConfigPort runtimeConfig,
+  public void open(
+      java.awt.Component ownerComponent,
       Context context,
-      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
-    this.runtimeConfig = runtimeConfig;
-    this.context = Objects.requireNonNull(context, "context");
-    this.ircv3ExtensionCatalog =
-        ircv3ExtensionCatalog == null
-            ? Ircv3ExtensionCatalog.builtInCatalog()
-            : ircv3ExtensionCatalog;
-  }
-
-  public void open(Component ownerComponent, String serverId, ServerRuntimeMetadata metadata) {
+      String serverId,
+      ServerRuntimeMetadata metadata) {
+    Objects.requireNonNull(context, "context");
     String sid = ServerTreeConventions.normalize(serverId);
     if (sid.isEmpty() || metadata == null) return;
 
@@ -155,13 +146,13 @@ public final class ServerTreeNetworkInfoDialogBuilder {
 
     JPanel body =
         new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
-    body.add(buildNetworkSummaryPanel(sid, metadata), "growx");
+    body.add(buildNetworkSummaryPanel(context, sid, metadata), "growx");
 
     JTabbedPane tabs = new JTabbedPane();
-    tabs.addTab("Overview", buildOverviewTab(sid, metadata));
+    tabs.addTab("Overview", buildOverviewTab(context, sid, metadata));
     tabs.addTab(
         "Capabilities (" + metadata.ircv3Caps.size() + ")",
-        buildCapabilitiesInfoPanel(sid, metadata));
+        buildCapabilitiesInfoPanel(context, sid, metadata));
     tabs.addTab("ISUPPORT (" + metadata.isupport.size() + ")", buildIsupportInfoPanel(metadata));
     body.add(tabs, "grow, push");
 
@@ -195,7 +186,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     dialog.setVisible(true);
   }
 
-  private JPanel buildNetworkSummaryPanel(String serverId, ServerRuntimeMetadata metadata) {
+  private JPanel buildNetworkSummaryPanel(
+      Context context, String serverId, ServerRuntimeMetadata metadata) {
     JPanel panel =
         new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[grow,fill][right]", "[]4[]"));
     panel.setBorder(BorderFactory.createTitledBorder("Summary"));
@@ -230,15 +222,17 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     return panel;
   }
 
-  private JComponent buildOverviewTab(String serverId, ServerRuntimeMetadata metadata) {
+  private JComponent buildOverviewTab(
+      Context context, String serverId, ServerRuntimeMetadata metadata) {
     JPanel overview =
         new JPanel(new MigLayout("insets 8, fill, wrap 2", "[grow,fill]12[grow,fill]", "[top]"));
-    overview.add(buildConnectionInfoPanel(serverId, metadata), "grow");
+    overview.add(buildConnectionInfoPanel(context, serverId, metadata), "grow");
     overview.add(buildServerInfoPanel(metadata), "grow");
     return overview;
   }
 
-  private JPanel buildConnectionInfoPanel(String serverId, ServerRuntimeMetadata metadata) {
+  private JPanel buildConnectionInfoPanel(
+      Context context, String serverId, ServerRuntimeMetadata metadata) {
     JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
     panel.setBorder(BorderFactory.createTitledBorder("Connection"));
     for (InfoRow row : connectionInfoRows(context, serverId, metadata)) {
@@ -293,7 +287,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     return panel;
   }
 
-  private JPanel buildCapabilitiesInfoPanel(String serverId, ServerRuntimeMetadata metadata) {
+  private JPanel buildCapabilitiesInfoPanel(
+      Context context, String serverId, ServerRuntimeMetadata metadata) {
     JPanel panel =
         new JPanel(
             new MigLayout(

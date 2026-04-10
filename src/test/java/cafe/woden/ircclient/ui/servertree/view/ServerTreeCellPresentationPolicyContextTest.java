@@ -11,7 +11,7 @@ import java.awt.Color;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
 
-class ServerTreeCellRendererContextTest {
+class ServerTreeCellPresentationPolicyContextTest {
 
   @Test
   void contextDelegatesCellRendererLookups() {
@@ -20,8 +20,8 @@ class ServerTreeCellRendererContextTest {
     Color unreadColor = new Color(1, 2, 3);
     Color highlightColor = new Color(4, 5, 6);
 
-    ServerTreeCellRenderer.Context context =
-        ServerTreeCellRenderer.context(
+    ServerTreeCellPresentationPolicy.Context context =
+        ServerTreeCellPresentationPolicy.context(
             () -> true,
             () -> 125,
             () -> ServerTreeTypingIndicatorStyle.GLOW_DOT,

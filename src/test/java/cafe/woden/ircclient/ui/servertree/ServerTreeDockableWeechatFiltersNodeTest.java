@@ -59,7 +59,7 @@ class ServerTreeDockableWeechatFiltersNodeTest {
   }
 
   private static ServerTreeDockable newDockable() {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         null,
         null,
         null,

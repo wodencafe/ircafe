@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
@@ -40,37 +39,19 @@ public final class ChatReadMarkerCoordinator {
 
   public ChatReadMarkerCoordinator(
       ChatTranscriptStore transcripts,
-      IrcReadMarkerPort readMarkerPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       Supplier<TargetRef> activeTargetSupplier,
       IntConsumer scrollToTranscriptOffset,
       Runnable updateScrollStateFromBar,
       BooleanSupplier transcriptAtBottomSupplier) {
     this(
         transcripts,
-        readMarkerPort,
+        readMarkerFeatureSupport,
         activeTargetSupplier,
         scrollToTranscriptOffset,
         updateScrollStateFromBar,
         transcriptAtBottomSupplier,
         System::currentTimeMillis);
-  }
-
-  public ChatReadMarkerCoordinator(
-      ChatTranscriptStore transcripts,
-      IrcReadMarkerPort readMarkerPort,
-      Supplier<TargetRef> activeTargetSupplier,
-      IntConsumer scrollToTranscriptOffset,
-      Runnable updateScrollStateFromBar,
-      BooleanSupplier transcriptAtBottomSupplier,
-      LongSupplier currentTimeMillis) {
-    this(
-        transcripts,
-        new Ircv3ReadMarkerFeatureSupport(readMarkerPort),
-        activeTargetSupplier,
-        scrollToTranscriptOffset,
-        updateScrollStateFromBar,
-        transcriptAtBottomSupplier,
-        currentTimeMillis);
   }
 
   public ChatReadMarkerCoordinator(

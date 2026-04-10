@@ -1,45 +1,21 @@
 package cafe.woden.ircclient.app.outbound.channel;
 
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
-import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
-import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /names, /who, and /list command flow. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundNamesWhoListCommandService {
 
-  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
-
+  @NonNull private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
-
-  public OutboundNamesWhoListCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundRawCommandSupport rawCommandSupport) {
-
-    this.commandTargetPolicy = commandTargetPolicy;
-    this.targetMembershipCommandSupport =
-        new OutboundTargetMembershipCommandSupport(
-            targetMembership,
-            ui,
-            connectionCoordinator,
-            targetCoordinator,
-            commandTargetPolicy,
-            rawCommandSupport);
-  }
 
   public void handleNames(CompositeDisposable disposables, String channel) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(names)");

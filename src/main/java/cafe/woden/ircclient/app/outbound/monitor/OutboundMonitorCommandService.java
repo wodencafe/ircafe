@@ -1,17 +1,13 @@
 package cafe.woden.ircclient.app.outbound.monitor;
 
-import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
-import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
@@ -20,30 +16,12 @@ import org.springframework.stereotype.Component;
 @Component
 @Application
 @ApplicationLayer
-public class OutboundMonitorCommandService {
+@RequiredArgsConstructor
+public final class OutboundMonitorCommandService {
   private static final int DEFAULT_MONITOR_CHUNK = 100;
 
-  private final MonitorRosterPort monitorRosterPort;
-  private final OutboundMonitorCommandSupport monitorCommandSupport;
-
-  public OutboundMonitorCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      MonitorRosterPort monitorRosterPort,
-      MonitorFallbackPort monitorFallbackPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
-    this.monitorRosterPort = Objects.requireNonNull(monitorRosterPort, "monitorRosterPort");
-    this.monitorCommandSupport =
-        new OutboundMonitorCommandSupport(
-            Objects.requireNonNull(irc, "irc"),
-            Objects.requireNonNull(ui, "ui"),
-            Objects.requireNonNull(targetCoordinator, "targetCoordinator"),
-            Objects.requireNonNull(connectionCoordinator, "connectionCoordinator"),
-            Objects.requireNonNull(monitorFallbackPort, "monitorFallbackPort"),
-            Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy"));
-  }
+  @NonNull private final MonitorRosterPort monitorRosterPort;
+  @NonNull private final OutboundMonitorCommandSupport monitorCommandSupport;
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
     MonitorCommandContext context = monitorCommandSupport.resolveContextOrNull();

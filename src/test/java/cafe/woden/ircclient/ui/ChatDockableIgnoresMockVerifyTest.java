@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.dcc.DccTransferStore;
@@ -132,6 +133,7 @@ class ChatDockableIgnoresMockVerifyTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    mock(Ircv3ReadMarkerFeatureSupport.class),
                     modeRoutingState,
                     serverIsupportState,
                     backendUiProfileProvider,

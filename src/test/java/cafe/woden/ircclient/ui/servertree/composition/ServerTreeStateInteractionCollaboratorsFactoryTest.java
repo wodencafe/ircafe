@@ -55,30 +55,31 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     AtomicReference<String> clearedPrivateMessageServer = new AtomicReference<>("");
 
     ServerTreeStateInteractionCollaborators collaborators =
-        ServerTreeStateInteractionCollaboratorsFactory.create(
-            new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
-                tree,
-                model,
-                null,
-                null,
-                channelStateStore,
-                null,
-                runtimeState,
-                new HashMap<>(),
-                leaves,
-                typingActivityNodes,
-                privateMessageOnlineStateStore,
-                ref -> false,
-                node -> node != null && node.getUserObject() instanceof String,
-                __ -> {},
-                () -> 12,
-                clearedPrivateMessageServer::set,
-                noOpOverlayContext(runtimeState),
-                noOpChannelStateContext(),
-                noOpTargetRemovalContext(),
-                16,
-                12,
-                6));
+        new ServerTreeStateInteractionCollaboratorsFactory()
+            .create(
+                new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
+                    tree,
+                    model,
+                    null,
+                    null,
+                    channelStateStore,
+                    null,
+                    runtimeState,
+                    new HashMap<>(),
+                    leaves,
+                    typingActivityNodes,
+                    privateMessageOnlineStateStore,
+                    ref -> false,
+                    node -> node != null && node.getUserObject() instanceof String,
+                    __ -> {},
+                    () -> 12,
+                    clearedPrivateMessageServer::set,
+                    noOpOverlayContext(runtimeState),
+                    noOpChannelStateContext(),
+                    noOpTargetRemovalContext(),
+                    16,
+                    12,
+                    6));
 
     assertNotNull(collaborators.serverActionOverlay());
     assertNotNull(collaborators.serverRuntimeUiUpdater());

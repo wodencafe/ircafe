@@ -22,13 +22,13 @@ import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles channel-interaction collaborators for server tree construction. */
+@Component
 public final class ServerTreeChannelInteractionCollaboratorsFactory {
 
-  private ServerTreeChannelInteractionCollaboratorsFactory() {}
-
-  public static ServerTreeChannelInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeChannelInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     Timer typingActivityTimer =

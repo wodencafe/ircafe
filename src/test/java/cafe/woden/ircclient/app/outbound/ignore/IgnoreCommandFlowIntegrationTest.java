@@ -36,9 +36,12 @@ class IgnoreCommandFlowIntegrationTest {
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
+    IgnoreHardCommandSupport ignoreHardCommandSupport =
+        new IgnoreHardCommandSupport(ui, targetCoordinator, ignoreListService, ignoreListService);
+    IgnoreSoftCommandSupport ignoreSoftCommandSupport =
+        new IgnoreSoftCommandSupport(ui, targetCoordinator, ignoreListService, ignoreListService);
     OutboundIgnoreCommandService service =
-        new OutboundIgnoreCommandService(
-            ui, targetCoordinator, ignoreListService, ignoreListService);
+        new OutboundIgnoreCommandService(ignoreHardCommandSupport, ignoreSoftCommandSupport);
 
     service.handleIgnore("-channels #ircafe MSGS badnick");
     assertEquals(List.of("badnick!*@*"), ignoreListService.listMasks("libera"));
@@ -67,9 +70,12 @@ class IgnoreCommandFlowIntegrationTest {
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
+    IgnoreHardCommandSupport ignoreHardCommandSupport =
+        new IgnoreHardCommandSupport(ui, targetCoordinator, ignoreListService, ignoreListService);
+    IgnoreSoftCommandSupport ignoreSoftCommandSupport =
+        new IgnoreSoftCommandSupport(ui, targetCoordinator, ignoreListService, ignoreListService);
     OutboundIgnoreCommandService service =
-        new OutboundIgnoreCommandService(
-            ui, targetCoordinator, ignoreListService, ignoreListService);
+        new OutboundIgnoreCommandService(ignoreHardCommandSupport, ignoreSoftCommandSupport);
 
     service.handleSoftIgnore("quietnick");
     assertEquals(List.of("quietnick!*@*"), ignoreListService.listSoftMasks("libera"));

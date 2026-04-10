@@ -3,6 +3,8 @@ package cafe.woden.ircclient.app.api;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Component;
 /** Shared multiline availability and negotiated-limit reasoning for outbound planning. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class Ircv3MultilineFeatureSupport implements Ircv3FeatureAvailabilitySupport {
 
   private static final String FEATURE_ID = "multiline";
@@ -17,15 +20,11 @@ public final class Ircv3MultilineFeatureSupport implements Ircv3FeatureAvailabil
   private static final String NEGOTIATION_UNAVAILABLE_MESSAGE =
       "IRCv3 multiline is not negotiated on this server.";
 
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
 
-  public Ircv3MultilineFeatureSupport(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort ircNegotiatedFeaturePort) {
-    this.backendCapabilityPolicy = backendCapabilityPolicy;
-    this.ircNegotiatedFeaturePort = ircNegotiatedFeaturePort;
-  }
+  @Qualifier("ircNegotiatedFeaturePort")
+  @NonNull
+  private final IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
 
   @Override
   public String featureId() {

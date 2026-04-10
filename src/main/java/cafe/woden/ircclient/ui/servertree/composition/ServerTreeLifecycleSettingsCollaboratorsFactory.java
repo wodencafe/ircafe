@@ -35,18 +35,23 @@ import java.util.function.IntConsumer;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles lifecycle and settings collaborators for server tree construction. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
 
-  private ServerTreeLifecycleSettingsCollaboratorsFactory() {}
+  @NonNull private final ServerTreeServerNodeBuilder serverNodeBuilder;
 
-  public static ServerTreeLifecycleSettingsCollaborators create(Inputs inputs) {
+  public ServerTreeLifecycleSettingsCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     ServerTreeServerRootLifecycleManager serverRootLifecycleManager =
         new ServerTreeServerRootLifecycleManager(
-            Objects.requireNonNull(in.serverNodeBuilder(), "serverNodeBuilder"),
+            serverNodeBuilder,
             Objects.requireNonNull(in.channelListLabel(), "channelListLabel"),
             Objects.requireNonNull(in.weechatFiltersLabel(), "weechatFiltersLabel"),
             Objects.requireNonNull(in.ignoresLabel(), "ignoresLabel"),
@@ -143,7 +148,6 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
   }
 
   public record Inputs(
-      ServerTreeServerNodeBuilder serverNodeBuilder,
       String channelListLabel,
       String weechatFiltersLabel,
       String ignoresLabel,

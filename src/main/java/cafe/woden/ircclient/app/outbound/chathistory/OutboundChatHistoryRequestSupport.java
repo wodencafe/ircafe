@@ -15,8 +15,10 @@ import java.util.function.Supplier;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared chathistory target validation, request routing, and preview/error support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class OutboundChatHistoryRequestSupport {

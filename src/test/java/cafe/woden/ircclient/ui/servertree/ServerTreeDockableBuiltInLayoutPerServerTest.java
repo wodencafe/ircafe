@@ -281,7 +281,7 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
   }
 
   private static ServerTreeDockable newDockable(RuntimeConfigStore runtimeConfig) {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         null,
         runtimeConfig,
         null,

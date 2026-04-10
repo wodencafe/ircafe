@@ -2,7 +2,6 @@ package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
@@ -101,7 +100,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
       IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ChatRedactionAuditService redactionAuditService,
       Function<String, BackendUiProfile> backendUiProfileProvider,
@@ -120,7 +119,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.outboundBus = outboundBus;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
     this.readMarkerFeatureSupport =
-        new Ircv3ReadMarkerFeatureSupport(Objects.requireNonNull(readMarkerPort, "readMarkerPort"));
+        Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.currentNickLookup = Objects.requireNonNullElse(currentNickLookup, serverId -> "");

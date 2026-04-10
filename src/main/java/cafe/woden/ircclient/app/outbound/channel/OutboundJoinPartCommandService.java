@@ -11,6 +11,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -18,10 +19,11 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /join and /part command flow. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundJoinPartCommandService {
 
-  @NonNull
   @Qualifier("ircTargetMembershipPort")
+  @NonNull
   private final IrcTargetMembershipPort targetMembership;
 
   @NonNull private final UiPort ui;
@@ -31,26 +33,6 @@ public final class OutboundJoinPartCommandService {
   @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
   @NonNull private final JoinRoutingPort joinRoutingState;
   @NonNull private final PartCommandSupport partCommandSupport;
-
-  public OutboundJoinPartCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      JoinRoutingPort joinRoutingState) {
-    this.targetMembership = targetMembership;
-    this.ui = ui;
-    this.connectionCoordinator = connectionCoordinator;
-    this.targetCoordinator = targetCoordinator;
-    this.commandTargetPolicy = commandTargetPolicy;
-    this.runtimeConfig = runtimeConfig;
-    this.joinRoutingState = joinRoutingState;
-    this.partCommandSupport =
-        new PartCommandSupport(
-            targetMembership, ui, connectionCoordinator, targetCoordinator, commandTargetPolicy);
-  }
 
   public void handleJoin(CompositeDisposable disposables, String channel, String key) {
     TargetRef at = targetCoordinator.getActiveTarget();

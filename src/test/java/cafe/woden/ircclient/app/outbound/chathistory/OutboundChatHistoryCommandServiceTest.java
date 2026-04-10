@@ -1,16 +1,20 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
@@ -28,9 +32,21 @@ class OutboundChatHistoryCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
       mock(ChatHistoryRequestRoutingPort.class);
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      backendCapabilityPolicy();
+  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
+      new Ircv3ChatHistoryFeatureSupport(
+          outboundBackendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc), irc);
+  private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport =
+      new OutboundChatHistoryRequestSupport(
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          chatHistoryRequestRoutingState,
+          chatHistoryFeatureSupport);
   private final OutboundChatHistoryCommandService service =
       new OutboundChatHistoryCommandService(
-          irc, ui, connectionCoordinator, targetCoordinator, chatHistoryRequestRoutingState);
+          irc, targetCoordinator, chatHistoryFeatureSupport, chatHistoryRequestSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach
@@ -157,5 +173,14 @@ class OutboundChatHistoryCommandServiceTest {
             chan,
             "(help)",
             "/chathistory [limit] (unavailable: requires negotiated draft/chathistory or chathistory)");
+  }
+
+  private static OutboundBackendCapabilityPolicy backendCapabilityPolicy() {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.featureUnavailableMessage(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    when(policy.unavailableReasonForHelp(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    return policy;
   }
 }

@@ -2,40 +2,24 @@ package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.Ircv3MultilineFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Shared multiline payload planning and fallback handling for outbound message sends. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundMultilineMessageSupport {
 
   @NonNull private final Ircv3MultilineFeatureSupport multilineFeatureSupport;
   @NonNull private final UiPort ui;
-
-  @Deprecated(forRemoval = false)
-  OutboundMultilineMessageSupport(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      IrcNegotiatedFeaturePort negotiatedFeaturePort,
-      UiPort ui) {
-    this(new Ircv3MultilineFeatureSupport(backendCapabilityPolicy, negotiatedFeaturePort), ui);
-  }
-
-  @Autowired
-  OutboundMultilineMessageSupport(Ircv3MultilineFeatureSupport multilineFeatureSupport, UiPort ui) {
-    this.multilineFeatureSupport =
-        Objects.requireNonNull(multilineFeatureSupport, "multilineFeatureSupport");
-    this.ui = Objects.requireNonNull(ui, "ui");
-  }
 
   MultilineSendPlan plan(TargetRef target, String message, String statusPrefix) {
     String payload = Objects.toString(message, "").trim();

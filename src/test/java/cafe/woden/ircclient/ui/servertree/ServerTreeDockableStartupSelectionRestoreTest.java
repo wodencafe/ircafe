@@ -94,7 +94,7 @@ class ServerTreeDockableStartupSelectionRestoreTest {
   }
 
   private static ServerTreeDockable newDockable(RuntimeConfigStore runtimeConfigStore) {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         null,
         runtimeConfigStore,
         null,

@@ -3,11 +3,9 @@ package cafe.woden.ircclient.app.outbound.readmarker;
 import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.support.OutboundCommandAvailabilitySupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -15,13 +13,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /markread command flow and read-marker help messaging. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
 
   @NonNull private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
@@ -29,40 +28,6 @@ public final class OutboundReadMarkerCommandService implements OutboundHelpContr
   @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final UiPort ui;
   @NonNull private final TargetCoordinator targetCoordinator;
-
-  @Deprecated(forRemoval = false)
-  public OutboundReadMarkerCommandService(
-      IrcReadMarkerPort readMarkerPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
-      OutboundConnectionStatusSupport outboundConnectionStatusSupport,
-      UiPort ui,
-      TargetCoordinator targetCoordinator) {
-    this(
-        new Ircv3ReadMarkerFeatureSupport(readMarkerPort, backendCapabilityPolicy),
-        outboundCommandAvailabilitySupport,
-        outboundConnectionStatusSupport,
-        ui,
-        targetCoordinator);
-  }
-
-  @Autowired
-  public OutboundReadMarkerCommandService(
-      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
-      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
-      OutboundConnectionStatusSupport outboundConnectionStatusSupport,
-      UiPort ui,
-      TargetCoordinator targetCoordinator) {
-    this.readMarkerFeatureSupport =
-        Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
-    this.outboundCommandAvailabilitySupport =
-        Objects.requireNonNull(
-            outboundCommandAvailabilitySupport, "outboundCommandAvailabilitySupport");
-    this.outboundConnectionStatusSupport =
-        Objects.requireNonNull(outboundConnectionStatusSupport, "outboundConnectionStatusSupport");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-  }
 
   @Override
   public void appendGeneralHelp(TargetRef out) {

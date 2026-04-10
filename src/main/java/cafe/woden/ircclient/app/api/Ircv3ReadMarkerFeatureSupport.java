@@ -8,13 +8,16 @@ import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.function.BiPredicate;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Shared read-marker behavior and availability support for UI and outbound flows. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class Ircv3ReadMarkerFeatureSupport implements Ircv3FeatureAvailabilitySupport {
 
   private static final String FEATURE_ID = "read-marker";
@@ -23,31 +26,12 @@ public final class Ircv3ReadMarkerFeatureSupport implements Ircv3FeatureAvailabi
   private static final String NEGOTIATION_UNAVAILABLE_MESSAGE =
       "read-marker is not negotiated on this server.";
 
+  @Qualifier("ircReadMarkerPort")
+  @NonNull
   private final IrcReadMarkerPort readMarkerPort;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final Ircv3CapabilityNameResolverPort capabilityNameResolver;
 
-  public Ircv3ReadMarkerFeatureSupport(IrcReadMarkerPort readMarkerPort) {
-    this(readMarkerPort, null, new Ircv3CapabilityNameResolverPort() {});
-  }
-
-  public Ircv3ReadMarkerFeatureSupport(
-      IrcReadMarkerPort readMarkerPort, OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
-    this(readMarkerPort, backendCapabilityPolicy, new Ircv3CapabilityNameResolverPort() {});
-  }
-
-  @Autowired
-  public Ircv3ReadMarkerFeatureSupport(
-      IrcReadMarkerPort readMarkerPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      Ircv3CapabilityNameResolverPort capabilityNameResolver) {
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
-    this.backendCapabilityPolicy = backendCapabilityPolicy;
-    this.capabilityNameResolver =
-        capabilityNameResolver == null
-            ? new Ircv3CapabilityNameResolverPort() {}
-            : capabilityNameResolver;
-  }
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final Ircv3CapabilityNameResolverPort capabilityNameResolver;
 
   @Override
   public String featureId() {
@@ -60,10 +44,7 @@ public final class Ircv3ReadMarkerFeatureSupport implements Ircv3FeatureAvailabi
     if (sid.isEmpty()) {
       return false;
     }
-    if (backendCapabilityPolicy != null) {
-      return backendCapabilityPolicy.supportsReadMarker(sid);
-    }
-    return readMarkerPort.isReadMarkerAvailable(sid);
+    return backendCapabilityPolicy.supportsReadMarker(sid);
   }
 
   @Override

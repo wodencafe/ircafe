@@ -10,8 +10,10 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared DCC target, transfer-tracking, and formatting support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class DccCommandSupport {

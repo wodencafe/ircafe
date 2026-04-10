@@ -10,8 +10,10 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared nick-command validation, persistence, and send support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class NickCommandSupport {

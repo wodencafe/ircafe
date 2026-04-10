@@ -5,22 +5,23 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Coordinates IRCv3 typing and read-marker side effects extracted from {@link IrcMediator}. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class MediatorIrcv3PresenceEventHandler {
   private static final Logger log =
       LoggerFactory.getLogger(MediatorIrcv3PresenceEventHandler.class);
@@ -40,37 +41,14 @@ public class MediatorIrcv3PresenceEventHandler {
   private record TypingLogState(String state, long atMs) {}
 
   @Qualifier("ircMediatorInteractionPort")
+  @NonNull
   private final IrcMediatorInteractionPort irc;
 
-  private final IrcTypingPort typingPort;
-  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
-  private final UiPort ui;
-  private final UiSettingsPort uiSettingsPort;
+  @NonNull private final IrcTypingPort typingPort;
+  @NonNull private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
+  @NonNull private final UiPort ui;
+  @NonNull private final UiSettingsPort uiSettingsPort;
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
-
-  @Deprecated(forRemoval = false)
-  public MediatorIrcv3PresenceEventHandler(
-      IrcMediatorInteractionPort irc,
-      IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
-      UiPort ui,
-      UiSettingsPort uiSettingsPort) {
-    this(irc, typingPort, new Ircv3ReadMarkerFeatureSupport(readMarkerPort), ui, uiSettingsPort);
-  }
-
-  @Autowired
-  public MediatorIrcv3PresenceEventHandler(
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
-      IrcTypingPort typingPort,
-      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
-      UiPort ui,
-      UiSettingsPort uiSettingsPort) {
-    this.irc = irc;
-    this.typingPort = typingPort;
-    this.readMarkerFeatureSupport = readMarkerFeatureSupport;
-    this.ui = ui;
-    this.uiSettingsPort = uiSettingsPort;
-  }
 
   public void handleUserTypingObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.UserTypingObserved event) {

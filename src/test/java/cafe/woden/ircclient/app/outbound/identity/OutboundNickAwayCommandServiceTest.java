@@ -27,9 +27,12 @@ class OutboundNickAwayCommandServiceTest {
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
+  private final NickCommandSupport nickCommandSupport =
+      new NickCommandSupport(irc, ui, connectionCoordinator, targetCoordinator, runtimeConfig);
+  private final AwayCommandSupport awayCommandSupport =
+      new AwayCommandSupport(irc, ui, connectionCoordinator, targetCoordinator, awayRoutingState);
   private final OutboundNickAwayCommandService service =
-      new OutboundNickAwayCommandService(
-          irc, ui, connectionCoordinator, targetCoordinator, runtimeConfig, awayRoutingState);
+      new OutboundNickAwayCommandService(nickCommandSupport, awayCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

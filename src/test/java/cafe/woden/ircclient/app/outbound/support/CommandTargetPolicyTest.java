@@ -22,7 +22,8 @@ class CommandTargetPolicyTest {
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
 
-    CommandTargetPolicy policy = new CommandTargetPolicy(serverCatalog);
+    CommandTargetPolicy policy =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
 
     assertTrue(policy.isChannelLikeTargetForServer("matrix", "!room:matrix.example.org"));
   }
@@ -33,7 +34,8 @@ class CommandTargetPolicyTest {
     when(serverCatalog.find("irc"))
         .thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
 
-    CommandTargetPolicy policy = new CommandTargetPolicy(serverCatalog);
+    CommandTargetPolicy policy =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
 
     assertFalse(policy.isChannelLikeTargetForServer("irc", "!room:matrix.example.org"));
   }
@@ -46,7 +48,9 @@ class CommandTargetPolicyTest {
     when(backendMetadata.availableBackendEditorProfiles())
         .thenReturn(List.of(matrixProfile("plugin-matrix")));
 
-    CommandTargetPolicy policy = new CommandTargetPolicy(serverCatalog, null, backendMetadata);
+    CommandTargetPolicy policy =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(
+            serverCatalog, backendMetadata);
 
     assertTrue(policy.isChannelLikeTargetForServer("plugin", "!room:plugin.example.org"));
   }
@@ -59,7 +63,9 @@ class CommandTargetPolicyTest {
     when(backendMetadata.availableBackendEditorProfiles())
         .thenReturn(List.of(ircProfile("plugin-irc")));
 
-    CommandTargetPolicy policy = new CommandTargetPolicy(serverCatalog, null, backendMetadata);
+    CommandTargetPolicy policy =
+        cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(
+            serverCatalog, backendMetadata);
 
     assertFalse(policy.isChannelLikeTargetForServer("plugin", "!room:plugin.example.org"));
   }

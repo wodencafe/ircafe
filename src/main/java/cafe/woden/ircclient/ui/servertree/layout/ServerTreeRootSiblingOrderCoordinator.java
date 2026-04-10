@@ -10,8 +10,10 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Coordinates per-server root sibling order state and runtime-config persistence. */
+@Component
 public final class ServerTreeRootSiblingOrderCoordinator {
 
   private final ServerTreePerServerNormalizedStore<ServerTreeRootSiblingOrder> byServer;

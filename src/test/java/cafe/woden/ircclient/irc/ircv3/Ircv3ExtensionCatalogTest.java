@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.ircv3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.InstalledPluginServices;
@@ -15,12 +16,29 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class Ircv3ExtensionCatalogTest {
 
   private static final String PLUGIN_PROVIDER_CLASS = "plugin.ircv3.RuntimeIrcv3ExtensionProvider";
 
+  private final ApplicationContextRunner runner =
+      new ApplicationContextRunner()
+          .withUserConfiguration(Ircv3ExtensionCatalog.class)
+          .withBean(InstalledPluginsPort.class, RecordingInstalledPluginsPort::new);
+
   @TempDir Path tempDir;
+
+  @Test
+  void createsCatalogBeanThroughAutowiredInstalledPluginsConstructor() {
+    runner.run(
+        ctx -> {
+          Ircv3ExtensionCatalog catalog = ctx.getBean(Ircv3ExtensionCatalog.class);
+
+          assertNotNull(catalog);
+          assertFalse(catalog.providerIds().isEmpty());
+        });
+  }
 
   @Test
   void runtimeCatalogLoadsInstalledIrcv3ExtensionProviders() throws Exception {
@@ -151,6 +169,10 @@ class Ircv3ExtensionCatalogTest {
   private static final class RecordingInstalledPluginsPort implements InstalledPluginsPort {
     private final List<Ircv3ExtensionDefinitionProvider> providers;
     private final List<InstalledPluginProblem> problems = new ArrayList<>();
+
+    private RecordingInstalledPluginsPort() {
+      this(List.of());
+    }
 
     private RecordingInstalledPluginsPort(List<Ircv3ExtensionDefinitionProvider> providers) {
       this.providers = List.copyOf(providers);

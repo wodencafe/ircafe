@@ -12,13 +12,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
@@ -27,44 +28,6 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
   @NonNull private final UiPort ui;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport;
-
-  @Deprecated(forRemoval = false)
-  public OutboundMessageMutationCommandService(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      OutboundMessageMutationSendSupport outboundMessageMutationSendSupport) {
-    this(
-        backendCapabilityPolicy,
-        new Ircv3MessageRedactionFeatureSupport(backendCapabilityPolicy, null),
-        outboundCommandAvailabilitySupport,
-        ui,
-        targetCoordinator,
-        outboundMessageMutationSendSupport);
-  }
-
-  @Autowired
-  public OutboundMessageMutationCommandService(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport,
-      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      OutboundMessageMutationSendSupport outboundMessageMutationSendSupport) {
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.messageRedactionFeatureSupport =
-        Objects.requireNonNull(messageRedactionFeatureSupport, "messageRedactionFeatureSupport");
-    this.outboundCommandAvailabilitySupport =
-        Objects.requireNonNull(
-            outboundCommandAvailabilitySupport, "outboundCommandAvailabilitySupport");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.outboundMessageMutationSendSupport =
-        Objects.requireNonNull(
-            outboundMessageMutationSendSupport, "outboundMessageMutationSendSupport");
-  }
 
   @Override
   public void appendGeneralHelp(TargetRef out) {

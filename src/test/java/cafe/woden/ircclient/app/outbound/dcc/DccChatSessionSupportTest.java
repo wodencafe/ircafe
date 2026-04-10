@@ -16,8 +16,6 @@ import java.io.BufferedWriter;
 import java.io.StringWriter;
 import java.net.Socket;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
@@ -29,7 +27,7 @@ class DccChatSessionSupportTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final DccTransferStore dccTransferStore = mock(DccTransferStore.class);
   private final ExecutorService io = mock(ExecutorService.class);
-  private final ConcurrentMap<String, DccChatSession> chatSessions = new ConcurrentHashMap<>();
+  private final DccRuntimeRegistry dccRuntimeRegistry = new DccRuntimeRegistry();
 
   private final DccChatSessionSupport support =
       new DccChatSessionSupport(
@@ -37,7 +35,7 @@ class DccChatSessionSupportTest {
           mediatorIrc,
           io,
           new DccCommandSupport(ui, targetCoordinator, dccTransferStore),
-          chatSessions);
+          dccRuntimeRegistry);
 
   @Test
   void sendChatMessageReturnsFalseWhenSessionIsMissing() {
@@ -51,10 +49,12 @@ class DccChatSessionSupportTest {
     Socket socket = mock(Socket.class);
     TargetRef pm = new TargetRef("libera", "alice");
 
-    chatSessions.put(
-        DccCommandSupport.peerKey("libera", "alice"),
-        new DccChatSession(
-            "libera", "alice", socket, writer, new Object(), new AtomicBoolean(false)));
+    dccRuntimeRegistry
+        .chatSessions()
+        .put(
+            DccCommandSupport.peerKey("libera", "alice"),
+            new DccChatSession(
+                "libera", "alice", socket, writer, new Object(), new AtomicBoolean(false)));
     when(mediatorIrc.currentNick("libera")).thenReturn(Optional.of("chris"));
 
     assertTrue(support.sendChatMessage("libera", "alice", "hello world"));
@@ -69,15 +69,17 @@ class DccChatSessionSupportTest {
     Socket socket = mock(Socket.class);
     TargetRef pm = new TargetRef("libera", "alice");
 
-    chatSessions.put(
-        DccCommandSupport.peerKey("libera", "alice"),
-        new DccChatSession(
-            "libera",
-            "alice",
-            socket,
-            mock(BufferedWriter.class),
-            new Object(),
-            new AtomicBoolean(false)));
+    dccRuntimeRegistry
+        .chatSessions()
+        .put(
+            DccCommandSupport.peerKey("libera", "alice"),
+            new DccChatSession(
+                "libera",
+                "alice",
+                socket,
+                mock(BufferedWriter.class),
+                new Object(),
+                new AtomicBoolean(false)));
 
     assertTrue(support.closeChatSession("libera", "alice", "Closed DCC CHAT session.", true));
 

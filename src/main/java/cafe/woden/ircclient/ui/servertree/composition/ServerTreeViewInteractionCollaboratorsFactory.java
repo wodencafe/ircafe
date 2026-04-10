@@ -29,47 +29,61 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
-import java.awt.Component;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
+import java.awt.event.MouseEvent;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.Action;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.tree.TreePath;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles tooltip and context-menu collaborators for the server tree UI. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
 
-  private ServerTreeViewInteractionCollaboratorsFactory() {}
+  @NonNull private final ServerTreeContextMenuBuilder contextMenuBuilder;
+  @NonNull private final ServerTreeTooltipResolver tooltipResolver;
+  @NonNull private final ServerTreeTooltipTextPolicy tooltipTextPolicy;
 
-  public static ServerTreeViewInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeViewInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
     ServerTreeRequestStreams requestStreams =
         Objects.requireNonNull(in.requestStreams(), "requestStreams");
 
     ServerTreeTooltipProvider tooltipProvider = createTooltipProvider(in, tree);
-    ServerTreeTooltipResolver tooltipResolver =
-        new ServerTreeTooltipResolver(
-            Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
-            tooltipProvider);
-    ServerTreeContextMenuBuilder contextMenuBuilder = createContextMenuBuilder(in, requestStreams);
+    Function<MouseEvent, String> tooltipResolver =
+        event ->
+            this.tooltipResolver.toolTipForEvent(
+                Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
+                tooltipProvider,
+                event);
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        createContextMenuBuilder(in, requestStreams);
 
     return new ServerTreeViewInteractionCollaborators(
         tooltipProvider, tooltipResolver, contextMenuBuilder);
   }
 
-  private static ServerTreeTooltipProvider createTooltipProvider(Inputs in, JTree tree) {
+  private ServerTreeTooltipProvider createTooltipProvider(Inputs in, JTree tree) {
     return new ServerTreeTooltipProvider(
         tree,
         ServerTreeTooltipProvider.context(
@@ -97,20 +111,23 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
                 isAutoConnectEnabled(in, backendId, originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
             nodeData -> isBouncerControlStatusNode(nodeData, in),
-            in.quasselNetworkTooltip()));
+            in.quasselNetworkTooltip()),
+        tooltipTextPolicy);
   }
 
-  private static ServerTreeContextMenuBuilder createContextMenuBuilder(
+  private Function<TreePath, JPopupMenu> createContextMenuBuilder(
       Inputs in, ServerTreeRequestStreams requestStreams) {
-    return new ServerTreeContextMenuBuilder(
-        ServerTreeContextMenuBuilder.routingContext(
-            in.uiHooks()::isServerNode,
-            in.nodeClassifier()::isInterceptorsGroupNode,
-            in.isQuasselNetworkNode(),
-            in.isQuasselEmptyStateNode()),
-        createServerNodeMenuContext(in),
-        createTargetNodeMenuContext(in, requestStreams),
-        createQuasselNetworkNodeMenuContext(in));
+    ServerTreeContextMenuBuilder.Contexts contexts =
+        new ServerTreeContextMenuBuilder.Contexts(
+            ServerTreeContextMenuBuilder.routingContext(
+                in.uiHooks()::isServerNode,
+                in.nodeClassifier()::isInterceptorsGroupNode,
+                in.isQuasselNetworkNode(),
+                in.isQuasselEmptyStateNode()),
+            createServerNodeMenuContext(in),
+            createTargetNodeMenuContext(in, requestStreams),
+            createQuasselNetworkNodeMenuContext(in));
+    return path -> contextMenuBuilder.build(contexts, path);
   }
 
   private static ServerTreeServerNodeMenuBuilder.Context createServerNodeMenuContext(Inputs in) {
@@ -226,7 +243,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     String label = Objects.toString(networkLabel, "").trim();
     String display = label.isEmpty() ? token : label;
     if (display.isEmpty()) display = "this network";
-    Component owner = in.ownerComponent();
+    java.awt.Component owner = in.ownerComponent();
     int choice =
         JOptionPane.showConfirmDialog(
             owner,
@@ -467,7 +484,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       InterceptorStore interceptorStore,
       ServerTreeInterceptorActions interceptorActions,
       ServerDialogs serverDialogs,
-      Component ownerComponent,
+      java.awt.Component ownerComponent,
       ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
