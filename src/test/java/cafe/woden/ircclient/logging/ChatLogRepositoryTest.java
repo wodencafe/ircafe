@@ -22,6 +22,23 @@ class ChatLogRepositoryTest {
   @TempDir Path tempDir;
 
   @Test
+  void chatLogTableUsesCachedStorageAfterMigrations() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-cached-table-type"))) {
+      String type =
+          fixture.jdbc.queryForObject(
+              """
+              SELECT HSQLDB_TYPE
+                FROM INFORMATION_SCHEMA.SYSTEM_TABLES
+               WHERE TABLE_SCHEM = 'PUBLIC'
+                 AND TABLE_NAME = 'CHAT_LOG'
+              """,
+              String.class);
+
+      assertEquals("CACHED", type);
+    }
+  }
+
+  @Test
   void duplicateMessageIdIsSuppressedAcrossRepositoryReopen() {
     Path base = tempDir.resolve("chatlog-reopen");
 
