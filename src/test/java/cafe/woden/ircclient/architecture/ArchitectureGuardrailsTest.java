@@ -144,6 +144,9 @@ class ArchitectureGuardrailsTest {
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder");
 

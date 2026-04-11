@@ -303,7 +303,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeBouncerDetachPolicy bouncerDetachPolicy;
   private final ServerTreeNodeBadgeUpdater nodeBadgeUpdater;
   private final ServerTreeSelectionFallbackPolicy selectionFallbackPolicy;
+  private final ServerTreeSelectionFallbackPolicy.Context selectionFallbackContext;
   private final ServerTreeSelectionPersistencePolicy selectionPersistencePolicy;
+  private final ServerTreeSelectionPersistencePolicy.Context selectionPersistenceContext;
   private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
   private final ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
@@ -370,6 +372,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       JfrRuntimeEventsService jfrRuntimeEventsService,
       ServerTreeNetworkInfoDialogBuilder networkInfoDialogBuilder,
       ServerTreeCellPresentationPolicy cellPresentationPolicy,
+      ServerTreeSelectionFallbackPolicy selectionFallbackPolicy,
+      ServerTreeSelectionPersistencePolicy selectionPersistencePolicy,
+      ServerTreeTargetNodePolicy targetNodePolicy,
       ServerTreeEdtExecutor edtExecutor,
       ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
@@ -656,24 +661,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             INTERCEPTORS_GROUP_LABEL,
             IGNORES_LABEL);
     this.selectionFallbackPolicy =
-        new ServerTreeSelectionFallbackPolicy(
-            ServerTreeSelectionFallbackPolicy.context(
-                ServerTreeDockable::normalizeServerId,
-                servers,
-                this::builtInNodesVisibility,
-                leaves,
-                this::selectTarget,
-                tree));
+        Objects.requireNonNull(selectionFallbackPolicy, "selectionFallbackPolicy");
+    this.selectionFallbackContext =
+        ServerTreeSelectionFallbackPolicy.context(
+            ServerTreeDockable::normalizeServerId,
+            servers,
+            this::builtInNodesVisibility,
+            leaves,
+            this::selectTarget,
+            tree);
     this.selectionPersistencePolicy =
-        new ServerTreeSelectionPersistencePolicy(
-            ServerTreeSelectionPersistencePolicy.context(
-                selectionBroadcastCoordinator::lastBroadcastSelectionRef,
-                this::selectedTargetRef,
-                () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
-                nodeClassifier::owningServerIdForNode,
-                nodeClassifier::isMonitorGroupNode,
-                nodeClassifier::isInterceptorsGroupNode,
-                quasselNetworkParentResolver::channelListRefForNetworkNode));
+        Objects.requireNonNull(selectionPersistencePolicy, "selectionPersistencePolicy");
+    this.selectionPersistenceContext =
+        ServerTreeSelectionPersistencePolicy.context(
+            selectionBroadcastCoordinator::lastBroadcastSelectionRef,
+            this::selectedTargetRef,
+            () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
+            nodeClassifier::owningServerIdForNode,
+            nodeClassifier::isMonitorGroupNode,
+            nodeClassifier::isInterceptorsGroupNode,
+            quasselNetworkParentResolver::channelListRefForNetworkNode);
     this.startupSelectionRestorer =
         new ServerTreeStartupSelectionRestorer(
             ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
@@ -746,16 +753,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   }
                 },
                 () -> tree.setSelectionPath(defaultSelectionPath())));
-    this.targetNodePolicy =
-        new ServerTreeTargetNodePolicy(
-            interceptorStore,
-            "Notifications",
-            "Interceptor",
-            LOG_VIEWER_LABEL,
-            CHANNEL_LIST_LABEL,
-            WEECHAT_FILTERS_LABEL,
-            IGNORES_LABEL,
-            DCC_TRANSFERS_LABEL);
+    this.targetNodePolicy = Objects.requireNonNull(targetNodePolicy, "targetNodePolicy");
     this.privateMessageOnlineStateCoordinator =
         new ServerTreePrivateMessageOnlineStateCoordinator(
             privateMessageOnlineStateStore,
@@ -1230,7 +1228,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * target refs.
    */
   public TargetRef selectedTargetForPersistence() {
-    return selectionPersistencePolicy.selectedTargetForPersistence();
+    return selectionPersistencePolicy.selectedTargetForPersistence(selectionPersistenceContext);
   }
 
   public Flowable<TargetRef> selectionStream() {
@@ -1666,14 +1664,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void selectBestFallbackForServer(String serverId) {
-    selectionFallbackPolicy.selectBestFallbackForServer(serverId);
+    selectionFallbackPolicy.selectBestFallbackForServer(selectionFallbackContext, serverId);
   }
 
   private void selectStartupDefaultForServer(String serverId) {
     if (startupSelectionRestorer.tryRestoreForServer(serverId)) {
       return;
     }
-    selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
+    selectionFallbackPolicy.selectStartupDefaultForServer(selectionFallbackContext, serverId);
   }
 
   private void applyBuiltInLayoutToTree(ServerNodes sn, ServerTreeBuiltInLayout requestedLayout) {

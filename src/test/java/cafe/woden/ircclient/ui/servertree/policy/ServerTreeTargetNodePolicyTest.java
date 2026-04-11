@@ -12,32 +12,14 @@ class ServerTreeTargetNodePolicyTest {
 
   @Test
   void leafLabelStripsNetworkQualifierForRegularTargets() {
-    ServerTreeTargetNodePolicy policy =
-        new ServerTreeTargetNodePolicy(
-            null,
-            "Notifications",
-            "Interceptor",
-            "Log Viewer",
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers");
+    ServerTreeTargetNodePolicy policy = new ServerTreeTargetNodePolicy(null);
 
     assertEquals("#ircafe", policy.leafLabel(new TargetRef("quassel", "#ircafe{net:libera}")));
   }
 
   @Test
   void leafLabelKeepsBuiltInLabelForQualifiedChannelListTargets() {
-    ServerTreeTargetNodePolicy policy =
-        new ServerTreeTargetNodePolicy(
-            null,
-            "Notifications",
-            "Interceptor",
-            "Log Viewer",
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers");
+    ServerTreeTargetNodePolicy policy = new ServerTreeTargetNodePolicy(null);
 
     assertEquals("Channel List", policy.leafLabel(TargetRef.channelList("quassel", "libera")));
   }
@@ -47,16 +29,7 @@ class ServerTreeTargetNodePolicyTest {
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     when(interceptorStore.interceptorName("quassel{net:libera}", "audit")).thenReturn("Audit Rule");
 
-    ServerTreeTargetNodePolicy policy =
-        new ServerTreeTargetNodePolicy(
-            interceptorStore,
-            "Notifications",
-            "Interceptor",
-            "Log Viewer",
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers");
+    ServerTreeTargetNodePolicy policy = new ServerTreeTargetNodePolicy(interceptorStore);
 
     assertEquals(
         "Audit Rule", policy.leafLabel(TargetRef.interceptor("quassel", "audit", "libera")));
@@ -64,16 +37,7 @@ class ServerTreeTargetNodePolicyTest {
 
   @Test
   void leafLabelSimplifiesMatrixAddressTargets() {
-    ServerTreeTargetNodePolicy policy =
-        new ServerTreeTargetNodePolicy(
-            null,
-            "Notifications",
-            "Interceptor",
-            "Log Viewer",
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers");
+    ServerTreeTargetNodePolicy policy = new ServerTreeTargetNodePolicy(null);
 
     assertEquals(
         "#woden",
