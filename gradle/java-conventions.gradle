@@ -73,9 +73,19 @@ springBoot {
     buildInfo()
 }
 
+boolean includeDevtoolsInBootRun = (findProperty('bootRunDevtools') ?: 'false').toString().toBoolean()
+
 // Ensure build-info exists for bootRun/IDE runs too.
 tasks.matching { it.name == 'bootRun' }.configureEach {
     dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+
+    if (!includeDevtoolsInBootRun) {
+        // Spring Boot devtools continuously snapshots the source tree during bootRun,
+        // which causes several MB/sec of short-lived allocation churn while IRCafe is idle.
+        classpath = classpath.filter { file ->
+            !file.name.contains('spring-boot-devtools')
+        }
+    }
 }
 tasks.matching { it.name == 'processResources' }.configureEach {
     dependsOn tasks.matching { it.name == 'bootBuildInfo' }
