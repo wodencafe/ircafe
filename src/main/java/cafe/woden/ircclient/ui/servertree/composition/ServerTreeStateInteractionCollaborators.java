@@ -15,6 +15,7 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 public record ServerTreeStateInteractionCollaborators(
     ServerTreeServerActionOverlay serverActionOverlay,
     ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater,
+    ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext,
     ServerTreeServerStateCleaner serverStateCleaner,
     ServerTreeServerStateCleaner.Context serverStateCleanerContext,
     ServerTreeChannelStateCoordinator channelStateCoordinator,

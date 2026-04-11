@@ -15,9 +15,11 @@ class ServerTreeRuntimeHeaderApiTest {
   void delegatesRuntimeAndHeaderOperations() {
     ServerTreeServerRuntimeUiUpdater runtimeUiUpdater =
         mock(ServerTreeServerRuntimeUiUpdater.class);
+    ServerTreeServerRuntimeUiUpdater.Context runtimeUiUpdaterContext =
+        mock(ServerTreeServerRuntimeUiUpdater.Context.class);
     ServerTreeHeaderControls headerControls = mock(ServerTreeHeaderControls.class);
     ServerTreeRuntimeHeaderApi api =
-        new ServerTreeRuntimeHeaderApi(runtimeUiUpdater, headerControls);
+        new ServerTreeRuntimeHeaderApi(runtimeUiUpdater, runtimeUiUpdaterContext, headerControls);
 
     Instant at = Instant.now();
     api.setServerConnectionState("libera", ConnectionState.CONNECTED);
@@ -31,14 +33,20 @@ class ServerTreeRuntimeHeaderApiTest {
     api.setConnectionControlsEnabled(true, false);
     api.setConnectedUi(true);
 
-    verify(runtimeUiUpdater).setServerConnectionState("libera", ConnectionState.CONNECTED);
-    verify(runtimeUiUpdater).setServerDesiredOnline("libera", true);
-    verify(runtimeUiUpdater).setServerConnectionDiagnostics("libera", "error", 123L);
     verify(runtimeUiUpdater)
-        .setServerConnectedIdentity("libera", "irc.libera.chat", 6697, "nick", at);
-    verify(runtimeUiUpdater).setServerIrcv3Capability("libera", "draft/example", "LS", true);
-    verify(runtimeUiUpdater).setServerIsupportToken("libera", "NICKLEN", "32");
-    verify(runtimeUiUpdater).setServerVersionDetails("libera", "server", "v1", "i", "k");
+        .setServerConnectionState(runtimeUiUpdaterContext, "libera", ConnectionState.CONNECTED);
+    verify(runtimeUiUpdater).setServerDesiredOnline(runtimeUiUpdaterContext, "libera", true);
+    verify(runtimeUiUpdater)
+        .setServerConnectionDiagnostics(runtimeUiUpdaterContext, "libera", "error", 123L);
+    verify(runtimeUiUpdater)
+        .setServerConnectedIdentity(
+            runtimeUiUpdaterContext, "libera", "irc.libera.chat", 6697, "nick", at);
+    verify(runtimeUiUpdater)
+        .setServerIrcv3Capability(runtimeUiUpdaterContext, "libera", "draft/example", "LS", true);
+    verify(runtimeUiUpdater)
+        .setServerIsupportToken(runtimeUiUpdaterContext, "libera", "NICKLEN", "32");
+    verify(runtimeUiUpdater)
+        .setServerVersionDetails(runtimeUiUpdaterContext, "libera", "server", "v1", "i", "k");
     verify(headerControls).setStatusText("Connected");
     verify(headerControls).setConnectionControlsEnabled(true, false);
     verify(headerControls).setConnectionControlsEnabled(false, true);

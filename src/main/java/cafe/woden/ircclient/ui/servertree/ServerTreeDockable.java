@@ -342,6 +342,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
   private final ServerTreeRequestApi requestApi;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
+  private final ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext;
   private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
 
@@ -636,6 +637,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 SERVER_ACTION_BUTTON_MARGIN));
     this.serverActionOverlay = stateInteractionCollaborators.serverActionOverlay();
     this.serverRuntimeUiUpdater = stateInteractionCollaborators.serverRuntimeUiUpdater();
+    this.serverRuntimeUiUpdaterContext =
+        stateInteractionCollaborators.serverRuntimeUiUpdaterContext();
     this.serverStateCleaner = stateInteractionCollaborators.serverStateCleaner();
     this.serverStateCleanerContext = stateInteractionCollaborators.serverStateCleanerContext();
     this.serverParentResolverContext =
@@ -1017,7 +1020,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.headerControls =
         new ServerTreeHeaderControls(this, connectBtn, disconnectBtn, serverDialogs);
-    this.runtimeHeaderApi = new ServerTreeRuntimeHeaderApi(serverRuntimeUiUpdater, headerControls);
+    this.runtimeHeaderApi =
+        new ServerTreeRuntimeHeaderApi(
+            serverRuntimeUiUpdater, serverRuntimeUiUpdaterContext, headerControls);
     JPanel header = headerControls.panel();
 
     root.add(ircRoot);

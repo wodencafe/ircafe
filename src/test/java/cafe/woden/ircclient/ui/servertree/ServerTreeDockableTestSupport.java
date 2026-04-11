@@ -30,6 +30,8 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPoli
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
@@ -130,7 +132,10 @@ final class ServerTreeDockableTestSupport {
     return new ServerTreeCompositionAssembler(
         new ServerTreeLayoutCollaboratorsFactory(
             layoutApplier, builtInLayoutCoordinator, rootSiblingOrderCoordinator),
-        new ServerTreeStateInteractionCollaboratorsFactory(new ServerTreeServerStateCleaner()),
+        new ServerTreeStateInteractionCollaboratorsFactory(
+            new ServerTreeEnsureNodeParentResolver(),
+            new ServerTreeServerRuntimeUiUpdater(),
+            new ServerTreeServerStateCleaner()),
         new ServerTreeViewInteractionCollaboratorsFactory(
             new ServerTreeContextMenuBuilder(
                 new ServerTreeServerNodeMenuBuilder(),

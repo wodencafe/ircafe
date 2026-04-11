@@ -35,6 +35,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public final class ServerTreeStateInteractionCollaboratorsFactory {
 
+  @NonNull private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
+  @NonNull private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   @NonNull private final ServerTreeServerStateCleaner serverStateCleaner;
 
   public ServerTreeStateInteractionCollaborators create(Inputs inputs) {
@@ -47,13 +49,13 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             in.serverActionButtonIconSize(),
             in.serverActionButtonMargin(),
             Objects.requireNonNull(in.serverActionOverlayContext(), "serverActionOverlayContext"));
-    ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater =
-        new ServerTreeServerRuntimeUiUpdater(
+    ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext =
+        ServerTreeServerRuntimeUiUpdater.context(
             Objects.requireNonNull(in.runtimeState(), "runtimeState"),
             Objects.requireNonNull(in.servers(), "servers"),
-            Objects.requireNonNull(in.model(), "model"),
-            serverActionOverlay,
-            in.tree());
+            Objects.requireNonNull(in.model(), "model")::nodeChanged,
+            serverActionOverlay::isHoveredServer,
+            in.tree()::repaint);
     ServerTreeServerStateCleaner.Context serverStateCleanerContext =
         ServerTreeServerStateCleaner.context(
             in.interceptorStore(),
@@ -71,8 +73,6 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             in.model(),
             Objects.requireNonNull(
                 in.channelStateCoordinatorContext(), "channelStateCoordinatorContext"));
-    ServerTreeEnsureNodeParentResolver ensureNodeParentResolver =
-        new ServerTreeEnsureNodeParentResolver();
     ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter =
         new ServerTreeEnsureNodeLeafInserter(
             in.leaves(),
@@ -105,6 +105,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
     return new ServerTreeStateInteractionCollaborators(
         serverActionOverlay,
         serverRuntimeUiUpdater,
+        serverRuntimeUiUpdaterContext,
         serverStateCleaner,
         serverStateCleanerContext,
         channelStateCoordinator,

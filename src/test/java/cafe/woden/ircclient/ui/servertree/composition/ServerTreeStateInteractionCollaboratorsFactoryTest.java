@@ -10,9 +10,11 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import java.util.HashMap;
@@ -56,7 +58,10 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     AtomicReference<String> clearedPrivateMessageServer = new AtomicReference<>("");
 
     ServerTreeStateInteractionCollaborators collaborators =
-        new ServerTreeStateInteractionCollaboratorsFactory(new ServerTreeServerStateCleaner())
+        new ServerTreeStateInteractionCollaboratorsFactory(
+                new ServerTreeEnsureNodeParentResolver(),
+                new ServerTreeServerRuntimeUiUpdater(),
+                new ServerTreeServerStateCleaner())
             .create(
                 new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
                     tree,
@@ -84,6 +89,7 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
 
     assertNotNull(collaborators.serverActionOverlay());
     assertNotNull(collaborators.serverRuntimeUiUpdater());
+    assertNotNull(collaborators.serverRuntimeUiUpdaterContext());
     assertNotNull(collaborators.serverStateCleaner());
     assertNotNull(collaborators.serverStateCleanerContext());
     assertNotNull(collaborators.channelStateCoordinator());
