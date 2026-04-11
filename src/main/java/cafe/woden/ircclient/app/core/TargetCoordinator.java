@@ -10,6 +10,7 @@ import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -60,6 +61,7 @@ public class TargetCoordinator implements ActiveTargetPort {
 
   @NonNull private final ServerRegistry serverRegistry;
   @NonNull private final IrcSessionRuntimeConfigPort runtimeConfig;
+  @NonNull private final ServerTreeChannelStateConfigPort channelStateConfig;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final IgnoreListQueryPort ignoreList;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
@@ -86,6 +88,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Set<TargetRef> closedPrivateTargetsByUser = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> detachedChannelsByUserOrKick = ConcurrentHashMap.newKeySet();
+  private final Set<TargetRef> locallyDetachedChannelsByUser = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> bouncerDetachedChannels = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
@@ -113,6 +116,7 @@ public class TargetCoordinator implements ActiveTargetPort {
         bouncerPlayback,
         serverRegistry,
         runtimeConfig,
+        null,
         connectionCoordinator,
         ignoreList,
         userhostQueryService,
@@ -132,6 +136,7 @@ public class TargetCoordinator implements ActiveTargetPort {
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ServerRegistry serverRegistry,
       IrcSessionRuntimeConfigPort runtimeConfig,
+      ServerTreeChannelStateConfigPort channelStateConfig,
       ConnectionCoordinator connectionCoordinator,
       IgnoreListQueryPort ignoreList,
       UserhostQueryService userhostQueryService,
@@ -149,6 +154,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.channelStateConfig = requireChannelStateConfig(runtimeConfig, channelStateConfig);
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.ignoreList = Objects.requireNonNull(ignoreList, "ignoreList");
@@ -542,6 +548,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     } else {
       channelsClosedByUser.remove(target);
     }
+    locallyDetachedChannelsByUser.remove(target);
 
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(status);
@@ -583,6 +590,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     boolean connected = connectionCoordinator.isConnected(sid);
 
     channelsClosedByUser.remove(target);
+    locallyDetachedChannelsByUser.add(target);
+    rememberChannelAutoReattachPreference(sid, target.target(), false);
     detachedChannelsByUserOrKick.add(target);
     bouncerDetachedChannels.remove(target);
     ui.setChannelDisconnected(target, true);
@@ -621,6 +630,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     channelsClosedByUser.remove(target);
+    locallyDetachedChannelsByUser.add(target);
+    rememberChannelAutoReattachPreference(sid, target.target(), false);
     detachedChannelsByUserOrKick.remove(target);
     bouncerDetachedChannels.add(target);
     ui.setChannelDisconnected(target, true);
@@ -651,6 +662,8 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     if (connected && ui.hasTarget(target) && !ui.isChannelDisconnected(target)) {
       channelsClosedByUser.remove(target);
+      locallyDetachedChannelsByUser.remove(target);
+      rememberChannelAutoReattachPreference(sid, target.target(), true);
       if (!isQuasselCoreServer(sid)) {
         runtimeConfig.rememberJoinedChannel(sid, target.target());
         syncRuntimeAutoJoinForReconnect(sid);
@@ -666,6 +679,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
 
     channelsClosedByUser.remove(target);
+    locallyDetachedChannelsByUser.remove(target);
+    rememberChannelAutoReattachPreference(sid, target.target(), true);
     if (!isQuasselCoreServer(sid)) {
       runtimeConfig.rememberJoinedChannel(sid, target.target());
       syncRuntimeAutoJoinForReconnect(sid);
@@ -716,6 +731,7 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     if (channelsClosedByUser.remove(target)) {
       detachedChannelsByUserOrKick.remove(target);
+      locallyDetachedChannelsByUser.remove(target);
       bouncerDetachedChannels.remove(target);
       userListStore.clear(sid, ch);
       return;
@@ -762,6 +778,8 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     if (bouncerDetachedChannels.remove(target)) {
       detachedChannelsByUserOrKick.remove(target);
+      locallyDetachedChannelsByUser.remove(target);
+      rememberChannelAutoReattachPreference(sid, ch, true);
       ui.setChannelDisconnected(target, false);
       if (Objects.equals(activeTarget, target)) {
         applyTargetContext(target);
@@ -771,6 +789,18 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     if (detachedChannelsByUserOrKick.contains(target)) {
+      if (locallyDetachedChannelsByUser.remove(target)) {
+        // A fresh self JOIN after a locally detached channel usually came from another client.
+        detachedChannelsByUserOrKick.remove(target);
+        rememberChannelAutoReattachPreference(sid, ch, true);
+        ui.setChannelDisconnected(target, false);
+        if (Objects.equals(activeTarget, target)) {
+          applyTargetContext(target);
+          ui.setChatActiveTarget(target);
+        }
+        return true;
+      }
+
       ui.setChannelDisconnected(target, true);
       userListStore.clear(sid, ch);
 
@@ -789,6 +819,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     detachedChannelsByUserOrKick.remove(target);
+    locallyDetachedChannelsByUser.remove(target);
+    rememberChannelAutoReattachPreference(sid, ch, true);
     ui.setChannelDisconnected(target, false);
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(target);
@@ -826,6 +858,29 @@ public class TargetCoordinator implements ActiveTargetPort {
           .equals(configured.orElseThrow().backendId());
     } catch (Exception ignored) {
       return false;
+    }
+  }
+
+  private static ServerTreeChannelStateConfigPort requireChannelStateConfig(
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ServerTreeChannelStateConfigPort channelStateConfig) {
+    if (channelStateConfig != null) {
+      return channelStateConfig;
+    }
+    if (runtimeConfig instanceof ServerTreeChannelStateConfigPort port) {
+      return port;
+    }
+    throw new IllegalArgumentException("channelStateConfig");
+  }
+
+  private void rememberChannelAutoReattachPreference(
+      String serverId, String channel, boolean autoReattach) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+    try {
+      channelStateConfig.rememberServerTreeChannelAutoReattach(sid, ch, autoReattach);
+    } catch (Exception ignored) {
     }
   }
 
