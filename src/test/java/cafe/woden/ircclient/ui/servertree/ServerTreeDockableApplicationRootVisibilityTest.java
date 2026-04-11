@@ -188,10 +188,11 @@ class ServerTreeDockableApplicationRootVisibilityTest {
     JTree tree = getTree(dockable);
     Object selected = tree.getLastSelectedPathComponent();
     if (!(selected instanceof DefaultMutableTreeNode node)) return false;
-    Field f = ServerTreeDockable.class.getDeclaredField("nodeClassifier");
-    f.setAccessible(true);
-    ServerTreeNodeClassifier classifier = (ServerTreeNodeClassifier) f.get(dockable);
-    return classifier.isMonitorGroupNode(node);
+    Field contextField = ServerTreeDockable.class.getDeclaredField("nodeClassifierContext");
+    contextField.setAccessible(true);
+    ServerTreeNodeClassifier.Context context =
+        (ServerTreeNodeClassifier.Context) contextField.get(dockable);
+    return new ServerTreeNodeClassifier().isMonitorGroupNode(context, node);
   }
 
   private static TargetRef selectedTargetRef(ServerTreeDockable dockable) throws Exception {

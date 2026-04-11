@@ -92,9 +92,13 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             Objects.requireNonNull(in.nodeAccess(), "nodeAccess")::isIrcRootNode,
             in.nodeAccess()::isApplicationRootNode,
             node -> backendIdForNetworksGroupNode(in, node),
-            Objects.requireNonNull(in.nodeClassifier(), "nodeClassifier")::isInterceptorsGroupNode,
-            in.nodeClassifier()::isMonitorGroupNode,
-            in.nodeClassifier()::isOtherGroupNode,
+            node ->
+                Objects.requireNonNull(in.nodeClassifier(), "nodeClassifier")
+                    .isInterceptorsGroupNode(
+                        Objects.requireNonNull(in.nodeClassifierContext(), "nodeClassifierContext"),
+                        node),
+            node -> in.nodeClassifier().isMonitorGroupNode(in.nodeClassifierContext(), node),
+            node -> in.nodeClassifier().isOtherGroupNode(in.nodeClassifierContext(), node),
             in.uiHooks()::isServerNode,
             in.isQuasselNetworkNode(),
             in.isQuasselEmptyStateNode(),
@@ -121,7 +125,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         new ServerTreeContextMenuBuilder.Contexts(
             ServerTreeContextMenuBuilder.routingContext(
                 in.uiHooks()::isServerNode,
-                in.nodeClassifier()::isInterceptorsGroupNode,
+                node ->
+                    in.nodeClassifier().isInterceptorsGroupNode(in.nodeClassifierContext(), node),
                 in.isQuasselNetworkNode(),
                 in.isQuasselEmptyStateNode()),
             createServerNodeMenuContext(in),
@@ -133,7 +138,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   private static ServerTreeServerNodeMenuBuilder.Context createServerNodeMenuContext(Inputs in) {
     return ServerTreeServerNodeMenuBuilder.context(
         in.nodeAccess()::isRootServerNode,
-        in.serverLabelPolicy()::prettyServerLabel,
+        serverId ->
+            in.serverLabelPolicy().prettyServerLabel(in.serverLabelPolicyContext(), serverId),
         in.uiHooks()::connectionStateForServer,
         in.runtimeState()::connectionDiagnosticsTipForServer,
         serverId -> serverEntry(in.serverCatalog(), serverId),
@@ -160,11 +166,12 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         (backendId, serverId) -> originForServer(in, backendId, serverId),
         (backendId, originId, networkKey) ->
             isAutoConnectEnabled(in, backendId, originId, networkKey),
-        serverId -> in.serverDisplayNames().getOrDefault(serverId, serverId),
+        serverId ->
+            in.serverLabelPolicy().prettyServerLabel(in.serverLabelPolicyContext(), serverId),
         (backendId, originId, networkKey, enabled) ->
             setAutoConnectEnabled(in, backendId, originId, networkKey, enabled),
         backendId -> refreshAutoConnectBadges(in, backendId),
-        in.nodeClassifier()::owningServerIdForNode);
+        node -> in.nodeClassifier().owningServerIdForNode(in.nodeClassifierContext(), node));
   }
 
   private static ServerTreeTargetNodeMenuBuilder.Context createTargetNodeMenuContext(
@@ -178,7 +185,9 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.uiHooks()::joinChannel,
         in.uiHooks()::disconnectChannel,
         in.uiHooks()::closeChannel,
-        in.bouncerDetachPolicy()::supportsBouncerDetach,
+        serverId ->
+            in.bouncerDetachPolicy()
+                .supportsBouncerDetach(in.bouncerDetachPolicyContext(), serverId),
         in.uiHooks()::bouncerDetachChannel,
         in.isChannelAutoReattach(),
         in.setChannelAutoReattach(),
@@ -300,7 +309,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       return originFromServerId(backendId, serverId);
     }
     if (inputs.serverLabelPolicy() != null) {
-      String resolved = inputs.serverLabelPolicy().originForServer(backendId, serverId);
+      String resolved =
+          inputs
+              .serverLabelPolicy()
+              .originForServer(inputs.serverLabelPolicyContext(), backendId, serverId);
       if (resolved != null && !resolved.isBlank()) {
         return resolved;
       }
@@ -327,13 +339,17 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     if (inputs == null || inputs.serverLabelPolicy() == null) {
       return null;
     }
-    return inputs.serverLabelPolicy().backendIdForEphemeralServer(serverId);
+    return inputs
+        .serverLabelPolicy()
+        .backendIdForEphemeralServer(inputs.serverLabelPolicyContext(), serverId);
   }
 
   private static boolean isAutoConnectEnabled(
       Inputs inputs, String backendId, String originId, String networkKey) {
     if (inputs != null && inputs.serverLabelPolicy() != null) {
-      return inputs.serverLabelPolicy().isAutoConnectEnabled(backendId, originId, networkKey);
+      return inputs
+          .serverLabelPolicy()
+          .isAutoConnectEnabled(inputs.serverLabelPolicyContext(), backendId, originId, networkKey);
     }
     String backend = normalizeBackendId(backendId);
     String origin = Objects.toString(originId, "").trim();
@@ -467,8 +483,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeNodeAccess nodeAccess,
       ServerTreeNetworkGroupManager networkGroupManager,
       ServerTreeNodeClassifier nodeClassifier,
+      ServerTreeNodeClassifier.Context nodeClassifierContext,
       ServerTreeRuntimeState runtimeState,
       ServerTreeServerLabelPolicy serverLabelPolicy,
+      ServerTreeServerLabelPolicy.Context serverLabelPolicyContext,
       Map<String, String> serverDisplayNames,
       java.util.function.Function<String, String> backendDisplayNameForServer,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
@@ -488,6 +506,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
+      ServerTreeBouncerDetachPolicy.Context bouncerDetachPolicyContext,
       Predicate<TargetRef> isChannelDisconnected,
       Predicate<TargetRef> isChannelAutoReattach,
       BiConsumer<TargetRef, Boolean> setChannelAutoReattach,

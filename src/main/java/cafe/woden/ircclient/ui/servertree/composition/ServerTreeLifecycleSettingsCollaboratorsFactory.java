@@ -65,8 +65,12 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                 Objects.requireNonNull(in.runtimeState(), "runtimeState")::markServerKnown,
                 Objects.requireNonNull(in.channelStateCoordinator(), "channelStateCoordinator")
                     ::loadChannelStateForServer,
-                Objects.requireNonNull(in.serverParentResolver(), "serverParentResolver")
-                    ::resolveParentForServer,
+                serverId ->
+                    Objects.requireNonNull(in.serverParentResolver(), "serverParentResolver")
+                        .resolveParentForServer(
+                            Objects.requireNonNull(
+                                in.serverParentResolverContext(), "serverParentResolverContext"),
+                            serverId),
                 Objects.requireNonNull(in.builtInNodesVisibility(), "builtInNodesVisibility"),
                 () ->
                     Objects.requireNonNull(
@@ -160,6 +164,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       ServerTreeRuntimeState runtimeState,
       ServerTreeChannelStateCoordinator channelStateCoordinator,
       ServerTreeServerParentResolver serverParentResolver,
+      ServerTreeServerParentResolver.Context serverParentResolverContext,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       BooleanSupplier isDccTransfersNodesVisible,
       ServerTreeStatusLabelManager statusLabelManager,

@@ -25,8 +25,10 @@ import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFacto
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
@@ -100,9 +102,14 @@ final class ServerTreeDockableTestSupport {
         new ServerTreeNetworkInfoDialogBuilder(
             runtimeConfig, Ircv3ExtensionCatalog.builtInCatalog()),
         new ServerTreeCellPresentationPolicy(),
+        new ServerTreeServerLabelPolicy(),
+        new ServerTreeBouncerDetachPolicy(),
         new ServerTreeSelectionFallbackPolicy(),
         new ServerTreeSelectionPersistencePolicy(),
         new ServerTreeTargetNodePolicy(interceptorStore),
+        new cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver(),
+        new cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier(),
+        new cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver(),
         new ServerTreeEdtExecutor(),
         newCompositionAssembler(runtimeConfig));
   }

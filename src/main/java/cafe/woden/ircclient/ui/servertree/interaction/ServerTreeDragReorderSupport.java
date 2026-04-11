@@ -26,6 +26,7 @@ public final class ServerTreeDragReorderSupport {
   private final JTree tree;
   private final Map<String, ServerNodes> servers;
   private final ServerTreeNodeClassifier nodeClassifier;
+  private final ServerTreeNodeClassifier.Context nodeClassifierContext;
   private final Predicate<DefaultMutableTreeNode> isServerNode;
   private final Predicate<DefaultMutableTreeNode> isChannelListLeafNode;
   private final Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode>
@@ -59,6 +60,7 @@ public final class ServerTreeDragReorderSupport {
       JTree tree,
       Map<String, ServerNodes> servers,
       ServerTreeNodeClassifier nodeClassifier,
+      ServerTreeNodeClassifier.Context nodeClassifierContext,
       Predicate<DefaultMutableTreeNode> isServerNode,
       Predicate<DefaultMutableTreeNode> isChannelListLeafNode,
       Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForNode,
@@ -67,6 +69,8 @@ public final class ServerTreeDragReorderSupport {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.servers = Objects.requireNonNull(servers, "servers");
     this.nodeClassifier = Objects.requireNonNull(nodeClassifier, "nodeClassifier");
+    this.nodeClassifierContext =
+        Objects.requireNonNull(nodeClassifierContext, "nodeClassifierContext");
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
     this.isChannelListLeafNode =
         Objects.requireNonNull(isChannelListLeafNode, "isChannelListLeafNode");
@@ -90,7 +94,7 @@ public final class ServerTreeDragReorderSupport {
   public boolean isMovableBuiltInNode(DefaultMutableTreeNode node) {
     ServerTreeBuiltInLayoutNode nodeKind = builtInLayoutNodeKindForNode.apply(node);
     if (nodeKind == null) return false;
-    String sid = nodeClassifier.owningServerIdForNode(node);
+    String sid = nodeClassifier.owningServerIdForNode(nodeClassifierContext, node);
     if (sid.isBlank()) return false;
     ServerNodes serverNodes = servers.get(sid);
     if (serverNodes == null) return false;
@@ -100,7 +104,7 @@ public final class ServerTreeDragReorderSupport {
 
   public boolean isRootSiblingReorderableNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
-    String sid = nodeClassifier.owningServerIdForNode(node);
+    String sid = nodeClassifier.owningServerIdForNode(nodeClassifierContext, node);
     if (sid.isBlank()) return false;
     ServerNodes serverNodes = servers.get(sid);
     if (serverNodes == null || serverNodes.serverNode == null) return false;
@@ -122,7 +126,7 @@ public final class ServerTreeDragReorderSupport {
           min++;
           continue;
         }
-      } else if (nodeClassifier.isInterceptorsGroupNode(child)) {
+      } else if (nodeClassifier.isInterceptorsGroupNode(nodeClassifierContext, child)) {
         min++;
         continue;
       }
@@ -178,7 +182,7 @@ public final class ServerTreeDragReorderSupport {
 
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
     String backendId = backendIdForNetworksGroupNode.apply(node);
-    return nodeClassifier.isPrivateMessagesGroupNode(node)
+    return nodeClassifier.isPrivateMessagesGroupNode(nodeClassifierContext, node)
         || (backendId != null && !backendId.isBlank());
   }
 

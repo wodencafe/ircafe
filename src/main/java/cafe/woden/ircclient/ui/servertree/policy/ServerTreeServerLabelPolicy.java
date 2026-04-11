@@ -1,127 +1,143 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
-import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
-import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
-import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /** Encapsulates display-label and ephemeral server badge policy. */
+@Component
 public final class ServerTreeServerLabelPolicy {
 
-  private final Map<String, String> serverDisplayNames;
-  private final Set<String> ephemeralServerIds;
-  private final Map<String, Map<String, String>> originByServerIdByBackendId;
-  private final Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId;
+  public interface Context {
+    String displayNameForServer(String serverId);
 
-  public ServerTreeServerLabelPolicy(
-      Map<String, String> serverDisplayNames,
-      Set<String> ephemeralServerIds,
-      Map<String, String> sojuOriginByServerId,
-      Map<String, String> zncOriginByServerId,
-      Map<String, String> genericOriginByServerId,
-      GenericBouncerAutoConnectStore genericAutoConnect,
-      SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect) {
-    this(
-        serverDisplayNames,
-        ephemeralServerIds,
-        originByServerIdByBackend(
-            sojuOriginByServerId, zncOriginByServerId, genericOriginByServerId),
-        autoConnectStoresByBackend(genericAutoConnect, sojuAutoConnect, zncAutoConnect));
+    boolean isEphemeralServer(String backendId, String serverId);
+
+    String mappedOriginForServer(String backendId, String serverId);
+
+    boolean isAutoConnectEnabled(String backendId, String originId, String networkKey);
   }
 
-  public ServerTreeServerLabelPolicy(
+  public static Context context(
       Map<String, String> serverDisplayNames,
       Set<String> ephemeralServerIds,
       Map<String, Map<String, String>> originByServerIdByBackendId,
       Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId) {
-    this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
-    this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.originByServerIdByBackendId =
+    Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
+    Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
+    Map<String, Map<String, String>> normalizedOrigins =
         normalizedOriginMap(
             Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId"));
-    this.autoConnectStoreByBackendId =
+    Map<String, BouncerAutoConnectStore> normalizedAutoConnectStores =
         normalizedAutoConnectMap(
             Objects.requireNonNull(autoConnectStoreByBackendId, "autoConnectStoreByBackendId"));
+    return new Context() {
+      @Override
+      public String displayNameForServer(String serverId) {
+        String id = normalize(serverId);
+        return serverDisplayNames.getOrDefault(id, id);
+      }
+
+      @Override
+      public boolean isEphemeralServer(String backendId, String serverId) {
+        String id = normalize(serverId);
+        String prefix = normalize(ServerTreeBouncerBackends.prefixFor(backendId));
+        return !id.isEmpty()
+            && !prefix.isEmpty()
+            && id.startsWith(prefix)
+            && ephemeralServerIds.contains(id);
+      }
+
+      @Override
+      public String mappedOriginForServer(String backendId, String serverId) {
+        String backend = normalize(backendId);
+        String id = normalize(serverId);
+        if (backend.isEmpty() || id.isEmpty()) {
+          return null;
+        }
+        Map<String, String> originByServerId = normalizedOrigins.get(backend);
+        return originByServerId == null ? null : originByServerId.get(id);
+      }
+
+      @Override
+      public boolean isAutoConnectEnabled(String backendId, String originId, String networkKey) {
+        String backend = normalize(backendId);
+        String origin = normalize(originId);
+        String network = normalize(networkKey);
+        if (backend.isEmpty() || origin.isEmpty() || network.isEmpty()) {
+          return false;
+        }
+        BouncerAutoConnectStore store = normalizedAutoConnectStores.get(backend);
+        return store != null && store.isEnabled(origin, network);
+      }
+    };
   }
 
-  public String prettyServerLabel(String serverId) {
+  public String prettyServerLabel(Context context, String serverId) {
+    Objects.requireNonNull(context, "context");
     String id = normalize(serverId);
     if (id.isEmpty()) return id;
 
-    String display = serverDisplayNames.getOrDefault(id, id);
-    String backendId = backendIdForEphemeralServer(id);
+    String display = context.displayNameForServer(id);
+    String backendId = backendIdForEphemeralServer(context, id);
     if (backendId == null || backendId.isBlank()) {
       return display;
     }
-    String origin = originForServer(backendId, id);
-    if (origin != null && !origin.isBlank() && isAutoConnectEnabled(backendId, origin, display)) {
+    String origin = originForServer(context, backendId, id);
+    if (origin != null
+        && !origin.isBlank()
+        && isAutoConnectEnabled(context, backendId, origin, display)) {
       return display + " (auto)";
     }
     return display;
   }
 
-  public boolean isSojuEphemeralServer(String serverId) {
-    return isEphemeralServer(ServerTreeBouncerBackends.SOJU, serverId);
+  public boolean isSojuEphemeralServer(Context context, String serverId) {
+    return isEphemeralServer(context, ServerTreeBouncerBackends.SOJU, serverId);
   }
 
-  public boolean isZncEphemeralServer(String serverId) {
-    return isEphemeralServer(ServerTreeBouncerBackends.ZNC, serverId);
+  public boolean isZncEphemeralServer(Context context, String serverId) {
+    return isEphemeralServer(context, ServerTreeBouncerBackends.ZNC, serverId);
   }
 
-  public boolean isGenericEphemeralServer(String serverId) {
-    return isEphemeralServer(ServerTreeBouncerBackends.GENERIC, serverId);
+  public boolean isGenericEphemeralServer(Context context, String serverId) {
+    return isEphemeralServer(context, ServerTreeBouncerBackends.GENERIC, serverId);
   }
 
-  public String backendIdForEphemeralServer(String serverId) {
+  public String backendIdForEphemeralServer(Context context, String serverId) {
+    Objects.requireNonNull(context, "context");
     for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
-      if (isEphemeralServer(backendId, serverId)) {
+      if (isEphemeralServer(context, backendId, serverId)) {
         return backendId;
       }
     }
     return null;
   }
 
-  public boolean isEphemeralServer(String backendId, String serverId) {
-    String id = normalize(serverId);
-    String prefix = normalize(ServerTreeBouncerBackends.prefixFor(backendId));
-    return !id.isEmpty()
-        && !prefix.isEmpty()
-        && id.startsWith(prefix)
-        && ephemeralServerIds.contains(id);
+  public boolean isEphemeralServer(Context context, String backendId, String serverId) {
+    Objects.requireNonNull(context, "context");
+    return context.isEphemeralServer(backendId, serverId);
   }
 
-  public String originForServer(String backendId, String serverId) {
+  public String originForServer(Context context, String backendId, String serverId) {
+    Objects.requireNonNull(context, "context");
     String id = normalize(serverId);
     if (id.isEmpty()) return null;
-    Map<String, String> originByServerId = originMapForBackend(backendId);
-    String origin = originByServerId == null ? null : originByServerId.get(id);
+    String origin = context.mappedOriginForServer(backendId, id);
     if (origin != null && !origin.isBlank()) {
       return origin;
     }
     return parseOrigin(id, ServerTreeBouncerBackends.prefixFor(backendId));
   }
 
-  public boolean isAutoConnectEnabled(String backendId, String originId, String networkKey) {
-    String backend = normalize(backendId);
-    String origin = normalize(originId);
-    String network = normalize(networkKey);
-    if (backend.isEmpty() || origin.isEmpty() || network.isEmpty()) {
-      return false;
-    }
-    BouncerAutoConnectStore store = autoConnectStoreByBackendId.get(backend);
-    return store != null && store.isEnabled(origin, network);
-  }
-
-  private Map<String, String> originMapForBackend(String backendId) {
-    String backend = normalize(backendId);
-    if (backend.isEmpty()) return null;
-    return originByServerIdByBackendId.get(backend);
+  public boolean isAutoConnectEnabled(
+      Context context, String backendId, String originId, String networkKey) {
+    Objects.requireNonNull(context, "context");
+    return context.isAutoConnectEnabled(backendId, originId, networkKey);
   }
 
   private static String parseOrigin(String serverId, String prefix) {
@@ -137,40 +153,6 @@ public final class ServerTreeServerLabelPolicy {
 
   private static String normalize(String value) {
     return Objects.toString(value, "").trim();
-  }
-
-  private static Map<String, Map<String, String>> originByServerIdByBackend(
-      Map<String, String> sojuOriginByServerId,
-      Map<String, String> zncOriginByServerId,
-      Map<String, String> genericOriginByServerId) {
-    Map<String, Map<String, String>> origins = new LinkedHashMap<>();
-    origins.put(
-        ServerTreeBouncerBackends.SOJU,
-        Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId"));
-    origins.put(
-        ServerTreeBouncerBackends.ZNC,
-        Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId"));
-    origins.put(
-        ServerTreeBouncerBackends.GENERIC,
-        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId"));
-    return origins;
-  }
-
-  private static Map<String, BouncerAutoConnectStore> autoConnectStoresByBackend(
-      GenericBouncerAutoConnectStore genericAutoConnect,
-      SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect) {
-    Map<String, BouncerAutoConnectStore> stores = new LinkedHashMap<>();
-    if (sojuAutoConnect != null) {
-      stores.put(ServerTreeBouncerBackends.SOJU, sojuAutoConnect);
-    }
-    if (zncAutoConnect != null) {
-      stores.put(ServerTreeBouncerBackends.ZNC, zncAutoConnect);
-    }
-    if (genericAutoConnect != null) {
-      stores.put(ServerTreeBouncerBackends.GENERIC, genericAutoConnect);
-    }
-    return stores;
   }
 
   private static Map<String, Map<String, String>> normalizedOriginMap(

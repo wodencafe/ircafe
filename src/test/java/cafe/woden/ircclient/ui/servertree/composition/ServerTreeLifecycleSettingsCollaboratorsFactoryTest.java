@@ -46,6 +46,7 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
                     new ServerTreeRuntimeState(16, __ -> {}),
                     mock(ServerTreeChannelStateCoordinator.class),
                     mock(ServerTreeServerParentResolver.class),
+                    mock(ServerTreeServerParentResolver.Context.class),
                     __ -> ServerBuiltInNodesVisibility.defaults(),
                     () -> true,
                     mock(ServerTreeStatusLabelManager.class),
