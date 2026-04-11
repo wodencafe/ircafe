@@ -60,6 +60,8 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import javax.swing.Box;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -176,6 +178,7 @@ public class AppMenuBar extends JMenuBar {
   private PropertyChangeListener dccTransfersVisibilityListener;
   private PropertyChangeListener applicationRootVisibilityListener;
   private boolean externalListenersInstalled;
+  private final AtomicBoolean jfrSnapshotInProgress = new AtomicBoolean(false);
 
   public AppMenuBar(
       PreferencesDialog preferencesDialog,
@@ -1663,14 +1666,25 @@ public class AppMenuBar extends JMenuBar {
   }
 
   private void showJfrSnapshotDialog() {
-    String report;
-    if (runtimeJfrService != null) {
-      RuntimeJfrService.SnapshotReport snapshot = runtimeJfrService.captureSnapshot();
-      report = snapshot != null ? snapshot.summary() : "No snapshot data.";
-    } else {
-      report = "JFR service is unavailable.";
+    if (!jfrSnapshotInProgress.compareAndSet(false, true)) {
+      Toolkit.getDefaultToolkit().beep();
+      showMultilineInfoDialog(
+          "JFR Snapshot", "A JFR snapshot is already being captured. Please wait.");
+      return;
     }
-    showMultilineInfoDialog("JFR Snapshot", report);
+    Window owner = memoryDialog != null ? memoryDialog : SwingUtilities.getWindowAncestor(this);
+    setJfrSnapshotBusy(owner, true);
+    captureJfrSnapshotAsync(
+        report ->
+            SwingUtilities.invokeLater(
+                () -> {
+                  try {
+                    showMultilineInfoDialog("JFR Snapshot", report);
+                  } finally {
+                    setJfrSnapshotBusy(owner, false);
+                    jfrSnapshotInProgress.set(false);
+                  }
+                }));
   }
 
   private void showMultilineInfoDialog(String title, String body) {
@@ -1683,6 +1697,39 @@ public class AppMenuBar extends JMenuBar {
     scroll.setPreferredSize(new Dimension(760, 420));
     JOptionPane.showMessageDialog(
         SwingUtilities.getWindowAncestor(this), scroll, title, JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private void setJfrSnapshotBusy(Window owner, boolean busy) {
+    Cursor cursor =
+        busy ? Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR) : Cursor.getDefaultCursor();
+    setCursor(cursor);
+    if (memoryDialog != null) {
+      memoryDialog.setCursor(cursor);
+    }
+    if (owner != null && owner != memoryDialog) {
+      owner.setCursor(cursor);
+    }
+  }
+
+  private void captureJfrSnapshotAsync(Consumer<String> onComplete) {
+    if (onComplete == null) return;
+    Thread.startVirtualThread(
+        () -> {
+          String report = captureJfrSnapshotReport();
+          onComplete.accept(report);
+        });
+  }
+
+  private String captureJfrSnapshotReport() {
+    try {
+      if (runtimeJfrService != null) {
+        RuntimeJfrService.SnapshotReport snapshot = runtimeJfrService.captureSnapshot();
+        return snapshot != null ? snapshot.summary() : "No snapshot data.";
+      }
+      return "JFR service is unavailable.";
+    } catch (Throwable t) {
+      return "Failed to capture JFR snapshot.\n\n" + Objects.toString(t.getMessage(), "");
+    }
   }
 
   private void resetDockLayout() {
