@@ -30,6 +30,7 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPoli
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
@@ -110,6 +111,9 @@ final class ServerTreeDockableTestSupport {
         new cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver(),
         new cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier(),
         new cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver(),
+        new cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager(),
+        new cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater(),
+        new cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions(),
         new ServerTreeEdtExecutor(),
         newCompositionAssembler(runtimeConfig));
   }
@@ -126,7 +130,7 @@ final class ServerTreeDockableTestSupport {
     return new ServerTreeCompositionAssembler(
         new ServerTreeLayoutCollaboratorsFactory(
             layoutApplier, builtInLayoutCoordinator, rootSiblingOrderCoordinator),
-        new ServerTreeStateInteractionCollaboratorsFactory(),
+        new ServerTreeStateInteractionCollaboratorsFactory(new ServerTreeServerStateCleaner()),
         new ServerTreeViewInteractionCollaboratorsFactory(
             new ServerTreeContextMenuBuilder(
                 new ServerTreeServerNodeMenuBuilder(),

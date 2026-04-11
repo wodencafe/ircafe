@@ -26,11 +26,16 @@ import java.util.function.IntSupplier;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /** Factory that assembles state/interaction collaborators for server tree construction. */
 @Component
+@RequiredArgsConstructor
 public final class ServerTreeStateInteractionCollaboratorsFactory {
+
+  @NonNull private final ServerTreeServerStateCleaner serverStateCleaner;
 
   public ServerTreeStateInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
@@ -49,15 +54,16 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             Objects.requireNonNull(in.model(), "model"),
             serverActionOverlay,
             in.tree());
-    ServerTreeServerStateCleaner serverStateCleaner =
-        new ServerTreeServerStateCleaner(
+    ServerTreeServerStateCleaner.Context serverStateCleanerContext =
+        ServerTreeServerStateCleaner.context(
             in.interceptorStore(),
-            serverActionOverlay,
-            in.runtimeState(),
-            Objects.requireNonNull(in.channelStateStore(), "channelStateStore"),
+            serverActionOverlay::clearHoveredServer,
+            Objects.requireNonNull(in.runtimeState(), "runtimeState")::removeServer,
+            Objects.requireNonNull(in.channelStateStore(), "channelStateStore")::clearServer,
+            Objects.requireNonNull(
+                in.clearPrivateMessageOnlineStates(), "clearPrivateMessageOnlineStates"),
             Objects.requireNonNull(in.leaves(), "leaves"),
-            Objects.requireNonNull(in.typingActivityNodes(), "typingActivityNodes"),
-            Objects.requireNonNull(in.serverStateCleanerContext(), "serverStateCleanerContext"));
+            Objects.requireNonNull(in.typingActivityNodes(), "typingActivityNodes"));
     ServerTreeChannelStateCoordinator channelStateCoordinator =
         new ServerTreeChannelStateCoordinator(
             in.channelStateConfig(),
@@ -100,6 +106,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
         serverActionOverlay,
         serverRuntimeUiUpdater,
         serverStateCleaner,
+        serverStateCleanerContext,
         channelStateCoordinator,
         ensureNodeParentResolver,
         ensureNodeLeafInserter,
@@ -125,7 +132,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
       java.util.function.Predicate<DefaultMutableTreeNode> isServerNode,
       Consumer<TargetRef> clearChannelDisconnectedWarning,
       IntSupplier typingSlotWidth,
-      ServerTreeServerStateCleaner.Context serverStateCleanerContext,
+      Consumer<String> clearPrivateMessageOnlineStates,
       ServerTreeServerActionOverlay.Context serverActionOverlayContext,
       ServerTreeChannelStateCoordinator.Context channelStateCoordinatorContext,
       ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,

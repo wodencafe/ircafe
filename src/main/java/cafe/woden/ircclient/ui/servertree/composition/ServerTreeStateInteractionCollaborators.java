@@ -16,6 +16,7 @@ public record ServerTreeStateInteractionCollaborators(
     ServerTreeServerActionOverlay serverActionOverlay,
     ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater,
     ServerTreeServerStateCleaner serverStateCleaner,
+    ServerTreeServerStateCleaner.Context serverStateCleanerContext,
     ServerTreeChannelStateCoordinator channelStateCoordinator,
     ServerTreeEnsureNodeParentResolver ensureNodeParentResolver,
     ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter,

@@ -153,7 +153,9 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
         in.supportsQuasselCoreCommands(),
         () -> in.interceptorStore() != null,
-        in.interceptorActions()::promptAndAddInterceptor,
+        serverId ->
+            in.interceptorActions()
+                .promptAndAddInterceptor(in.interceptorActionsContext(), serverId),
         () -> in.serverDialogs() != null,
         serverId -> openSaveEphemeralServer(in, serverId),
         serverId -> openEditServer(in, serverId),
@@ -203,9 +205,15 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.uiHooks()::closeTarget,
         target -> interceptorDefinition(in.interceptorStore(), target),
         () -> in.interceptorStore() != null,
-        in.interceptorActions()::setInterceptorEnabled,
-        in.interceptorActions()::promptRenameInterceptor,
-        in.interceptorActions()::confirmDeleteInterceptor);
+        (target, enabled) ->
+            in.interceptorActions()
+                .setInterceptorEnabled(in.interceptorActionsContext(), target, enabled),
+        (target, label) ->
+            in.interceptorActions()
+                .promptRenameInterceptor(in.interceptorActionsContext(), target, label),
+        (target, label) ->
+            in.interceptorActions()
+                .confirmDeleteInterceptor(in.interceptorActionsContext(), target, label));
   }
 
   private static ServerTreeQuasselNetworkNodeMenuBuilder.Context
@@ -373,7 +381,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static void refreshAutoConnectBadges(Inputs inputs, String backendId) {
     if (inputs == null || inputs.nodeBadgeUpdater() == null) return;
-    inputs.nodeBadgeUpdater().refreshAutoConnectBadges(backendId);
+    inputs.nodeBadgeUpdater().refreshAutoConnectBadges(inputs.nodeBadgeUpdaterContext(), backendId);
   }
 
   private static Set<String> orderedBackendIds(Inputs inputs) {
@@ -501,10 +509,12 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRequestEmitter requestEmitter,
       InterceptorStore interceptorStore,
       ServerTreeInterceptorActions interceptorActions,
+      ServerTreeInterceptorActions.Context interceptorActionsContext,
       ServerDialogs serverDialogs,
       java.awt.Component ownerComponent,
       ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
+      ServerTreeNodeBadgeUpdater.Context nodeBadgeUpdaterContext,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
       ServerTreeBouncerDetachPolicy.Context bouncerDetachPolicyContext,
       Predicate<TargetRef> isChannelDisconnected,

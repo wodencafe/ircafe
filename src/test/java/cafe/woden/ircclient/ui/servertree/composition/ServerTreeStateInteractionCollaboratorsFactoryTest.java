@@ -13,6 +13,7 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,7 +56,7 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     AtomicReference<String> clearedPrivateMessageServer = new AtomicReference<>("");
 
     ServerTreeStateInteractionCollaborators collaborators =
-        new ServerTreeStateInteractionCollaboratorsFactory()
+        new ServerTreeStateInteractionCollaboratorsFactory(new ServerTreeServerStateCleaner())
             .create(
                 new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
                     tree,
@@ -84,6 +85,7 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     assertNotNull(collaborators.serverActionOverlay());
     assertNotNull(collaborators.serverRuntimeUiUpdater());
     assertNotNull(collaborators.serverStateCleaner());
+    assertNotNull(collaborators.serverStateCleanerContext());
     assertNotNull(collaborators.channelStateCoordinator());
     assertNotNull(collaborators.ensureNodeParentResolver());
     assertNotNull(collaborators.ensureNodeLeafInserter());
@@ -92,7 +94,9 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     assertNotNull(collaborators.detachedWarningClickHandler());
     assertNotNull(collaborators.rowInteractionHandler());
 
-    collaborators.serverStateCleaner().cleanupServerState("libera");
+    collaborators
+        .serverStateCleaner()
+        .cleanupServerState(collaborators.serverStateCleanerContext(), "libera");
 
     assertFalse(channelStateStore.channelSortModeByServer().containsKey("libera"));
     assertEquals(ConnectionState.DISCONNECTED, runtimeState.connectionStateForServer("libera"));

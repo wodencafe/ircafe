@@ -11,91 +11,100 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Updates dynamic node badges/labels driven by notifications and auto-connect state. */
+@Component
 public final class ServerTreeNodeBadgeUpdater {
 
   public interface Context {
+    NotificationStore notificationStore();
+
+    Set<String> ephemeralServerIds();
+
+    Map<TargetRef, DefaultMutableTreeNode> leaves();
+
     void nodeChanged(DefaultMutableTreeNode node);
 
     void nodeChangedForServer(String serverId);
   }
 
-  public static Context context(
-      Consumer<DefaultMutableTreeNode> nodeChanged,
-      Function<String, DefaultMutableTreeNode> serverNodeById) {
-    Objects.requireNonNull(nodeChanged, "nodeChanged");
-    Objects.requireNonNull(serverNodeById, "serverNodeById");
-    return new Context() {
-      @Override
-      public void nodeChanged(DefaultMutableTreeNode node) {
-        nodeChanged.accept(node);
-      }
-
-      @Override
-      public void nodeChangedForServer(String serverId) {
-        DefaultMutableTreeNode node = serverNodeById.apply(serverId);
-        if (node != null) {
-          nodeChanged.accept(node);
-        }
-      }
-    };
-  }
-
-  private final NotificationStore notificationStore;
-  private final Set<String> ephemeralServerIds;
-  private final Map<TargetRef, DefaultMutableTreeNode> leaves;
-  private final Context context;
-
-  public ServerTreeNodeBadgeUpdater(
+  private record DefaultContext(
       NotificationStore notificationStore,
       Set<String> ephemeralServerIds,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
-      Context context) {
-    this.notificationStore = notificationStore;
-    this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.leaves = Objects.requireNonNull(leaves, "leaves");
-    this.context = Objects.requireNonNull(context, "context");
+      Consumer<DefaultMutableTreeNode> nodeChanged,
+      Function<String, DefaultMutableTreeNode> serverNodeById)
+      implements Context {
+
+    @Override
+    public void nodeChanged(DefaultMutableTreeNode node) {
+      nodeChanged.accept(node);
+    }
+
+    @Override
+    public void nodeChangedForServer(String serverId) {
+      DefaultMutableTreeNode node = serverNodeById.apply(serverId);
+      if (node != null) {
+        nodeChanged.accept(node);
+      }
+    }
   }
 
-  public void refreshNotificationsCount(String serverId) {
-    if (notificationStore == null) return;
+  public static Context context(
+      NotificationStore notificationStore,
+      Set<String> ephemeralServerIds,
+      Map<TargetRef, DefaultMutableTreeNode> leaves,
+      Consumer<DefaultMutableTreeNode> nodeChanged,
+      Function<String, DefaultMutableTreeNode> serverNodeById) {
+    Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
+    Objects.requireNonNull(leaves, "leaves");
+    Objects.requireNonNull(nodeChanged, "nodeChanged");
+    Objects.requireNonNull(serverNodeById, "serverNodeById");
+    return new DefaultContext(
+        notificationStore, ephemeralServerIds, leaves, nodeChanged, serverNodeById);
+  }
+
+  public void refreshNotificationsCount(Context context, String serverId) {
+    Context in = Objects.requireNonNull(context, "context");
+    if (in.notificationStore() == null) return;
     String sid = normalize(serverId);
     if (sid.isEmpty()) return;
 
     TargetRef ref = TargetRef.notifications(sid);
-    DefaultMutableTreeNode node = leaves.get(ref);
+    DefaultMutableTreeNode node = in.leaves().get(ref);
     if (node == null) return;
 
     Object userObject = node.getUserObject();
     if (!(userObject instanceof ServerTreeNodeData nodeData)) return;
 
-    int count = notificationStore.count(sid);
+    int count = in.notificationStore().count(sid);
     if (nodeData.unread == 0 && nodeData.highlightUnread == count) return;
     nodeData.unread = 0;
     nodeData.highlightUnread = count;
-    context.nodeChanged(node);
+    in.nodeChanged(node);
   }
 
-  public void refreshSojuAutoConnectBadges() {
-    refreshAutoConnectBadges(ServerTreeBouncerBackends.SOJU);
+  public void refreshSojuAutoConnectBadges(Context context) {
+    refreshAutoConnectBadges(context, ServerTreeBouncerBackends.SOJU);
   }
 
-  public void refreshZncAutoConnectBadges() {
-    refreshAutoConnectBadges(ServerTreeBouncerBackends.ZNC);
+  public void refreshZncAutoConnectBadges(Context context) {
+    refreshAutoConnectBadges(context, ServerTreeBouncerBackends.ZNC);
   }
 
-  public void refreshGenericAutoConnectBadges() {
-    refreshAutoConnectBadges(ServerTreeBouncerBackends.GENERIC);
+  public void refreshGenericAutoConnectBadges(Context context) {
+    refreshAutoConnectBadges(context, ServerTreeBouncerBackends.GENERIC);
   }
 
-  public void refreshAutoConnectBadges(String backendId) {
+  public void refreshAutoConnectBadges(Context context, String backendId) {
+    Context in = Objects.requireNonNull(context, "context");
     String prefix = normalize(ServerTreeBouncerBackends.prefixFor(backendId));
     if (prefix.isEmpty()) return;
 
-    for (String id : ephemeralServerIds) {
+    for (String id : in.ephemeralServerIds()) {
       if (!Objects.toString(id, "").startsWith(prefix)) continue;
-      context.nodeChangedForServer(id);
+      in.nodeChangedForServer(id);
     }
   }
 

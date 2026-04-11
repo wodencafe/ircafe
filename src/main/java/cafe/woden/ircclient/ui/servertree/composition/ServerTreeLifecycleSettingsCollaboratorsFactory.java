@@ -76,8 +76,12 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                     Objects.requireNonNull(
                             in.isDccTransfersNodesVisible(), "isDccTransfersNodesVisible")
                         .getAsBoolean(),
-                Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager")
-                    ::statusLeafLabelForServer,
+                serverId ->
+                    Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager")
+                        .statusLeafLabelForServer(
+                            Objects.requireNonNull(
+                                in.statusLabelManagerContext(), "statusLabelManagerContext"),
+                            serverId),
                 serverId -> {
                   NotificationStore store = in.notificationStore();
                   return store == null ? 0 : store.count(serverId);
@@ -101,18 +105,31 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                 Objects.requireNonNull(in.model(), "model"),
                 Objects.requireNonNull(in.root(), "root"),
                 Objects.requireNonNull(in.tree(), "tree"),
-                Objects.requireNonNull(in.nodeBadgeUpdater(), "nodeBadgeUpdater")
-                    ::refreshNotificationsCount,
-                Objects.requireNonNull(in.interceptorActions(), "interceptorActions")
-                    ::refreshInterceptorGroupCount,
-                Objects.requireNonNull(in.serverStateCleaner(), "serverStateCleaner")
-                    ::cleanupServerState,
+                serverId ->
+                    Objects.requireNonNull(in.nodeBadgeUpdater(), "nodeBadgeUpdater")
+                        .refreshNotificationsCount(
+                            Objects.requireNonNull(
+                                in.nodeBadgeUpdaterContext(), "nodeBadgeUpdaterContext"),
+                            serverId),
+                serverId ->
+                    Objects.requireNonNull(in.interceptorActions(), "interceptorActions")
+                        .refreshInterceptorGroupCount(
+                            Objects.requireNonNull(
+                                in.interceptorActionsContext(), "interceptorActionsContext"),
+                            serverId),
+                serverId ->
+                    Objects.requireNonNull(in.serverStateCleaner(), "serverStateCleaner")
+                        .cleanupServerState(
+                            Objects.requireNonNull(
+                                in.serverStateCleanerContext(), "serverStateCleanerContext"),
+                            serverId),
                 Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
                     ::removeEmptyGroupIfNeeded));
     ServerTreeServerLifecycleFacade serverLifecycleFacade =
         new ServerTreeServerLifecycleFacade(
             serverRootLifecycleManager,
-            Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager"));
+            Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager"),
+            Objects.requireNonNull(in.statusLabelManagerContext(), "statusLabelManagerContext"));
     ServerTreeSettingsSynchronizer settingsSynchronizer =
         new ServerTreeSettingsSynchronizer(
             ServerTreeSettingsSynchronizer.context(
@@ -168,6 +185,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       BooleanSupplier isDccTransfersNodesVisible,
       ServerTreeStatusLabelManager statusLabelManager,
+      ServerTreeStatusLabelManager.Context statusLabelManagerContext,
       NotificationStore notificationStore,
       InterceptorStore interceptorStore,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
@@ -179,8 +197,11 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       DefaultMutableTreeNode root,
       JTree tree,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
+      ServerTreeNodeBadgeUpdater.Context nodeBadgeUpdaterContext,
       ServerTreeInterceptorActions interceptorActions,
+      ServerTreeInterceptorActions.Context interceptorActionsContext,
       ServerTreeServerStateCleaner serverStateCleaner,
+      ServerTreeServerStateCleaner.Context serverStateCleanerContext,
       ServerTreeNetworkGroupManager networkGroupManager,
       UiSettingsBus settingsBus,
       JfrRuntimeEventsService jfrRuntimeEventsService,

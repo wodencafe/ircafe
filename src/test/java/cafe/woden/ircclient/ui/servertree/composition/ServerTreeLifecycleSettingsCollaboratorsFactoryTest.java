@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
+import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
@@ -50,6 +51,7 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
                     __ -> ServerBuiltInNodesVisibility.defaults(),
                     () -> true,
                     mock(ServerTreeStatusLabelManager.class),
+                    mock(ServerTreeStatusLabelManager.Context.class),
                     null,
                     null,
                     new HashMap<>(),
@@ -61,10 +63,11 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
                     root,
                     tree,
                     mock(ServerTreeNodeBadgeUpdater.class),
-                    mock(
-                        cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions
-                            .class),
+                    mock(ServerTreeNodeBadgeUpdater.Context.class),
+                    mock(ServerTreeInterceptorActions.class),
+                    mock(ServerTreeInterceptorActions.Context.class),
                     mock(ServerTreeServerStateCleaner.class),
+                    mock(ServerTreeServerStateCleaner.Context.class),
                     mock(ServerTreeNetworkGroupManager.class),
                     mock(UiSettingsBus.class),
                     null,

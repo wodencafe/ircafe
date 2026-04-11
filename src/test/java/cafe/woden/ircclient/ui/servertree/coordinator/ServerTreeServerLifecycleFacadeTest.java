@@ -20,8 +20,11 @@ class ServerTreeServerLifecycleFacadeTest {
     ServerTreeServerRootLifecycleManager rootLifecycleManager =
         mock(ServerTreeServerRootLifecycleManager.class);
     ServerTreeStatusLabelManager statusLabelManager = mock(ServerTreeStatusLabelManager.class);
+    ServerTreeStatusLabelManager.Context statusLabelManagerContext =
+        mock(ServerTreeStatusLabelManager.Context.class);
     ServerTreeServerLifecycleFacade facade =
-        new ServerTreeServerLifecycleFacade(rootLifecycleManager, statusLabelManager);
+        new ServerTreeServerLifecycleFacade(
+            rootLifecycleManager, statusLabelManager, statusLabelManagerContext);
 
     ServerNodes nodes = serverNodes("libera");
     when(rootLifecycleManager.addServerRoot("libera")).thenReturn(nodes);
@@ -41,7 +44,8 @@ class ServerTreeServerLifecycleFacadeTest {
 
     verify(rootLifecycleManager).addServerRoot("libera");
     verify(rootLifecycleManager).removeServerRoot("libera");
-    verify(statusLabelManager).updateBouncerControlLabels(bouncerControlByBackend);
+    verify(statusLabelManager)
+        .updateBouncerControlLabels(statusLabelManagerContext, bouncerControlByBackend);
   }
 
   private static ServerNodes serverNodes(String serverId) {

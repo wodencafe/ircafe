@@ -11,6 +11,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JPanel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
 
@@ -33,20 +34,20 @@ class ServerTreeInterceptorActionsTest {
     when(store.interceptorName("libera", "audit")).thenReturn("Audit");
     when(store.hitCount("libera", "audit")).thenReturn(3);
 
-    ServerTreeInterceptorActions actions =
-        new ServerTreeInterceptorActions(
-            null,
+    ServerTreeInterceptorActions actions = new ServerTreeInterceptorActions();
+    ServerTreeInterceptorActions.Context context =
+        ServerTreeInterceptorActions.context(
+            new JPanel(),
             store,
             "Interceptors",
-            ServerTreeInterceptorActions.context(
-                ref1 -> {},
-                ref1 -> {},
-                ref1 -> {},
-                ref1 -> Map.of(ref, interceptorNode).get(ref1),
-                serverId -> null,
-                changedNode::set));
+            ref1 -> {},
+            ref1 -> {},
+            ref1 -> {},
+            ref1 -> Map.of(ref, interceptorNode).get(ref1),
+            serverId -> null,
+            changedNode::set);
 
-    actions.refreshInterceptorNodeLabel("libera", "audit");
+    actions.refreshInterceptorNodeLabel(context, "libera", "audit");
 
     assertSame(interceptorNode, changedNode.get());
     assertTrue(interceptorNode.getUserObject() instanceof ServerTreeNodeData);
@@ -73,20 +74,20 @@ class ServerTreeInterceptorActionsTest {
     nodeData.unread = 7;
     nodeData.highlightUnread = 1;
 
-    ServerTreeInterceptorActions actions =
-        new ServerTreeInterceptorActions(
-            null,
+    ServerTreeInterceptorActions actions = new ServerTreeInterceptorActions();
+    ServerTreeInterceptorActions.Context context =
+        ServerTreeInterceptorActions.context(
+            new JPanel(),
             store,
             "Interceptors",
-            ServerTreeInterceptorActions.context(
-                ref -> {},
-                ref -> {},
-                ref -> {},
-                ref -> Map.of(groupRef, groupNode).get(ref),
-                serverId -> groupNode,
-                changedNode::set));
+            ref -> {},
+            ref -> {},
+            ref -> {},
+            ref -> Map.of(groupRef, groupNode).get(ref),
+            serverId -> groupNode,
+            changedNode::set);
 
-    actions.refreshInterceptorGroupCount("libera");
+    actions.refreshInterceptorGroupCount(context, "libera");
 
     assertSame(groupNode, changedNode.get());
     assertEquals(0, nodeData.unread);

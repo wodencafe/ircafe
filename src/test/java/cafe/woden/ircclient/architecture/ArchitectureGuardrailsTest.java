@@ -149,9 +149,13 @@ class ArchitectureGuardrailsTest {
           "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy",
           "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy",
           "cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy",
+          "cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions",
           "cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier",
           "cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver",
           "cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder");
 

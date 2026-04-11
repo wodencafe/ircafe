@@ -295,10 +295,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeNetworkInfoDialogBuilder networkInfoDialogBuilder;
   private final ServerTreeInterceptorActions interceptorActions;
+  private final ServerTreeInterceptorActions.Context interceptorActionsContext;
   private final ServerTreeServerCatalogSynchronizer serverCatalogSynchronizer;
-  private final ServerTreeStatusLabelManager statusLabelManager;
+
+  private final ServerTreeStatusLabelManager.Context statusLabelManagerContext;
   private final ServerTreeNetworkGroupManager networkGroupManager;
   private final ServerTreeServerStateCleaner serverStateCleaner;
+  private final ServerTreeServerStateCleaner.Context serverStateCleanerContext;
   private final ServerTreeServerLifecycleFacade serverLifecycleFacade;
 
   private final ServerTreeServerParentResolver.Context serverParentResolverContext;
@@ -306,7 +309,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeServerLabelPolicy.Context serverLabelPolicyContext;
 
   private final ServerTreeBouncerDetachPolicy.Context bouncerDetachPolicyContext;
-  private final ServerTreeNodeBadgeUpdater nodeBadgeUpdater;
+
+  private final ServerTreeNodeBadgeUpdater.Context nodeBadgeUpdaterContext;
   private final ServerTreeSelectionFallbackPolicy selectionFallbackPolicy;
   private final ServerTreeSelectionFallbackPolicy.Context selectionFallbackContext;
   private final ServerTreeSelectionPersistencePolicy selectionPersistencePolicy;
@@ -385,6 +389,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerTreeServerNodeResolver serverNodeResolver,
       ServerTreeNodeClassifier nodeClassifier,
       ServerTreeServerParentResolver serverParentResolver,
+      ServerTreeStatusLabelManager statusLabelManager,
+      ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
+      ServerTreeInterceptorActions interceptorActions,
       ServerTreeEdtExecutor edtExecutor,
       ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
@@ -524,20 +531,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.networkInfoDialogBuilder =
         Objects.requireNonNull(networkInfoDialogBuilder, "networkInfoDialogBuilder");
-    this.interceptorActions =
-        new ServerTreeInterceptorActions(
+    this.interceptorActions = Objects.requireNonNull(interceptorActions, "interceptorActions");
+    this.interceptorActionsContext =
+        ServerTreeInterceptorActions.context(
             this,
             interceptorStore,
             INTERCEPTORS_GROUP_LABEL,
-            ServerTreeInterceptorActions.context(
-                this::ensureNode,
-                this::selectTarget,
-                this::removeTarget,
-                leaves::get,
-                serverId ->
-                    serverNodeResolver.interceptorsNodeForServer(
-                        serverNodeResolverContext, serverId),
-                model::nodeChanged));
+            this::ensureNode,
+            this::selectTarget,
+            this::removeTarget,
+            leaves::get,
+            serverId ->
+                serverNodeResolver.interceptorsNodeForServer(serverNodeResolverContext, serverId),
+            model::nodeChanged);
     this.serverCatalogSynchronizer =
         new ServerTreeServerCatalogSynchronizer(
             serverDisplayNames,
@@ -563,8 +569,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::firstServerIdOrEmpty,
                 this::selectStartupDefaultForServer,
                 this::defaultSelectionPath));
-    this.statusLabelManager =
-        new ServerTreeStatusLabelManager(
+
+    this.statusLabelManagerContext =
+        ServerTreeStatusLabelManager.context(
             STATUS_LABEL,
             BOUNCER_CONTROL_LABEL,
             bouncerControlServerIdsByBackendId,
@@ -630,6 +637,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverActionOverlay = stateInteractionCollaborators.serverActionOverlay();
     this.serverRuntimeUiUpdater = stateInteractionCollaborators.serverRuntimeUiUpdater();
     this.serverStateCleaner = stateInteractionCollaborators.serverStateCleaner();
+    this.serverStateCleanerContext = stateInteractionCollaborators.serverStateCleanerContext();
     this.serverParentResolverContext =
         ServerTreeServerParentResolver.context(
             originByServerIdByBackendId,
@@ -657,23 +665,29 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   || state == ServerRuntimeMetadata.CapabilityState.AVAILABLE
                   || state == ServerRuntimeMetadata.CapabilityState.DISABLED;
             });
-    this.nodeBadgeUpdater =
-        new ServerTreeNodeBadgeUpdater(
+
+    this.nodeBadgeUpdaterContext =
+        ServerTreeNodeBadgeUpdater.context(
             notificationStore,
             ephemeralServerIds,
             leaves,
-            ServerTreeNodeBadgeUpdater.context(
-                model::nodeChanged,
-                serverId ->
-                    serverNodeResolver.serverNodeForServer(serverNodeResolverContext, serverId)));
+            model::nodeChanged,
+            serverId ->
+                serverNodeResolver.serverNodeForServer(serverNodeResolverContext, serverId));
     this.externalStreamBinder =
         new ServerTreeExternalStreamBinder(
             disposables,
             serverCatalogSynchronizer::syncServers,
-            nodeBadgeUpdater::refreshNotificationsCount,
-            interceptorActions::refreshInterceptorNodeLabel,
-            interceptorActions::refreshInterceptorGroupCount,
-            nodeBadgeUpdater::refreshAutoConnectBadges);
+            serverId ->
+                nodeBadgeUpdater.refreshNotificationsCount(nodeBadgeUpdaterContext, serverId),
+            (serverId, interceptorId) ->
+                interceptorActions.refreshInterceptorNodeLabel(
+                    interceptorActionsContext, serverId, interceptorId),
+            serverId ->
+                interceptorActions.refreshInterceptorGroupCount(
+                    interceptorActionsContext, serverId),
+            backendId ->
+                nodeBadgeUpdater.refreshAutoConnectBadges(nodeBadgeUpdaterContext, backendId));
     this.quasselNetworkParentResolver =
         new ServerTreeQuasselNetworkParentResolver(
             leaves,
@@ -738,7 +752,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this::rootSiblingOrder,
             this::applyBuiltInLayoutToTree,
             this::applyRootSiblingOrderToTree,
-            statusLabelManager::statusLeafLabelForServer,
+            serverId ->
+                statusLabelManager.statusLeafLabelForServer(statusLabelManagerContext, serverId),
             this::isQuasselServer,
             nodeVisibilityApi::isDccTransfersNodesVisible,
             leaves::get);
@@ -839,10 +854,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 requestEmitter,
                 interceptorStore,
                 interceptorActions,
+                interceptorActionsContext,
                 serverDialogs,
                 this,
                 runtimeConfig,
                 nodeBadgeUpdater,
+                nodeBadgeUpdaterContext,
                 bouncerDetachPolicy,
                 bouncerDetachPolicyContext,
                 this::isChannelDisconnected,
@@ -880,6 +897,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::builtInNodesVisibility,
                 nodeVisibilityApi::isDccTransfersNodesVisible,
                 statusLabelManager,
+                statusLabelManagerContext,
                 notificationStore,
                 interceptorStore,
                 leaves,
@@ -891,8 +909,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 root,
                 tree,
                 nodeBadgeUpdater,
+                nodeBadgeUpdaterContext,
                 interceptorActions,
+                interceptorActionsContext,
                 serverStateCleaner,
+                serverStateCleanerContext,
                 networkGroupManager,
                 settingsBus,
                 jfrRuntimeEventsService,
@@ -1958,16 +1979,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       TargetRef ref = InterceptorScope.interceptorRef(scopeServerId, interceptorId);
       if (ref == null) continue;
       targetLifecycleCoordinator.ensureNode(ref);
-      interceptorActions.refreshInterceptorNodeLabel(scopeServerId, interceptorId);
+      interceptorActions.refreshInterceptorNodeLabel(
+          interceptorActionsContext, scopeServerId, interceptorId);
       scopeServerIds.add(scopeServerId);
     }
 
     if (scopeServerIds.isEmpty()) {
-      interceptorActions.refreshInterceptorGroupCount(sid);
+      interceptorActions.refreshInterceptorGroupCount(interceptorActionsContext, sid);
       return;
     }
     for (String scopeServerId : scopeServerIds) {
-      interceptorActions.refreshInterceptorGroupCount(scopeServerId);
+      interceptorActions.refreshInterceptorGroupCount(interceptorActionsContext, scopeServerId);
     }
   }
 

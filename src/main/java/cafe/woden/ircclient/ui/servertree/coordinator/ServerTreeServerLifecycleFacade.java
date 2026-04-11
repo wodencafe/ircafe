@@ -9,13 +9,17 @@ import java.util.Set;
 public final class ServerTreeServerLifecycleFacade {
   private final ServerTreeServerRootLifecycleManager serverRootLifecycleManager;
   private final ServerTreeStatusLabelManager statusLabelManager;
+  private final ServerTreeStatusLabelManager.Context statusLabelManagerContext;
 
   public ServerTreeServerLifecycleFacade(
       ServerTreeServerRootLifecycleManager serverRootLifecycleManager,
-      ServerTreeStatusLabelManager statusLabelManager) {
+      ServerTreeStatusLabelManager statusLabelManager,
+      ServerTreeStatusLabelManager.Context statusLabelManagerContext) {
     this.serverRootLifecycleManager =
         Objects.requireNonNull(serverRootLifecycleManager, "serverRootLifecycleManager");
     this.statusLabelManager = Objects.requireNonNull(statusLabelManager, "statusLabelManager");
+    this.statusLabelManagerContext =
+        Objects.requireNonNull(statusLabelManagerContext, "statusLabelManagerContext");
   }
 
   public void removeServerRoot(String serverId) {
@@ -27,6 +31,7 @@ public final class ServerTreeServerLifecycleFacade {
   }
 
   public void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
-    statusLabelManager.updateBouncerControlLabels(nextBouncerControlByBackendId);
+    statusLabelManager.updateBouncerControlLabels(
+        statusLabelManagerContext, nextBouncerControlByBackendId);
   }
 }
