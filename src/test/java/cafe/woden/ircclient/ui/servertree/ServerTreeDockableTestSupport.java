@@ -21,16 +21,29 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteraction
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeChannelListNodeEnsurer;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
+import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
+import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySettings;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
@@ -87,6 +100,7 @@ final class ServerTreeDockableTestSupport {
       InterceptorStore interceptorStore,
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs) {
+    ServerTreeEdtExecutor edtExecutor = new ServerTreeEdtExecutor();
     return new ServerTreeDockable(
         serverCatalog,
         runtimeConfig,
@@ -104,6 +118,7 @@ final class ServerTreeDockableTestSupport {
         null,
         new ServerTreeNetworkInfoDialogBuilder(
             runtimeConfig, Ircv3ExtensionCatalog.builtInCatalog()),
+        new ServerTreeBuiltInVisibilitySettings(),
         new ServerTreeCellPresentationPolicy(),
         new ServerTreeServerLabelPolicy(),
         new ServerTreeBouncerDetachPolicy(),
@@ -114,9 +129,19 @@ final class ServerTreeDockableTestSupport {
         new cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier(),
         new cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver(),
         new cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager(),
+        new ServerTreeNetworkGroupManager(),
         new cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater(),
         new cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions(),
-        new ServerTreeEdtExecutor(),
+        new ServerTreeServerCatalogSynchronizer(),
+        new ServerTreePrivateMessageOnlineStateCoordinator(),
+        new ServerTreeUiLeafVisibilitySynchronizer(),
+        new ServerTreeApplicationRootVisibilityCoordinator(),
+        new ServerTreeChannelListNodeEnsurer(),
+        new ServerTreeTargetSnapshotProvider(),
+        new ServerTreeChannelQueryService(edtExecutor),
+        new ServerTreeChannelTargetOperations(edtExecutor),
+        new ServerTreeRequestApi(),
+        edtExecutor,
         newCompositionAssembler(runtimeConfig));
   }
 
@@ -134,8 +159,11 @@ final class ServerTreeDockableTestSupport {
             layoutApplier, builtInLayoutCoordinator, rootSiblingOrderCoordinator),
         new ServerTreeStateInteractionCollaboratorsFactory(
             new ServerTreeEnsureNodeParentResolver(),
+            new ServerTreeEnsureNodeLeafInserter(),
             new ServerTreeServerRuntimeUiUpdater(),
-            new ServerTreeServerStateCleaner()),
+            new ServerTreeServerStateCleaner(),
+            new cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator(),
+            new ServerTreeTargetRemovalStateCoordinator()),
         new ServerTreeViewInteractionCollaboratorsFactory(
             new ServerTreeContextMenuBuilder(
                 new ServerTreeServerNodeMenuBuilder(),

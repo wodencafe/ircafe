@@ -20,7 +20,9 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     List<DefaultMutableTreeNode> changedNodes = new ArrayList<>();
     ServerTreePrivateMessageOnlineStateCoordinator coordinator =
-        new ServerTreePrivateMessageOnlineStateCoordinator(
+        new ServerTreePrivateMessageOnlineStateCoordinator();
+    ServerTreePrivateMessageOnlineStateCoordinator.Context context =
+        ServerTreePrivateMessageOnlineStateCoordinator.context(
             store,
             leaves,
             changedNodes::add,
@@ -30,7 +32,7 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("alice");
     leaves.put(pm, pmNode);
 
-    coordinator.setPrivateMessageOnlineState(" libera ", "alice", true);
+    coordinator.setPrivateMessageOnlineState(context, " libera ", "alice", true);
 
     assertTrue(store.isOnline(pm));
     assertTrue(changedNodes.contains(pmNode));
@@ -42,7 +44,9 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     List<DefaultMutableTreeNode> changedNodes = new ArrayList<>();
     ServerTreePrivateMessageOnlineStateCoordinator coordinator =
-        new ServerTreePrivateMessageOnlineStateCoordinator(
+        new ServerTreePrivateMessageOnlineStateCoordinator();
+    ServerTreePrivateMessageOnlineStateCoordinator.Context context =
+        ServerTreePrivateMessageOnlineStateCoordinator.context(
             store,
             leaves,
             changedNodes::add,
@@ -51,9 +55,9 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     TargetRef channel = new TargetRef("libera", "#ircafe");
     leaves.put(channel, new DefaultMutableTreeNode("#ircafe"));
 
-    coordinator.setPrivateMessageOnlineState("libera", "#ircafe", true);
-    coordinator.setPrivateMessageOnlineState(" ", "alice", true);
-    coordinator.setPrivateMessageOnlineState("libera", " ", true);
+    coordinator.setPrivateMessageOnlineState(context, "libera", "#ircafe", true);
+    coordinator.setPrivateMessageOnlineState(context, " ", "alice", true);
+    coordinator.setPrivateMessageOnlineState(context, "libera", " ", true);
 
     assertFalse(store.isOnline(channel));
     assertTrue(changedNodes.isEmpty());
@@ -65,7 +69,9 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     List<DefaultMutableTreeNode> changedNodes = new ArrayList<>();
     ServerTreePrivateMessageOnlineStateCoordinator coordinator =
-        new ServerTreePrivateMessageOnlineStateCoordinator(
+        new ServerTreePrivateMessageOnlineStateCoordinator();
+    ServerTreePrivateMessageOnlineStateCoordinator.Context context =
+        ServerTreePrivateMessageOnlineStateCoordinator.context(
             store,
             leaves,
             changedNodes::add,
@@ -80,7 +86,7 @@ class ServerTreePrivateMessageOnlineStateCoordinatorTest {
     store.put(pm2, false);
     store.put(pmOtherServer, true);
 
-    coordinator.clearPrivateMessageOnlineStates("libera");
+    coordinator.clearPrivateMessageOnlineStates(context, "libera");
 
     assertFalse(store.isOnline(pm1));
     assertFalse(store.isOnline(pm2));

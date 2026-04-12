@@ -10,6 +10,8 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
@@ -60,8 +62,11 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     ServerTreeStateInteractionCollaborators collaborators =
         new ServerTreeStateInteractionCollaboratorsFactory(
                 new ServerTreeEnsureNodeParentResolver(),
+                new ServerTreeEnsureNodeLeafInserter(),
                 new ServerTreeServerRuntimeUiUpdater(),
-                new ServerTreeServerStateCleaner())
+                new ServerTreeServerStateCleaner(),
+                new ServerTreeTargetNodeRemovalMutator(),
+                new ServerTreeTargetRemovalStateCoordinator())
             .create(
                 new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
                     tree,
@@ -95,8 +100,11 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     assertNotNull(collaborators.channelStateCoordinator());
     assertNotNull(collaborators.ensureNodeParentResolver());
     assertNotNull(collaborators.ensureNodeLeafInserter());
+    assertNotNull(collaborators.ensureNodeLeafInserterContext());
     assertNotNull(collaborators.targetNodeRemovalMutator());
+    assertNotNull(collaborators.targetNodeRemovalMutatorContext());
     assertNotNull(collaborators.targetRemovalStateCoordinator());
+    assertNotNull(collaborators.targetRemovalStateCoordinatorContext());
     assertNotNull(collaborators.detachedWarningClickHandler());
     assertNotNull(collaborators.rowInteractionHandler());
 
@@ -210,6 +218,30 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
 
       @Override
       public void emitManagedChannelsChanged(String serverId) {}
+
+      @Override
+      public void removePrivateMessageOnline(TargetRef ref) {}
+
+      @Override
+      public void forgetPrivateMessageTarget(String serverId, String target) {}
+
+      @Override
+      public void forgetJoinedChannel(String serverId, String channelName) {}
+
+      @Override
+      public void removeChannelAutoReattach(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelActivityRank(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelPinned(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelMuted(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelCustomOrderEntries(String serverId, String channelKey) {}
     };
   }
 }

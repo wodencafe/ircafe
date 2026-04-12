@@ -19,30 +19,31 @@ class ServerTreeRequestApiTest {
     ServerTreeRequestStreams requestStreams = mock(ServerTreeRequestStreams.class);
     ServerTreeInteractionSetupCoordinator interactionSetupCoordinator =
         mock(ServerTreeInteractionSetupCoordinator.class);
-    ServerTreeRequestApi api =
-        new ServerTreeRequestApi(
+    ServerTreeRequestApi api = new ServerTreeRequestApi();
+    ServerTreeRequestApi.Context context =
+        ServerTreeRequestApi.context(
             selectionBroadcastCoordinator, requestStreams, interactionSetupCoordinator);
 
     Function<TargetRef, Dockable> provider = __ -> null;
 
-    api.selectionStream();
-    api.connectServerRequests();
-    api.disconnectServerRequests();
-    api.closeTargetRequests();
-    api.joinChannelRequests();
-    api.disconnectChannelRequests();
-    api.bouncerDetachChannelRequests();
-    api.closeChannelRequests();
-    api.managedChannelsChangedByServer();
-    api.clearLogRequests();
-    api.openPinnedChatRequests();
-    api.quasselSetupRequests();
-    api.quasselNetworkManagerRequests();
-    api.channelModeDetailsRequests();
-    api.channelModeRefreshRequests();
-    api.channelModeSetRequests();
-    api.ircv3CapabilityToggleRequests();
-    api.setPinnedDockableProvider(provider);
+    api.selectionStream(context);
+    api.connectServerRequests(context);
+    api.disconnectServerRequests(context);
+    api.closeTargetRequests(context);
+    api.joinChannelRequests(context);
+    api.disconnectChannelRequests(context);
+    api.bouncerDetachChannelRequests(context);
+    api.closeChannelRequests(context);
+    api.managedChannelsChangedByServer(context);
+    api.clearLogRequests(context);
+    api.openPinnedChatRequests(context);
+    api.quasselSetupRequests(context);
+    api.quasselNetworkManagerRequests(context);
+    api.channelModeDetailsRequests(context);
+    api.channelModeRefreshRequests(context);
+    api.channelModeSetRequests(context);
+    api.ircv3CapabilityToggleRequests(context);
+    api.setPinnedDockableProvider(context, provider);
 
     verify(selectionBroadcastCoordinator).selectionStream();
     verify(requestStreams).connectServerRequests();

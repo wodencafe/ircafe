@@ -278,10 +278,15 @@ public final class ServerTreeTargetLifecycleCoordinator {
   private final ServerCatalog serverCatalog;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
+  private final ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext;
   private final ServerTreeTargetNodePolicy targetNodePolicy;
   private final ServerTreeTargetSnapshotProvider targetSnapshotProvider;
+  private final ServerTreeTargetSnapshotProvider.Context targetSnapshotProviderContext;
   private final ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator;
+  private final ServerTreeTargetRemovalStateCoordinator.Context
+      targetRemovalStateCoordinatorContext;
   private final ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator;
+  private final ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext;
   private final Context context;
 
   public ServerTreeTargetLifecycleCoordinator(
@@ -290,10 +295,14 @@ public final class ServerTreeTargetLifecycleCoordinator {
       ServerCatalog serverCatalog,
       ServerTreeEnsureNodeParentResolver ensureNodeParentResolver,
       ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter,
+      ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
       ServerTreeTargetNodePolicy targetNodePolicy,
       ServerTreeTargetSnapshotProvider targetSnapshotProvider,
+      ServerTreeTargetSnapshotProvider.Context targetSnapshotProviderContext,
       ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator,
+      ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,
       ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator,
+      ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext,
       Context context) {
     this.servers = Objects.requireNonNull(servers, "servers");
     this.leaves = Objects.requireNonNull(leaves, "leaves");
@@ -302,13 +311,22 @@ public final class ServerTreeTargetLifecycleCoordinator {
         Objects.requireNonNull(ensureNodeParentResolver, "ensureNodeParentResolver");
     this.ensureNodeLeafInserter =
         Objects.requireNonNull(ensureNodeLeafInserter, "ensureNodeLeafInserter");
+    this.ensureNodeLeafInserterContext =
+        Objects.requireNonNull(ensureNodeLeafInserterContext, "ensureNodeLeafInserterContext");
     this.targetNodePolicy = Objects.requireNonNull(targetNodePolicy, "targetNodePolicy");
     this.targetSnapshotProvider =
         Objects.requireNonNull(targetSnapshotProvider, "targetSnapshotProvider");
+    this.targetSnapshotProviderContext =
+        Objects.requireNonNull(targetSnapshotProviderContext, "targetSnapshotProviderContext");
     this.targetRemovalStateCoordinator =
         Objects.requireNonNull(targetRemovalStateCoordinator, "targetRemovalStateCoordinator");
+    this.targetRemovalStateCoordinatorContext =
+        Objects.requireNonNull(
+            targetRemovalStateCoordinatorContext, "targetRemovalStateCoordinatorContext");
     this.targetNodeRemovalMutator =
         Objects.requireNonNull(targetNodeRemovalMutator, "targetNodeRemovalMutator");
+    this.targetNodeRemovalMutatorContext =
+        Objects.requireNonNull(targetNodeRemovalMutatorContext, "targetNodeRemovalMutatorContext");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -370,7 +388,7 @@ public final class ServerTreeTargetLifecycleCoordinator {
     }
 
     String leafLabel = targetNodePolicy.leafLabel(ref);
-    ensureNodeLeafInserter.insertLeaf(parent, ref, leafLabel);
+    ensureNodeLeafInserter.insertLeaf(ensureNodeLeafInserterContext, parent, ref, leafLabel);
     if (context.isPrivateMessageTarget(ref) && context.shouldPersistPrivateMessageList()) {
       context.rememberPrivateMessageTarget(serverId, ref.target());
     }
@@ -399,11 +417,14 @@ public final class ServerTreeTargetLifecycleCoordinator {
     if (mappedNode != null) {
       nodesToRemove.add(mappedNode);
     }
-    nodesToRemove.addAll(targetSnapshotProvider.findTreeNodesByTarget(ref));
+    nodesToRemove.addAll(
+        targetSnapshotProvider.findTreeNodesByTarget(targetSnapshotProviderContext, ref));
     if (nodesToRemove.isEmpty()) return;
 
-    targetRemovalStateCoordinator.cleanupForRemovedTarget(ref);
-    boolean removedAny = targetNodeRemovalMutator.removeNodes(nodesToRemove);
+    targetRemovalStateCoordinator.cleanupForRemovedTarget(
+        targetRemovalStateCoordinatorContext, ref);
+    boolean removedAny =
+        targetNodeRemovalMutator.removeNodes(targetNodeRemovalMutatorContext, nodesToRemove);
     if (!removedAny) {
       context.reloadRoot();
     }

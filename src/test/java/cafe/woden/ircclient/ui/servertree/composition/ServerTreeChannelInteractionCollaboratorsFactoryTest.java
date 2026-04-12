@@ -50,7 +50,9 @@ class ServerTreeChannelInteractionCollaboratorsFactoryTest {
                     __ -> {},
                     __ -> {},
                     mock(ServerTreeChannelQueryService.class),
-                    mock(ServerTreeChannelTargetOperations.class)));
+                    mock(ServerTreeChannelQueryService.Context.class),
+                    mock(ServerTreeChannelTargetOperations.class),
+                    mock(ServerTreeChannelTargetOperations.Context.class)));
 
     assertNotNull(collaborators.typingActivityTimer());
     assertNotNull(collaborators.typingActivityManager());

@@ -21,7 +21,10 @@ public record ServerTreeStateInteractionCollaborators(
     ServerTreeChannelStateCoordinator channelStateCoordinator,
     ServerTreeEnsureNodeParentResolver ensureNodeParentResolver,
     ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter,
+    ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
     ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator,
+    ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext,
     ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator,
+    ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,
     ServerTreeDetachedWarningClickHandler detachedWarningClickHandler,
     ServerTreeRowInteractionHandler rowInteractionHandler) {}

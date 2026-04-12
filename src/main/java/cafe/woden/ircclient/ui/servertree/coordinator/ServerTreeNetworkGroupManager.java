@@ -9,22 +9,42 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Manages lifecycle and lookup of bouncer-network grouping nodes beneath origin servers. */
+@Component
 public final class ServerTreeNetworkGroupManager {
 
   public interface Context {
+    Map<String, String> networksGroupLabelByBackendId();
+
+    Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId();
+
     DefaultMutableTreeNode serverNode(String serverId);
 
     DefaultMutableTreeNode privateMessagesNode(String serverId);
   }
 
   public static Context context(
+      Map<String, String> networksGroupLabelByBackendId,
+      Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId,
       Function<String, DefaultMutableTreeNode> serverNode,
       Function<String, DefaultMutableTreeNode> privateMessagesNode) {
+    Objects.requireNonNull(networksGroupLabelByBackendId, "networksGroupLabelByBackendId");
+    Objects.requireNonNull(networksGroupByOriginByBackendId, "networksGroupByOriginByBackendId");
     Objects.requireNonNull(serverNode, "serverNode");
     Objects.requireNonNull(privateMessagesNode, "privateMessagesNode");
     return new Context() {
+      @Override
+      public Map<String, String> networksGroupLabelByBackendId() {
+        return networksGroupLabelByBackendId;
+      }
+
+      @Override
+      public Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId() {
+        return networksGroupByOriginByBackendId;
+      }
+
       @Override
       public DefaultMutableTreeNode serverNode(String serverId) {
         return serverNode.apply(serverId);
@@ -37,87 +57,67 @@ public final class ServerTreeNetworkGroupManager {
     };
   }
 
-  private final Map<String, String> networksGroupLabelByBackendId;
-  private final Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId;
-  private final Context context;
-
-  public ServerTreeNetworkGroupManager(
-      String sojuNetworksGroupLabel,
-      String zncNetworksGroupLabel,
-      String genericNetworksGroupLabel,
-      Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin,
-      Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin,
-      Map<String, DefaultMutableTreeNode> genericNetworksGroupByOrigin,
-      Context context) {
-    this(
-        labelMap(sojuNetworksGroupLabel, zncNetworksGroupLabel, genericNetworksGroupLabel),
-        groupsByBackendMap(
-            sojuNetworksGroupByOrigin, zncNetworksGroupByOrigin, genericNetworksGroupByOrigin),
-        context);
+  public DefaultMutableTreeNode getOrCreateSojuNetworksGroupNode(
+      Context context, String originServerId) {
+    return getOrCreateNetworksGroupNode(context, ServerTreeBouncerBackends.SOJU, originServerId);
   }
 
-  public ServerTreeNetworkGroupManager(
-      Map<String, String> networksGroupLabelByBackendId,
-      Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId,
-      Context context) {
-    this.networksGroupLabelByBackendId =
-        Objects.requireNonNull(networksGroupLabelByBackendId, "networksGroupLabelByBackendId");
-    this.networksGroupByOriginByBackendId =
-        Objects.requireNonNull(
-            networksGroupByOriginByBackendId, "networksGroupByOriginByBackendId");
-    this.context = Objects.requireNonNull(context, "context");
+  public DefaultMutableTreeNode getOrCreateZncNetworksGroupNode(
+      Context context, String originServerId) {
+    return getOrCreateNetworksGroupNode(context, ServerTreeBouncerBackends.ZNC, originServerId);
   }
 
-  public DefaultMutableTreeNode getOrCreateSojuNetworksGroupNode(String originServerId) {
-    return getOrCreateNetworksGroupNode(ServerTreeBouncerBackends.SOJU, originServerId);
-  }
-
-  public DefaultMutableTreeNode getOrCreateZncNetworksGroupNode(String originServerId) {
-    return getOrCreateNetworksGroupNode(ServerTreeBouncerBackends.ZNC, originServerId);
-  }
-
-  public DefaultMutableTreeNode getOrCreateGenericNetworksGroupNode(String originServerId) {
-    return getOrCreateNetworksGroupNode(ServerTreeBouncerBackends.GENERIC, originServerId);
+  public DefaultMutableTreeNode getOrCreateGenericNetworksGroupNode(
+      Context context, String originServerId) {
+    return getOrCreateNetworksGroupNode(context, ServerTreeBouncerBackends.GENERIC, originServerId);
   }
 
   public DefaultMutableTreeNode getOrCreateNetworksGroupNode(
-      String backendId, String originServerId) {
+      Context context, String backendId, String originServerId) {
+    Context in = Objects.requireNonNull(context, "context");
     return getOrCreateNetworksGroupNode(
-        originServerId, groupLabelForBackend(backendId), groupsByOriginForBackend(backendId));
+        in,
+        originServerId,
+        groupLabelForBackend(in, backendId),
+        groupsByOriginForBackend(in, backendId));
   }
 
-  public boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
-    return isNetworksGroupNode(ServerTreeBouncerBackends.SOJU, node);
+  public boolean isSojuNetworksGroupNode(Context context, DefaultMutableTreeNode node) {
+    return isNetworksGroupNode(context, ServerTreeBouncerBackends.SOJU, node);
   }
 
-  public boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
-    return isNetworksGroupNode(ServerTreeBouncerBackends.ZNC, node);
+  public boolean isZncNetworksGroupNode(Context context, DefaultMutableTreeNode node) {
+    return isNetworksGroupNode(context, ServerTreeBouncerBackends.ZNC, node);
   }
 
-  public boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node) {
-    return isNetworksGroupNode(ServerTreeBouncerBackends.GENERIC, node);
+  public boolean isGenericNetworksGroupNode(Context context, DefaultMutableTreeNode node) {
+    return isNetworksGroupNode(context, ServerTreeBouncerBackends.GENERIC, node);
   }
 
-  public boolean isNetworksGroupNode(String backendId, DefaultMutableTreeNode node) {
+  public boolean isNetworksGroupNode(
+      Context context, String backendId, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
     return isNetworksGroupNode(
-        node, groupLabelForBackend(backendId), groupsByOriginForBackend(backendId));
+        node, groupLabelForBackend(in, backendId), groupsByOriginForBackend(in, backendId));
   }
 
-  public String backendIdForNetworksGroupNode(DefaultMutableTreeNode node) {
-    for (String backendId : backendIds()) {
-      if (isNetworksGroupNode(backendId, node)) {
+  public String backendIdForNetworksGroupNode(Context context, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
+    for (String backendId : backendIds(in)) {
+      if (isNetworksGroupNode(in, backendId, node)) {
         return backendId;
       }
     }
     return null;
   }
 
-  public void removeEmptyGroupIfNeeded(DefaultMutableTreeNode node) {
+  public void removeEmptyGroupIfNeeded(Context context, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
     if (node == null || node.getChildCount() > 0) return;
 
-    String backendId = backendIdForNetworksGroupNode(node);
+    String backendId = backendIdForNetworksGroupNode(in, node);
     if (backendId == null || backendId.isBlank()) return;
-    removeGroupNode(node, groupsByOriginForBackend(backendId));
+    removeGroupNode(node, groupsByOriginForBackend(in, backendId));
   }
 
   public static String parseOriginFromCompoundServerId(String serverId, String prefix) {
@@ -143,34 +143,38 @@ public final class ServerTreeNetworkGroupManager {
     return ServerTreeConventions.normalize(value);
   }
 
-  private Set<String> backendIds() {
+  private Set<String> backendIds(Context context) {
     LinkedHashSet<String> backendIds = new LinkedHashSet<>(ServerTreeBouncerBackends.orderedIds());
-    backendIds.addAll(networksGroupLabelByBackendId.keySet());
-    backendIds.addAll(networksGroupByOriginByBackendId.keySet());
+    backendIds.addAll(context.networksGroupLabelByBackendId().keySet());
+    backendIds.addAll(context.networksGroupByOriginByBackendId().keySet());
     return backendIds;
   }
 
-  private String groupLabelForBackend(String backendId) {
+  private String groupLabelForBackend(Context context, String backendId) {
     String backend = normalize(backendId);
     if (backend.isEmpty()) {
       return ServerTreeBouncerBackends.defaultNetworksGroupLabel(backendId);
     }
-    String label = networksGroupLabelByBackendId.get(backend);
+    String label = context.networksGroupLabelByBackendId().get(backend);
     if (label == null || label.isBlank()) {
       return ServerTreeBouncerBackends.defaultNetworksGroupLabel(backend);
     }
     return label;
   }
 
-  private Map<String, DefaultMutableTreeNode> groupsByOriginForBackend(String backendId) {
+  private Map<String, DefaultMutableTreeNode> groupsByOriginForBackend(
+      Context context, String backendId) {
     String backend = normalize(backendId);
     if (backend.isEmpty()) {
       return new HashMap<>();
     }
-    return networksGroupByOriginByBackendId.computeIfAbsent(backend, ignored -> new HashMap<>());
+    return context
+        .networksGroupByOriginByBackendId()
+        .computeIfAbsent(backend, ignored -> new HashMap<>());
   }
 
   private DefaultMutableTreeNode getOrCreateNetworksGroupNode(
+      Context context,
       String originServerId,
       String groupLabel,
       Map<String, DefaultMutableTreeNode> groupsByOrigin) {
@@ -207,46 +211,5 @@ public final class ServerTreeNetworkGroupManager {
       originNode.remove(node);
     }
     groupsByOrigin.entrySet().removeIf(entry -> entry.getValue() == node);
-  }
-
-  private static Map<String, String> labelMap(
-      String sojuNetworksGroupLabel,
-      String zncNetworksGroupLabel,
-      String genericNetworksGroupLabel) {
-    Map<String, String> labels = new HashMap<>();
-    labels.put(
-        ServerTreeBouncerBackends.SOJU,
-        Objects.toString(
-            sojuNetworksGroupLabel,
-            ServerTreeBouncerBackends.defaultNetworksGroupLabel(ServerTreeBouncerBackends.SOJU)));
-    labels.put(
-        ServerTreeBouncerBackends.ZNC,
-        Objects.toString(
-            zncNetworksGroupLabel,
-            ServerTreeBouncerBackends.defaultNetworksGroupLabel(ServerTreeBouncerBackends.ZNC)));
-    labels.put(
-        ServerTreeBouncerBackends.GENERIC,
-        Objects.toString(
-            genericNetworksGroupLabel,
-            ServerTreeBouncerBackends.defaultNetworksGroupLabel(
-                ServerTreeBouncerBackends.GENERIC)));
-    return labels;
-  }
-
-  private static Map<String, Map<String, DefaultMutableTreeNode>> groupsByBackendMap(
-      Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin,
-      Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin,
-      Map<String, DefaultMutableTreeNode> genericNetworksGroupByOrigin) {
-    Map<String, Map<String, DefaultMutableTreeNode>> groupsByBackend = new HashMap<>();
-    groupsByBackend.put(
-        ServerTreeBouncerBackends.SOJU,
-        Objects.requireNonNull(sojuNetworksGroupByOrigin, "sojuNetworksGroupByOrigin"));
-    groupsByBackend.put(
-        ServerTreeBouncerBackends.ZNC,
-        Objects.requireNonNull(zncNetworksGroupByOrigin, "zncNetworksGroupByOrigin"));
-    groupsByBackend.put(
-        ServerTreeBouncerBackends.GENERIC,
-        Objects.requireNonNull(genericNetworksGroupByOrigin, "genericNetworksGroupByOrigin"));
-    return groupsByBackend;
   }
 }

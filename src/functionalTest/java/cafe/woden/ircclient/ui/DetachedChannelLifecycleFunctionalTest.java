@@ -52,7 +52,6 @@ import java.awt.Component;
 import java.awt.Font;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -61,6 +60,7 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
@@ -250,7 +250,7 @@ class DetachedChannelLifecycleFunctionalTest {
     ServerTreeDockable serverTree =
         onEdtCall(
             () ->
-                new ServerTreeDockable(
+                FunctionalTestWiringSupport.newServerTreeDockable(
                     null,
                     null,
                     null,
@@ -426,11 +426,9 @@ class DetachedChannelLifecycleFunctionalTest {
     if (node == null) return null;
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
-    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu =
-        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
-    buildPopupMenu.setAccessible(true);
-    return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(node.getPath()));
   }
 
   private static void onEdt(ThrowingRunnable runnable)

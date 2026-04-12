@@ -24,8 +24,9 @@ class ServerTreeChannelListNodeEnsurerTest {
     nodes.serverNode.add(new DefaultMutableTreeNode("status"));
     AtomicReference<DefaultMutableTreeNode> insertedParent = new AtomicReference<>();
     AtomicReference<int[]> insertedIndexes = new AtomicReference<>();
-    ServerTreeChannelListNodeEnsurer ensurer =
-        new ServerTreeChannelListNodeEnsurer(
+    ServerTreeChannelListNodeEnsurer ensurer = new ServerTreeChannelListNodeEnsurer();
+    ServerTreeChannelListNodeEnsurer.Context context =
+        ServerTreeChannelListNodeEnsurer.context(
             "Channel List",
             leaves,
             (parent, indexes) -> {
@@ -33,7 +34,7 @@ class ServerTreeChannelListNodeEnsurerTest {
               insertedIndexes.set(indexes);
             });
 
-    DefaultMutableTreeNode ensured = ensurer.ensureChannelListNode(nodes);
+    DefaultMutableTreeNode ensured = ensurer.ensureChannelListNode(context, nodes);
 
     assertNotNull(ensured);
     assertSame(nodes.serverNode, ensured.getParent());
@@ -54,11 +55,12 @@ class ServerTreeChannelListNodeEnsurerTest {
     nodes.serverNode.add(existing);
     leaves.put(nodes.channelListRef, existing);
     AtomicInteger insertEvents = new AtomicInteger();
-    ServerTreeChannelListNodeEnsurer ensurer =
-        new ServerTreeChannelListNodeEnsurer(
+    ServerTreeChannelListNodeEnsurer ensurer = new ServerTreeChannelListNodeEnsurer();
+    ServerTreeChannelListNodeEnsurer.Context context =
+        ServerTreeChannelListNodeEnsurer.context(
             "Channel List", leaves, (parent, indexes) -> insertEvents.incrementAndGet());
 
-    DefaultMutableTreeNode ensured = ensurer.ensureChannelListNode(nodes);
+    DefaultMutableTreeNode ensured = ensurer.ensureChannelListNode(context, nodes);
 
     assertSame(existing, ensured);
     assertEquals(0, insertEvents.get());

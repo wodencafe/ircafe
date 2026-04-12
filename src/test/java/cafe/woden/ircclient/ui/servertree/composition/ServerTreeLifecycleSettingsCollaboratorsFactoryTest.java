@@ -69,6 +69,7 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
                     mock(ServerTreeServerStateCleaner.class),
                     mock(ServerTreeServerStateCleaner.Context.class),
                     mock(ServerTreeNetworkGroupManager.class),
+                    mock(ServerTreeNetworkGroupManager.Context.class),
                     mock(UiSettingsBus.class),
                     null,
                     null,

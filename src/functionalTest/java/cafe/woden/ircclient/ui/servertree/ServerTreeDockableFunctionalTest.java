@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
@@ -300,7 +302,7 @@ class ServerTreeDockableFunctionalTest {
   }
 
   private static ServerTreeDockable newDockable() {
-    return new ServerTreeDockable(
+    return FunctionalTestWiringSupport.newServerTreeDockable(
         null,
         null,
         null,
@@ -316,7 +318,7 @@ class ServerTreeDockableFunctionalTest {
 
   private static ServerTreeDockable newDockable(
       ServerCatalog serverCatalog, RuntimeConfigStore runtimeConfig) {
-    return new ServerTreeDockable(
+    return FunctionalTestWiringSupport.newServerTreeDockable(
         serverCatalog,
         runtimeConfig,
         null,
@@ -331,7 +333,7 @@ class ServerTreeDockableFunctionalTest {
   }
 
   private static ServerTreeDockable newDockable(InterceptorStore interceptorStore) {
-    return new ServerTreeDockable(
+    return FunctionalTestWiringSupport.newServerTreeDockable(
         null,
         null,
         null,
@@ -404,11 +406,9 @@ class ServerTreeDockableFunctionalTest {
 
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
-    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu =
-        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
-    buildPopupMenu.setAccessible(true);
-    return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(node.getPath()));
   }
 
   @SuppressWarnings("unchecked")
@@ -426,12 +426,9 @@ class ServerTreeDockableFunctionalTest {
 
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
-    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu =
-        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
-    buildPopupMenu.setAccessible(true);
-    return (JPopupMenu)
-        buildPopupMenu.invoke(contextMenuBuilder, new TreePath(serverNode.getPath()));
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(serverNode.getPath()));
   }
 
   private static void invokeAddServerRoot(ServerTreeDockable dockable, String serverId)

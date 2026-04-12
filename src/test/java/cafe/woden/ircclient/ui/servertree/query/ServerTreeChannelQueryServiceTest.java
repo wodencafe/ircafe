@@ -21,34 +21,44 @@ class ServerTreeChannelQueryServiceTest {
   void openChannelsForServerReturnsSnapshotOrEmptyForBlankServerId() {
     ServerTreeTargetSnapshotProvider targetSnapshotProvider =
         mock(ServerTreeTargetSnapshotProvider.class);
+    ServerTreeTargetSnapshotProvider.Context targetSnapshotProviderContext =
+        mock(ServerTreeTargetSnapshotProvider.Context.class);
     ServerTreeChannelStateCoordinator channelStateCoordinator =
         mock(ServerTreeChannelStateCoordinator.class);
     ServerTreeChannelQueryService service =
-        new ServerTreeChannelQueryService(
-            new ServerTreeEdtExecutor(),
+        new ServerTreeChannelQueryService(new ServerTreeEdtExecutor());
+    ServerTreeChannelQueryService.Context context =
+        ServerTreeChannelQueryService.context(
             targetSnapshotProvider,
+            targetSnapshotProviderContext,
             channelStateCoordinator,
             id -> Objects.toString(id, "").trim());
 
-    when(targetSnapshotProvider.snapshotOpenChannelsForServer("libera"))
+    when(targetSnapshotProvider.snapshotOpenChannelsForServer(
+            targetSnapshotProviderContext, "libera"))
         .thenReturn(List.of("#ircafe"));
 
-    assertEquals(List.of("#ircafe"), service.openChannelsForServer("libera"));
-    assertTrue(service.openChannelsForServer(" ").isEmpty());
+    assertEquals(List.of("#ircafe"), service.openChannelsForServer(context, "libera"));
+    assertTrue(service.openChannelsForServer(context, " ").isEmpty());
 
-    verify(targetSnapshotProvider).snapshotOpenChannelsForServer("libera");
+    verify(targetSnapshotProvider)
+        .snapshotOpenChannelsForServer(targetSnapshotProviderContext, "libera");
   }
 
   @Test
   void managedChannelQueriesAndMutationsUseNormalizedServerIds() throws Exception {
     ServerTreeTargetSnapshotProvider targetSnapshotProvider =
         mock(ServerTreeTargetSnapshotProvider.class);
+    ServerTreeTargetSnapshotProvider.Context targetSnapshotProviderContext =
+        mock(ServerTreeTargetSnapshotProvider.Context.class);
     ServerTreeChannelStateCoordinator channelStateCoordinator =
         mock(ServerTreeChannelStateCoordinator.class);
     ServerTreeChannelQueryService service =
-        new ServerTreeChannelQueryService(
-            new ServerTreeEdtExecutor(),
+        new ServerTreeChannelQueryService(new ServerTreeEdtExecutor());
+    ServerTreeChannelQueryService.Context context =
+        ServerTreeChannelQueryService.context(
             targetSnapshotProvider,
+            targetSnapshotProviderContext,
             channelStateCoordinator,
             id -> Objects.toString(id, "").trim());
 
@@ -57,21 +67,21 @@ class ServerTreeChannelQueryServiceTest {
     when(channelStateCoordinator.channelSortModeForServer("libera"))
         .thenReturn(ServerTreeDockable.ChannelSortMode.ALPHABETICAL);
 
-    assertEquals(1, service.managedChannelsForServer(" libera ").size());
+    assertEquals(1, service.managedChannelsForServer(context, " libera ").size());
     assertEquals(
         ServerTreeDockable.ChannelSortMode.ALPHABETICAL,
-        service.channelSortModeForServer(" libera "));
+        service.channelSortModeForServer(context, " libera "));
 
-    service.setChannelSortModeForServer(" libera ", null);
-    service.setChannelCustomOrderForServer(" libera ", List.of("#a", "#b"));
+    service.setChannelSortModeForServer(context, " libera ", null);
+    service.setChannelCustomOrderForServer(context, " libera ", List.of("#a", "#b"));
     flushEdt();
 
     verify(channelStateCoordinator)
         .setChannelSortModeForServer("libera", ServerTreeDockable.ChannelSortMode.CUSTOM);
     verify(channelStateCoordinator).setChannelCustomOrderForServer("libera", List.of("#a", "#b"));
 
-    service.setChannelSortModeForServer(" ", ServerTreeDockable.ChannelSortMode.CUSTOM);
-    service.setChannelCustomOrderForServer(" ", List.of("#ignored"));
+    service.setChannelSortModeForServer(context, " ", ServerTreeDockable.ChannelSortMode.CUSTOM);
+    service.setChannelCustomOrderForServer(context, " ", List.of("#ignored"));
     flushEdt();
 
     verify(channelStateCoordinator, never())

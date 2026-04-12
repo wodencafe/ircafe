@@ -123,8 +123,12 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                             Objects.requireNonNull(
                                 in.serverStateCleanerContext(), "serverStateCleanerContext"),
                             serverId),
-                Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
-                    ::removeEmptyGroupIfNeeded));
+                groupNode ->
+                    Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
+                        .removeEmptyGroupIfNeeded(
+                            Objects.requireNonNull(
+                                in.networkGroupManagerContext(), "networkGroupManagerContext"),
+                            groupNode)));
     ServerTreeServerLifecycleFacade serverLifecycleFacade =
         new ServerTreeServerLifecycleFacade(
             serverRootLifecycleManager,
@@ -203,6 +207,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       ServerTreeServerStateCleaner serverStateCleaner,
       ServerTreeServerStateCleaner.Context serverStateCleanerContext,
       ServerTreeNetworkGroupManager networkGroupManager,
+      ServerTreeNetworkGroupManager.Context networkGroupManagerContext,
       UiSettingsBus settingsBus,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       UiSettingsRuntimeConfigPort runtimeConfig,

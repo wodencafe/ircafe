@@ -17,6 +17,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
@@ -302,7 +303,8 @@ class PreferencesDialogFunctionalTest {
     JSpinner badgeScale =
         ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
     Ircv3CapabilitiesControls capabilities =
-        Ircv3PanelSupport.buildCapabilitiesControls(runtimeConfig);
+        Ircv3PanelSupport.buildCapabilitiesControls(
+            runtimeConfig, Ircv3ExtensionCatalog.builtInCatalog());
 
     JPanel panel =
         Ircv3PanelSupport.buildPanel(

@@ -36,8 +36,11 @@ import org.springframework.stereotype.Component;
 public final class ServerTreeStateInteractionCollaboratorsFactory {
 
   @NonNull private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
+  @NonNull private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
   @NonNull private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   @NonNull private final ServerTreeServerStateCleaner serverStateCleaner;
+  @NonNull private final ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator;
+  @NonNull private final ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator;
 
   public ServerTreeStateInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
@@ -73,23 +76,20 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             in.model(),
             Objects.requireNonNull(
                 in.channelStateCoordinatorContext(), "channelStateCoordinatorContext"));
-    ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter =
-        new ServerTreeEnsureNodeLeafInserter(
+    ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext =
+        ServerTreeEnsureNodeLeafInserter.context(
             in.leaves(),
             in.model(),
             Objects.requireNonNull(
                 in.privateMessageOnlineStateStore(), "privateMessageOnlineStateStore"),
             Objects.requireNonNull(
-                in.ensureNodeLeafInserterContext(), "ensureNodeLeafInserterContext"));
-    ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator =
-        new ServerTreeTargetNodeRemovalMutator(in.typingActivityNodes(), in.model());
-    ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator =
-        new ServerTreeTargetRemovalStateCoordinator(
-            in.privateMessageOnlineStateStore(),
-            in.sessionRuntimeConfig(),
-            in.channelStateStore(),
-            Objects.requireNonNull(
-                in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext"));
+                in.isPrivateMessageTargetForEnsureNodeLeafInserter(),
+                "isPrivateMessageTargetForEnsureNodeLeafInserter"));
+    ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext =
+        ServerTreeTargetNodeRemovalMutator.context(in.typingActivityNodes(), in.model());
+    ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext =
+        Objects.requireNonNull(
+            in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext");
     ServerTreeDetachedWarningClickHandler detachedWarningClickHandler =
         new ServerTreeDetachedWarningClickHandler(
             in.tree(),
@@ -111,8 +111,11 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
         channelStateCoordinator,
         ensureNodeParentResolver,
         ensureNodeLeafInserter,
+        ensureNodeLeafInserterContext,
         targetNodeRemovalMutator,
+        targetNodeRemovalMutatorContext,
         targetRemovalStateCoordinator,
+        targetRemovalStateCoordinatorContext,
         detachedWarningClickHandler,
         rowInteractionHandler);
   }
@@ -129,7 +132,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Set<DefaultMutableTreeNode> typingActivityNodes,
       ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore,
-      ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
+      java.util.function.Predicate<TargetRef> isPrivateMessageTargetForEnsureNodeLeafInserter,
       java.util.function.Predicate<DefaultMutableTreeNode> isServerNode,
       Consumer<TargetRef> clearChannelDisconnectedWarning,
       IntSupplier typingSlotWidth,

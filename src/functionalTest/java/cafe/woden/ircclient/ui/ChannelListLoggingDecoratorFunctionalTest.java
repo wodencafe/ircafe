@@ -128,7 +128,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
     ServerTreeDockable serverTree =
         onEdtCall(
             () ->
-                new ServerTreeDockable(
+                FunctionalTestWiringSupport.newServerTreeDockable(
                     serverCatalog,
                     runtimeConfig,
                     logProps,

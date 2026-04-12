@@ -10,20 +10,28 @@ import java.util.function.BiPredicate;
 /** Public-facing channel interaction API composed from query/state coordinators. */
 public final class ServerTreeChannelInteractionApi {
   private final ServerTreeChannelQueryService channelQueryService;
+  private final ServerTreeChannelQueryService.Context channelQueryServiceContext;
   private final ServerTreeChannelTargetOperations channelTargetOperations;
+  private final ServerTreeChannelTargetOperations.Context channelTargetOperationsContext;
   private final ServerTreeChannelDisconnectStateManager channelDisconnectStateManager;
   private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
   private final ServerTreeTypingActivityManager typingActivityManager;
 
   public ServerTreeChannelInteractionApi(
       ServerTreeChannelQueryService channelQueryService,
+      ServerTreeChannelQueryService.Context channelQueryServiceContext,
       ServerTreeChannelTargetOperations channelTargetOperations,
+      ServerTreeChannelTargetOperations.Context channelTargetOperationsContext,
       ServerTreeChannelDisconnectStateManager channelDisconnectStateManager,
       ServerTreeUnreadStateCoordinator unreadStateCoordinator,
       ServerTreeTypingActivityManager typingActivityManager) {
     this.channelQueryService = Objects.requireNonNull(channelQueryService, "channelQueryService");
+    this.channelQueryServiceContext =
+        Objects.requireNonNull(channelQueryServiceContext, "channelQueryServiceContext");
     this.channelTargetOperations =
         Objects.requireNonNull(channelTargetOperations, "channelTargetOperations");
+    this.channelTargetOperationsContext =
+        Objects.requireNonNull(channelTargetOperationsContext, "channelTargetOperationsContext");
     this.channelDisconnectStateManager =
         Objects.requireNonNull(channelDisconnectStateManager, "channelDisconnectStateManager");
     this.unreadStateCoordinator =
@@ -33,40 +41,42 @@ public final class ServerTreeChannelInteractionApi {
   }
 
   public List<String> openChannelsForServer(String serverId) {
-    return channelQueryService.openChannelsForServer(serverId);
+    return channelQueryService.openChannelsForServer(channelQueryServiceContext, serverId);
   }
 
   public List<ServerTreeDockable.ManagedChannelEntry> managedChannelsForServer(String serverId) {
-    return channelQueryService.managedChannelsForServer(serverId);
+    return channelQueryService.managedChannelsForServer(channelQueryServiceContext, serverId);
   }
 
   public ServerTreeDockable.ChannelSortMode channelSortModeForServer(String serverId) {
-    return channelQueryService.channelSortModeForServer(serverId);
+    return channelQueryService.channelSortModeForServer(channelQueryServiceContext, serverId);
   }
 
   public void setChannelSortModeForServer(
       String serverId, ServerTreeDockable.ChannelSortMode mode) {
-    channelQueryService.setChannelSortModeForServer(serverId, mode);
+    channelQueryService.setChannelSortModeForServer(channelQueryServiceContext, serverId, mode);
   }
 
   public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
-    channelQueryService.setChannelCustomOrderForServer(serverId, channels);
+    channelQueryService.setChannelCustomOrderForServer(
+        channelQueryServiceContext, serverId, channels);
   }
 
   public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
-    channelTargetOperations.setCanEditChannelModes(canEditChannelModes);
+    channelTargetOperations.setCanEditChannelModes(
+        channelTargetOperationsContext, canEditChannelModes);
   }
 
   public void requestJoinChannel(TargetRef target) {
-    channelTargetOperations.requestJoinChannel(target);
+    channelTargetOperations.requestJoinChannel(channelTargetOperationsContext, target);
   }
 
   public void requestDisconnectChannel(TargetRef target) {
-    channelTargetOperations.requestDisconnectChannel(target);
+    channelTargetOperations.requestDisconnectChannel(channelTargetOperationsContext, target);
   }
 
   public void requestCloseChannel(TargetRef target) {
-    channelTargetOperations.requestCloseChannel(target);
+    channelTargetOperations.requestCloseChannel(channelTargetOperationsContext, target);
   }
 
   public void setChannelDisconnected(TargetRef ref, boolean disconnected, String warningReason) {
@@ -82,27 +92,28 @@ public final class ServerTreeChannelInteractionApi {
   }
 
   public boolean isChannelAutoReattach(TargetRef ref) {
-    return channelTargetOperations.isChannelAutoReattach(ref);
+    return channelTargetOperations.isChannelAutoReattach(channelTargetOperationsContext, ref);
   }
 
   public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
-    channelTargetOperations.setChannelAutoReattach(ref, autoReattach);
+    channelTargetOperations.setChannelAutoReattach(
+        channelTargetOperationsContext, ref, autoReattach);
   }
 
   public boolean isChannelPinned(TargetRef ref) {
-    return channelTargetOperations.isChannelPinned(ref);
+    return channelTargetOperations.isChannelPinned(channelTargetOperationsContext, ref);
   }
 
   public void setChannelPinned(TargetRef ref, boolean pinned) {
-    channelTargetOperations.setChannelPinned(ref, pinned);
+    channelTargetOperations.setChannelPinned(channelTargetOperationsContext, ref, pinned);
   }
 
   public boolean isChannelMuted(TargetRef ref) {
-    return channelTargetOperations.isChannelMuted(ref);
+    return channelTargetOperations.isChannelMuted(channelTargetOperationsContext, ref);
   }
 
   public void setChannelMuted(TargetRef ref, boolean muted) {
-    channelTargetOperations.setChannelMuted(ref, muted);
+    channelTargetOperations.setChannelMuted(channelTargetOperationsContext, ref, muted);
     unreadStateCoordinator.onChannelMutedStateChanged(ref, muted);
   }
 

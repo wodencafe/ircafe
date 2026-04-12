@@ -173,8 +173,7 @@ class AppMenuBarActionsMockVerifyTest {
       ChatDockable chatOverride,
       ServerTreeDockable treeOverride,
       ServerDialogs dialogsOverride) {
-    return newMenuBar(
-        shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, null, null);
+    return newMenuBar(shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, null, null);
   }
 
   private static AppMenuBar newMenuBar(

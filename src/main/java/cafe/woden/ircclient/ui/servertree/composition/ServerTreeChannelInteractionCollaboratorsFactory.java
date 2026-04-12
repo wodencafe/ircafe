@@ -93,7 +93,10 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
     ServerTreeChannelInteractionApi channelInteractionApi =
         new ServerTreeChannelInteractionApi(
             Objects.requireNonNull(in.channelQueryService(), "channelQueryService"),
+            Objects.requireNonNull(in.channelQueryServiceContext(), "channelQueryServiceContext"),
             Objects.requireNonNull(in.channelTargetOperations(), "channelTargetOperations"),
+            Objects.requireNonNull(
+                in.channelTargetOperationsContext(), "channelTargetOperationsContext"),
             channelDisconnectStateManager,
             unreadStateCoordinator,
             typingActivityManager);
@@ -129,5 +132,7 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
       Consumer<TargetRef> noteChannelActivity,
       Consumer<TargetRef> onChannelUnreadCountsChanged,
       ServerTreeChannelQueryService channelQueryService,
-      ServerTreeChannelTargetOperations channelTargetOperations) {}
+      ServerTreeChannelQueryService.Context channelQueryServiceContext,
+      ServerTreeChannelTargetOperations channelTargetOperations,
+      ServerTreeChannelTargetOperations.Context channelTargetOperationsContext) {}
 }

@@ -332,15 +332,15 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static String backendIdForNetworksGroupNode(
       Inputs inputs, javax.swing.tree.DefaultMutableTreeNode node) {
-    if (inputs == null || inputs.networkGroupManager() == null || node == null) {
+    if (inputs == null
+        || inputs.networkGroupManager() == null
+        || inputs.networkGroupManagerContext() == null
+        || node == null) {
       return null;
     }
-    for (String backendId : orderedBackendIds(inputs)) {
-      if (inputs.networkGroupManager().isNetworksGroupNode(backendId, node)) {
-        return backendId;
-      }
-    }
-    return null;
+    return inputs
+        .networkGroupManager()
+        .backendIdForNetworksGroupNode(inputs.networkGroupManagerContext(), node);
   }
 
   private static String backendIdForEphemeralServer(Inputs inputs, String serverId) {
@@ -490,6 +490,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeUiHooks uiHooks,
       ServerTreeNodeAccess nodeAccess,
       ServerTreeNetworkGroupManager networkGroupManager,
+      ServerTreeNetworkGroupManager.Context networkGroupManagerContext,
       ServerTreeNodeClassifier nodeClassifier,
       ServerTreeNodeClassifier.Context nodeClassifierContext,
       ServerTreeRuntimeState runtimeState,

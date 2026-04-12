@@ -52,6 +52,7 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                     mock(ServerTreeUiHooks.class),
                     mock(ServerTreeNodeAccess.class),
                     mock(ServerTreeNetworkGroupManager.class),
+                    mock(ServerTreeNetworkGroupManager.Context.class),
                     mock(ServerTreeNodeClassifier.class),
                     mock(ServerTreeNodeClassifier.Context.class),
                     mock(ServerTreeRuntimeState.class),

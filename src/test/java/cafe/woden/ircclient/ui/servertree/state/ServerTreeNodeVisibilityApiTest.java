@@ -23,6 +23,8 @@ class ServerTreeNodeVisibilityApiTest {
   void dccTransfersVisibilityChangeSyncsAndFiresPropertyChange() {
     ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings =
         mock(ServerTreeBuiltInVisibilitySettings.class);
+    ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext =
+        mock(ServerTreeBuiltInVisibilitySettings.Context.class);
     AtomicInteger syncUiCount = new AtomicInteger();
     AtomicReference<String> propertyName = new AtomicReference<>();
     AtomicReference<Boolean> oldValue = new AtomicReference<>();
@@ -31,6 +33,7 @@ class ServerTreeNodeVisibilityApiTest {
     ServerTreeNodeVisibilityApi api =
         visibilityApi(
             builtInVisibilitySettings,
+            builtInVisibilitySettingsContext,
             syncUiCount::incrementAndGet,
             () -> {},
             (prop, old, next) -> {
@@ -56,12 +59,15 @@ class ServerTreeNodeVisibilityApiTest {
   void applicationRootVisibilityChangeSyncsAndFiresPropertyChange() {
     ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings =
         mock(ServerTreeBuiltInVisibilitySettings.class);
+    ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext =
+        mock(ServerTreeBuiltInVisibilitySettings.Context.class);
     AtomicInteger syncAppCount = new AtomicInteger();
     AtomicReference<String> propertyName = new AtomicReference<>();
 
     ServerTreeNodeVisibilityApi api =
         visibilityApi(
             builtInVisibilitySettings,
+            builtInVisibilitySettingsContext,
             () -> {},
             syncAppCount::incrementAndGet,
             (prop, old, next) -> propertyName.set(prop));
@@ -81,11 +87,21 @@ class ServerTreeNodeVisibilityApiTest {
   void delegatesBuiltInVisibilityQueriesAndMutations() {
     ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings =
         mock(ServerTreeBuiltInVisibilitySettings.class);
-    when(builtInVisibilitySettings.defaultVisibility(any())).thenReturn(true);
-    when(builtInVisibilitySettings.serverVisibility(anyString(), any())).thenReturn(true);
+    ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext =
+        mock(ServerTreeBuiltInVisibilitySettings.Context.class);
+    when(builtInVisibilitySettings.defaultVisibility(eq(builtInVisibilitySettingsContext), any()))
+        .thenReturn(true);
+    when(builtInVisibilitySettings.serverVisibility(
+            eq(builtInVisibilitySettingsContext), anyString(), any()))
+        .thenReturn(true);
 
     ServerTreeNodeVisibilityApi api =
-        visibilityApi(builtInVisibilitySettings, () -> {}, () -> {}, (prop, old, next) -> {});
+        visibilityApi(
+            builtInVisibilitySettings,
+            builtInVisibilitySettingsContext,
+            () -> {},
+            () -> {},
+            (prop, old, next) -> {});
 
     assertTrue(api.isServerNodesVisible());
     assertTrue(api.isLogViewerNodesVisible());
@@ -110,19 +126,24 @@ class ServerTreeNodeVisibilityApiTest {
     api.setInterceptorsNodesVisible(true);
 
     verify(builtInVisibilitySettings, times(5))
-        .setVisibilityForServer(eq("libera"), eq(true), any());
-    verify(builtInVisibilitySettings, times(5)).setDefaultVisibility(eq(true), any(), any(), any());
+        .setVisibilityForServer(
+            eq(builtInVisibilitySettingsContext), eq("libera"), eq(true), any());
+    verify(builtInVisibilitySettings, times(5))
+        .setDefaultVisibility(eq(builtInVisibilitySettingsContext), eq(true), any(), any(), any());
   }
 
   @Test
   void channelListVisibilityFalseIsIgnored() {
     ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings =
         mock(ServerTreeBuiltInVisibilitySettings.class);
+    ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext =
+        mock(ServerTreeBuiltInVisibilitySettings.Context.class);
     AtomicInteger syncUiCount = new AtomicInteger();
 
     ServerTreeNodeVisibilityApi api =
         visibilityApi(
             builtInVisibilitySettings,
+            builtInVisibilitySettingsContext,
             syncUiCount::incrementAndGet,
             () -> {},
             (prop, old, next) -> {});
@@ -131,16 +152,18 @@ class ServerTreeNodeVisibilityApiTest {
 
     assertEquals(0, syncUiCount.get());
     verify(builtInVisibilitySettings, never())
-        .setDefaultVisibility(anyBoolean(), any(), any(), any());
+        .setDefaultVisibility(any(), anyBoolean(), any(), any(), any());
   }
 
   private static ServerTreeNodeVisibilityApi visibilityApi(
       ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings,
+      ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext,
       Runnable syncUiLeafVisibility,
       Runnable syncApplicationRootVisibility,
       ServerTreeNodeVisibilityApi.BooleanPropertyChangePublisher propertyChangePublisher) {
     return new ServerTreeNodeVisibilityApi(
         builtInVisibilitySettings,
+        builtInVisibilitySettingsContext,
         syncUiLeafVisibility,
         syncApplicationRootVisibility,
         propertyChangePublisher,
