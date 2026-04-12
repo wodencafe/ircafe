@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -141,6 +142,8 @@ public abstract class AbstractApplicationModuleIntegrationTest {
 
   @MockitoBean(name = "ircNegotiatedFeaturePort", answers = Answers.RETURNS_DEEP_STUBS)
   IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
+
+  @MockitoBean Ircv3ChatHistoryFeatureSupport ircv3ChatHistoryFeatureSupport;
 
   @MockitoBean(name = "ircReadMarkerPort", answers = Answers.RETURNS_DEEP_STUBS)
   IrcReadMarkerPort ircReadMarkerPort;
