@@ -320,6 +320,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeSelectionPersistencePolicy selectionPersistencePolicy;
   private final ServerTreeSelectionPersistencePolicy.Context selectionPersistenceContext;
   private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
+  private final ServerTreeStartupSelectionRestorer.Context startupSelectionRestorerContext;
   private final ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
   private final ServerTreeUiLeafVisibilitySynchronizer.Context uiLeafVisibilitySynchronizerContext;
@@ -357,10 +358,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
   private final ServerTreeRequestApi requestApi;
   private final ServerTreeRequestApi.Context requestApiContext;
-  private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
+
   private final ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext;
   private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
+  private final ServerTreeRuntimeHeaderApi.Context runtimeHeaderApiContext;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
+  private final ServerTreeUiRefreshCoordinator.Context uiRefreshCoordinatorContext;
 
   private final Function<MouseEvent, String> tooltipResolver;
   private final Function<TreePath, JPopupMenu> contextMenuBuilder;
@@ -403,6 +406,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
       ServerTreeSelectionFallbackPolicy selectionFallbackPolicy,
       ServerTreeSelectionPersistencePolicy selectionPersistencePolicy,
+      ServerTreeStartupSelectionRestorer startupSelectionRestorer,
       ServerTreeTargetNodePolicy targetNodePolicy,
       ServerTreeServerNodeResolver serverNodeResolver,
       ServerTreeNodeClassifier nodeClassifier,
@@ -420,6 +424,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerTreeChannelQueryService channelQueryService,
       ServerTreeChannelTargetOperations channelTargetOperations,
       ServerTreeRequestApi requestApi,
+      ServerTreeRuntimeHeaderApi runtimeHeaderApi,
+      ServerTreeUiRefreshCoordinator uiRefreshCoordinator,
       ServerTreeEdtExecutor edtExecutor,
       ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
@@ -666,7 +672,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 SERVER_ACTION_BUTTON_ICON_SIZE,
                 SERVER_ACTION_BUTTON_MARGIN));
     this.serverActionOverlay = stateInteractionCollaborators.serverActionOverlay();
-    this.serverRuntimeUiUpdater = stateInteractionCollaborators.serverRuntimeUiUpdater();
+
     this.serverRuntimeUiUpdaterContext =
         stateInteractionCollaborators.serverRuntimeUiUpdaterContext();
     this.serverStateCleaner = stateInteractionCollaborators.serverStateCleaner();
@@ -757,18 +763,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             node -> nodeClassifier.isInterceptorsGroupNode(nodeClassifierContext, node),
             quasselNetworkParentResolver::channelListRefForNetworkNode);
     this.startupSelectionRestorer =
-        new ServerTreeStartupSelectionRestorer(
-            ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
-            ServerTreeStartupSelectionRestorer.context(
-                ServerTreeDockable::normalizeServerId,
-                ref -> ref != null && leaves.containsKey(ref),
-                serverId ->
-                    isServerGroupNodeSelectable(
-                        serverNodeResolver, serverNodeResolverContext, serverId, true),
-                serverId ->
-                    isServerGroupNodeSelectable(
-                        serverNodeResolver, serverNodeResolverContext, serverId, false),
-                this::selectTarget));
+        Objects.requireNonNull(startupSelectionRestorer, "startupSelectionRestorer");
+    java.util.concurrent.atomic.AtomicReference<TargetRef> rememberedSelection =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig));
+    this.startupSelectionRestorerContext =
+        ServerTreeStartupSelectionRestorer.context(
+            rememberedSelection::get,
+            rememberedSelection::set,
+            ServerTreeDockable::normalizeServerId,
+            ref -> ref != null && leaves.containsKey(ref),
+            serverId ->
+                isServerGroupNodeSelectable(
+                    serverNodeResolver, serverNodeResolverContext, serverId, true),
+            serverId ->
+                isServerGroupNodeSelectable(
+                    serverNodeResolver, serverNodeResolverContext, serverId, false),
+            this::selectTarget);
     ServerTreeNodeVisibilityMutator nodeVisibilityMutator =
         new ServerTreeNodeVisibilityMutator(model, leaves, typingActivityNodes);
     this.serverLeafVisibilityCoordinator =
@@ -1069,7 +1080,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 quasselNetworkParentResolver::isQuasselNetworkNode,
                 quasselNetworkParentResolver::isQuasselEmptyStateNode));
     this.uiRefreshCoordinator =
-        new ServerTreeUiRefreshCoordinator(
+        Objects.requireNonNull(uiRefreshCoordinator, "uiRefreshCoordinator");
+    this.uiRefreshCoordinatorContext =
+        ServerTreeUiRefreshCoordinator.context(
             tree,
             model,
             root,
@@ -1079,9 +1092,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.headerControls =
         new ServerTreeHeaderControls(this, connectBtn, disconnectBtn, serverDialogs);
-    this.runtimeHeaderApi =
-        new ServerTreeRuntimeHeaderApi(
-            serverRuntimeUiUpdater, serverRuntimeUiUpdaterContext, headerControls);
+    this.runtimeHeaderApi = Objects.requireNonNull(runtimeHeaderApi, "runtimeHeaderApi");
+    this.runtimeHeaderApiContext =
+        ServerTreeRuntimeHeaderApi.context(
+            serverRuntimeUiUpdaterContext,
+            headerControls::setStatusText,
+            headerControls::setConnectionControlsEnabled);
     JPanel header = headerControls.panel();
 
     root.add(ircRoot);
@@ -1298,7 +1314,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private String firstServerIdOrEmpty() {
     return serverNodeResolver.firstServerIdOrEmpty(
-        serverNodeResolverContext, startupSelectionRestorer::rememberedSelection);
+        serverNodeResolverContext,
+        () -> startupSelectionRestorer.rememberedSelection(startupSelectionRestorerContext));
   }
 
   private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
@@ -1522,7 +1539,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setServerConnectionState(String serverId, ConnectionState state) {
-    runtimeHeaderApi.setServerConnectionState(serverId, state);
+    runtimeHeaderApi.setServerConnectionState(runtimeHeaderApiContext, serverId, state);
   }
 
   public boolean isServerConnected(String serverId) {
@@ -1532,26 +1549,30 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
-    runtimeHeaderApi.setServerDesiredOnline(serverId, desiredOnline);
+    runtimeHeaderApi.setServerDesiredOnline(runtimeHeaderApiContext, serverId, desiredOnline);
   }
 
   public void setServerConnectionDiagnostics(
       String serverId, String lastError, Long nextRetryEpochMs) {
-    runtimeHeaderApi.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs);
+    runtimeHeaderApi.setServerConnectionDiagnostics(
+        runtimeHeaderApiContext, serverId, lastError, nextRetryEpochMs);
   }
 
   public void setServerConnectedIdentity(
       String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
-    runtimeHeaderApi.setServerConnectedIdentity(serverId, connectedHost, connectedPort, nick, at);
+    runtimeHeaderApi.setServerConnectedIdentity(
+        runtimeHeaderApiContext, serverId, connectedHost, connectedPort, nick, at);
   }
 
   public void setServerIrcv3Capability(
       String serverId, String capability, String subcommand, boolean enabled) {
-    runtimeHeaderApi.setServerIrcv3Capability(serverId, capability, subcommand, enabled);
+    runtimeHeaderApi.setServerIrcv3Capability(
+        runtimeHeaderApiContext, serverId, capability, subcommand, enabled);
   }
 
   public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
-    runtimeHeaderApi.setServerIsupportToken(serverId, tokenName, tokenValue);
+    runtimeHeaderApi.setServerIsupportToken(
+        runtimeHeaderApiContext, serverId, tokenName, tokenValue);
   }
 
   public void setServerVersionDetails(
@@ -1561,7 +1582,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       String userModes,
       String channelModes) {
     runtimeHeaderApi.setServerVersionDetails(
-        serverId, serverName, serverVersion, userModes, channelModes);
+        runtimeHeaderApiContext, serverId, serverName, serverVersion, userModes, channelModes);
   }
 
   private void openServerInfoDialog(String serverId) {
@@ -1590,11 +1611,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setStatusText(String text) {
-    runtimeHeaderApi.setStatusText(text);
+    runtimeHeaderApi.setStatusText(runtimeHeaderApiContext, text);
   }
 
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
-    runtimeHeaderApi.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
+    runtimeHeaderApi.setConnectionControlsEnabled(
+        runtimeHeaderApiContext, connectEnabled, disconnectEnabled);
   }
 
   /**
@@ -1604,7 +1626,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    */
   @Deprecated
   public void setConnectedUi(boolean connected) {
-    runtimeHeaderApi.setConnectedUi(connected);
+    runtimeHeaderApi.setConnectedUi(runtimeHeaderApiContext, connected);
   }
 
   public boolean isChannelListNodesVisible() {
@@ -1804,7 +1826,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void selectStartupDefaultForServer(String serverId) {
-    if (startupSelectionRestorer.tryRestoreForServer(serverId)) {
+    if (startupSelectionRestorer.tryRestoreForServer(startupSelectionRestorerContext, serverId)) {
       return;
     }
     selectionFallbackPolicy.selectStartupDefaultForServer(selectionFallbackContext, serverId);
@@ -1833,7 +1855,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public void ensureNode(TargetRef ref) {
     targetLifecycleCoordinator.ensureNode(ref);
-    startupSelectionRestorer.tryRestoreAfterEnsure(ref);
+    startupSelectionRestorer.tryRestoreAfterEnsure(startupSelectionRestorerContext, ref);
   }
 
   public boolean hasTarget(TargetRef ref) {
@@ -2070,7 +2092,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void refreshTreeLayoutAfterUiChange() {
-    uiRefreshCoordinator.refreshTreeLayoutAfterUiChange();
+    uiRefreshCoordinator.refreshTreeLayoutAfterUiChange(uiRefreshCoordinatorContext);
   }
 
   private boolean isQuasselServer(String serverId) {

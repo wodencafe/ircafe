@@ -12,38 +12,82 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Refreshes tree renderer/layout state after UI defaults or look-and-feel changes. */
+@Component
 public final class ServerTreeUiRefreshCoordinator {
 
-  private final JTree tree;
-  private final DefaultTreeModel model;
-  private final DefaultMutableTreeNode root;
-  private final DefaultTreeCellRenderer treeCellRenderer;
-  private final Supplier<Set<TreePath>> snapshotExpandedTreePaths;
-  private final Consumer<Set<TreePath>> restoreExpandedTreePaths;
+  public interface Context {
+    JTree tree();
 
-  public ServerTreeUiRefreshCoordinator(
+    DefaultTreeModel model();
+
+    DefaultMutableTreeNode root();
+
+    DefaultTreeCellRenderer treeCellRenderer();
+
+    Set<TreePath> snapshotExpandedTreePaths();
+
+    void restoreExpandedTreePaths(Set<TreePath> expanded);
+  }
+
+  public static Context context(
       JTree tree,
       DefaultTreeModel model,
       DefaultMutableTreeNode root,
       DefaultTreeCellRenderer treeCellRenderer,
       Supplier<Set<TreePath>> snapshotExpandedTreePaths,
       Consumer<Set<TreePath>> restoreExpandedTreePaths) {
-    this.tree = Objects.requireNonNull(tree, "tree");
-    this.model = Objects.requireNonNull(model, "model");
-    this.root = Objects.requireNonNull(root, "root");
-    this.treeCellRenderer = Objects.requireNonNull(treeCellRenderer, "treeCellRenderer");
-    this.snapshotExpandedTreePaths =
-        Objects.requireNonNull(snapshotExpandedTreePaths, "snapshotExpandedTreePaths");
-    this.restoreExpandedTreePaths =
-        Objects.requireNonNull(restoreExpandedTreePaths, "restoreExpandedTreePaths");
+    Objects.requireNonNull(tree, "tree");
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(root, "root");
+    Objects.requireNonNull(treeCellRenderer, "treeCellRenderer");
+    Objects.requireNonNull(snapshotExpandedTreePaths, "snapshotExpandedTreePaths");
+    Objects.requireNonNull(restoreExpandedTreePaths, "restoreExpandedTreePaths");
+    return new Context() {
+      @Override
+      public JTree tree() {
+        return tree;
+      }
+
+      @Override
+      public DefaultTreeModel model() {
+        return model;
+      }
+
+      @Override
+      public DefaultMutableTreeNode root() {
+        return root;
+      }
+
+      @Override
+      public DefaultTreeCellRenderer treeCellRenderer() {
+        return treeCellRenderer;
+      }
+
+      @Override
+      public Set<TreePath> snapshotExpandedTreePaths() {
+        return snapshotExpandedTreePaths.get();
+      }
+
+      @Override
+      public void restoreExpandedTreePaths(Set<TreePath> expanded) {
+        restoreExpandedTreePaths.accept(expanded);
+      }
+    };
   }
 
-  public void refreshTreeLayoutAfterUiChange() {
+  public void refreshTreeLayoutAfterUiChange(Context context) {
+    Context in = Objects.requireNonNull(context, "context");
+    JTree tree = in.tree();
+    DefaultTreeModel model = in.model();
+    DefaultMutableTreeNode root = in.root();
+    DefaultTreeCellRenderer treeCellRenderer = in.treeCellRenderer();
+    Set<TreePath> expanded = in.snapshotExpandedTreePaths();
+
     try {
       applyTreeFontFromUiDefaults(tree);
-      Set<TreePath> expanded = snapshotExpandedTreePaths.get();
       tree.setRowHeight(0);
       try {
         treeCellRenderer.updateUI();
@@ -55,13 +99,15 @@ public final class ServerTreeUiRefreshCoordinator {
       tree.setCellRenderer(treeCellRenderer);
       ToolTipManager.sharedInstance().registerComponent(tree);
       model.reload(root);
-      restoreExpandedTreePaths.accept(expanded);
+      in.restoreExpandedTreePaths(expanded);
 
       tree.revalidate();
       tree.repaint();
     } catch (Exception ignored) {
     }
   }
+
+  public ServerTreeUiRefreshCoordinator() {}
 
   public static void applyTreeFontFromUiDefaults(JTree tree) {
     if (tree == null) return;

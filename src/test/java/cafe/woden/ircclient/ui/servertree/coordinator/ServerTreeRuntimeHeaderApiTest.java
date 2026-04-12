@@ -18,20 +18,24 @@ class ServerTreeRuntimeHeaderApiTest {
     ServerTreeServerRuntimeUiUpdater.Context runtimeUiUpdaterContext =
         mock(ServerTreeServerRuntimeUiUpdater.Context.class);
     ServerTreeHeaderControls headerControls = mock(ServerTreeHeaderControls.class);
-    ServerTreeRuntimeHeaderApi api =
-        new ServerTreeRuntimeHeaderApi(runtimeUiUpdater, runtimeUiUpdaterContext, headerControls);
+    ServerTreeRuntimeHeaderApi api = new ServerTreeRuntimeHeaderApi(runtimeUiUpdater);
+    ServerTreeRuntimeHeaderApi.Context context =
+        ServerTreeRuntimeHeaderApi.context(
+            runtimeUiUpdaterContext,
+            headerControls::setStatusText,
+            headerControls::setConnectionControlsEnabled);
 
     Instant at = Instant.now();
-    api.setServerConnectionState("libera", ConnectionState.CONNECTED);
-    api.setServerDesiredOnline("libera", true);
-    api.setServerConnectionDiagnostics("libera", "error", 123L);
-    api.setServerConnectedIdentity("libera", "irc.libera.chat", 6697, "nick", at);
-    api.setServerIrcv3Capability("libera", "draft/example", "LS", true);
-    api.setServerIsupportToken("libera", "NICKLEN", "32");
-    api.setServerVersionDetails("libera", "server", "v1", "i", "k");
-    api.setStatusText("Connected");
-    api.setConnectionControlsEnabled(true, false);
-    api.setConnectedUi(true);
+    api.setServerConnectionState(context, "libera", ConnectionState.CONNECTED);
+    api.setServerDesiredOnline(context, "libera", true);
+    api.setServerConnectionDiagnostics(context, "libera", "error", 123L);
+    api.setServerConnectedIdentity(context, "libera", "irc.libera.chat", 6697, "nick", at);
+    api.setServerIrcv3Capability(context, "libera", "draft/example", "LS", true);
+    api.setServerIsupportToken(context, "libera", "NICKLEN", "32");
+    api.setServerVersionDetails(context, "libera", "server", "v1", "i", "k");
+    api.setStatusText(context, "Connected");
+    api.setConnectionControlsEnabled(context, true, false);
+    api.setConnectedUi(context, true);
 
     verify(runtimeUiUpdater)
         .setServerConnectionState(runtimeUiUpdaterContext, "libera", ConnectionState.CONNECTED);

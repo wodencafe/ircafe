@@ -79,9 +79,11 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOpe
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
@@ -92,6 +94,7 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
@@ -197,6 +200,7 @@ public final class FunctionalTestWiringSupport {
         new ServerTreeBouncerDetachPolicy(),
         new ServerTreeSelectionFallbackPolicy(),
         new ServerTreeSelectionPersistencePolicy(),
+        new ServerTreeStartupSelectionRestorer(),
         new ServerTreeTargetNodePolicy(interceptorStore),
         new cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver(),
         new cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier(),
@@ -214,6 +218,8 @@ public final class FunctionalTestWiringSupport {
         new ServerTreeChannelQueryService(edtExecutor),
         new ServerTreeChannelTargetOperations(edtExecutor),
         new ServerTreeRequestApi(),
+        new ServerTreeRuntimeHeaderApi(new ServerTreeServerRuntimeUiUpdater()),
+        new ServerTreeUiRefreshCoordinator(),
         edtExecutor,
         newServerTreeCompositionAssembler(runtimeConfig));
   }
