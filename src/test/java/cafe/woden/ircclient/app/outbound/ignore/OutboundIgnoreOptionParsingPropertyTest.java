@@ -9,13 +9,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
 import java.util.Random;
+import java.util.SplittableRandom;
 import org.junit.jupiter.api.Test;
 
 class OutboundIgnoreOptionParsingPropertyTest {
 
   @Test
   void parseIrssiDurationMsAcceptsRandomValidCompoundValues() {
-    Random random = new Random(20260227L);
+    SplittableRandom random = new SplittableRandom(20260227L);
     String[] units = {"ms", "s", "m", "h", "d", "w"};
     long[] factors = {1L, 1_000L, 60_000L, 3_600_000L, 86_400_000L, 604_800_000L};
 

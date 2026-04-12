@@ -45,8 +45,6 @@ class QuasselCoreDatastreamCodecTest {
 
   @Test
   void decodesSessionInitWithNetworkIdsAndBufferInfos() throws Exception {
-    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
-
     QuasselCoreDatastreamCodec.BufferInfoValue statusBuffer =
         new QuasselCoreDatastreamCodec.BufferInfoValue(1, 7, 0x01, 0, "freenode");
 
@@ -277,7 +275,6 @@ class QuasselCoreDatastreamCodecTest {
 
   @Test
   void decodesSignalProxyHeartbeatMessage() throws Exception {
-    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
     byte[] payload =
         QuasselCoreDatastreamCodec.encodeSignalProxyPayload(
             List.of(
