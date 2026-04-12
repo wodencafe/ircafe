@@ -372,7 +372,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final Function<MouseEvent, String> tooltipResolver;
   private final Function<TreePath, JPopupMenu> contextMenuBuilder;
-  private final ServerTreeExternalStreamBinder externalStreamBinder;
+
+  private final ServerTreeExternalStreamBinder.Context externalStreamBinderContext;
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
   private final ServerCatalog serverCatalog;
@@ -434,6 +435,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator,
       ServerTreeExpansionStateManager expansionStateManager,
       ServerTreeBuiltInLayoutVisibilityFacade builtInLayoutVisibilityFacade,
+      ServerTreeExternalStreamBinder externalStreamBinder,
       ServerTreeEdtExecutor edtExecutor,
       ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
@@ -728,8 +730,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             model::nodeChanged,
             serverId ->
                 serverNodeResolver.serverNodeForServer(serverNodeResolverContext, serverId));
-    this.externalStreamBinder =
-        new ServerTreeExternalStreamBinder(
+
+    this.externalStreamBinderContext =
+        ServerTreeExternalStreamBinder.context(
             disposables,
             latest ->
                 serverCatalogSynchronizer.syncServers(serverCatalogSynchronizerContext, latest),
@@ -1202,6 +1205,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, treeScroll);
     add(treeScroll, BorderLayout.CENTER);
     externalStreamBinder.bind(
+        externalStreamBinderContext,
         serverCatalog,
         notificationStore,
         interceptorStore,

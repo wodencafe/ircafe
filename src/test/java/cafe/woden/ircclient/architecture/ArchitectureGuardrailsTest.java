@@ -139,6 +139,7 @@ class ArchitectureGuardrailsTest {
           "cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder",
           "cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory",
           "cafe.woden.ircclient.ui.servertree.ServerTreeEdtExecutor",
+          "cafe.woden.ircclient.ui.servertree.ServerTreeExternalStreamBinder",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder",
           "cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder",

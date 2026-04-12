@@ -2765,7 +2765,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     pos = ensureAtLineStartForInsert(doc, pos);
 
     String msg = text == null ? "" : text;
-    String tsPrefix = (ts != null && ts.enabled() && timestampsIncludeChatMessages()) ? ts.prefixAt(tsEpochMs) : "";
+    String tsPrefix =
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages())
+            ? ts.prefixAt(tsEpochMs)
+            : "";
     final int offFinal = pos;
     final SpoilerMessageComponent comp = buildSpoilerComponent(ref, from, tsPrefix);
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
@@ -2776,8 +2779,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     try {
       doc.insertString(offFinal, " ", attrs);
       final Position spoilerPos = doc.createPosition(offFinal);
-      comp.setOnReveal(
-          () -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
+      comp.setOnReveal(() -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
       SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
       if (m != null) {
         tsAttrs = withFilterMatch(tsAttrs, m);
@@ -3754,8 +3756,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (!SwingUtilities.isEventDispatchThread()) {
       final boolean[] ok = new boolean[] {false};
       try {
-        SwingUtilities.invokeAndWait(
-            () -> ok[0] = removeInlineComponentNear(doc, expected));
+        SwingUtilities.invokeAndWait(() -> ok[0] = removeInlineComponentNear(doc, expected));
       } catch (Exception ignored) {
         return false;
       }
@@ -3993,12 +3994,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     return fromLabel;
   }
 
-  private SpoilerMessageComponent buildSpoilerComponent(TargetRef ref, String from, String tsPrefix) {
-    SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefix, buildSpoilerFromLabel(ref, from));
+  private SpoilerMessageComponent buildSpoilerComponent(
+      TargetRef ref, String from, String tsPrefix) {
+    SpoilerMessageComponent comp =
+        new SpoilerMessageComponent(tsPrefix, buildSpoilerFromLabel(ref, from));
     try {
       if (uiSettings != null && uiSettings.get() != null) {
         comp.setTranscriptFont(
-            new Font(uiSettings.get().chatFontFamily(), Font.PLAIN, uiSettings.get().chatFontSize()));
+            new Font(
+                uiSettings.get().chatFontFamily(), Font.PLAIN, uiSettings.get().chatFontSize()));
       }
     } catch (Exception ignored) {
     }
@@ -4030,7 +4034,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
-    String tsPrefix = (ts != null && ts.enabled() && timestampsIncludeChatMessages()) ? ts.prefixNow() : "";
+    String tsPrefix =
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages()) ? ts.prefixNow() : "";
     final int offFinal = doc.getLength();
     final SpoilerMessageComponent comp = buildSpoilerComponent(ref, from, tsPrefix);
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
@@ -4041,8 +4046,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     try {
       doc.insertString(offFinal, " ", attrs);
       final Position spoilerPos = doc.createPosition(offFinal);
-      comp.setOnReveal(
-          () -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
+      comp.setOnReveal(() -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
       SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
       if (m != null) {
         tsAttrs = withFilterMatch(tsAttrs, m);
@@ -4070,7 +4074,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
-    String tsPrefix = (ts != null && ts.enabled() && timestampsIncludeChatMessages()) ? ts.prefixAt(tsEpochMs) : "";
+    String tsPrefix =
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages())
+            ? ts.prefixAt(tsEpochMs)
+            : "";
     final int offFinal = doc.getLength();
     final SpoilerMessageComponent comp = buildSpoilerComponent(ref, from, tsPrefix);
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
@@ -4081,8 +4088,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     try {
       doc.insertString(offFinal, " ", attrs);
       final Position spoilerPos = doc.createPosition(offFinal);
-      comp.setOnReveal(
-          () -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
+      comp.setOnReveal(() -> revealSpoilerInPlace(ref, doc, spoilerPos, comp, tsPrefix, from, msg));
       SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
       if (m != null) {
         tsAttrs = withFilterMatch(tsAttrs, m);

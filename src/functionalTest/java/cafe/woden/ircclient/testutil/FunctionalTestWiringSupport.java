@@ -65,6 +65,7 @@ import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.ServerTreeEdtExecutor;
+import cafe.woden.ircclient.ui.servertree.ServerTreeExternalStreamBinder;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeCompositionAssembler;
@@ -226,6 +227,7 @@ public final class FunctionalTestWiringSupport {
         new ServerTreeServerLeafVisibilityCoordinator(),
         new ServerTreeExpansionStateManager(),
         new ServerTreeBuiltInLayoutVisibilityFacade(),
+        new ServerTreeExternalStreamBinder(),
         edtExecutor,
         newServerTreeCompositionAssembler(runtimeConfig));
   }

@@ -153,6 +153,7 @@ final class ServerTreeDockableTestSupport {
         new ServerTreeServerLeafVisibilityCoordinator(),
         new ServerTreeExpansionStateManager(),
         new ServerTreeBuiltInLayoutVisibilityFacade(),
+        new ServerTreeExternalStreamBinder(),
         edtExecutor,
         newCompositionAssembler(runtimeConfig));
   }
