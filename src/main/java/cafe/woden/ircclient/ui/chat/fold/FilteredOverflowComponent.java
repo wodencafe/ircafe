@@ -13,7 +13,7 @@ import javax.swing.border.EmptyBorder;
  *
  * <p>It aggregates the remainder of hidden lines for the current load into a single counter.
  */
-public class FilteredOverflowComponent extends JPanel {
+public class FilteredOverflowComponent extends JPanel implements FilteredLineComponent {
 
   private int count = 0;
 

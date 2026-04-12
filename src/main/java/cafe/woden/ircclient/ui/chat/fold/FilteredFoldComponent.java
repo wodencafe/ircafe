@@ -15,7 +15,7 @@ import javax.swing.border.EmptyBorder;
  * <p>By default it shows a single summary line (e.g. {@code "▶ Filtered (7)"}). Clicking toggles an
  * optional preview list of up to {@code maxPreviewLines} samples.
  */
-public class FilteredFoldComponent extends JPanel {
+public class FilteredFoldComponent extends JPanel implements FilteredLineComponent {
 
   private final int maxPreviewLines;
   private final List<String> previews = new ArrayList<>();

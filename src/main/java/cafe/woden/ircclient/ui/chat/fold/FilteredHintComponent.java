@@ -12,7 +12,7 @@ import javax.swing.border.EmptyBorder;
  *
  * <p>This exists to avoid the "unread but nothing visible" confusion.
  */
-public class FilteredHintComponent extends JPanel {
+public class FilteredHintComponent extends JPanel implements FilteredLineComponent {
 
   private int count = 0;
 
