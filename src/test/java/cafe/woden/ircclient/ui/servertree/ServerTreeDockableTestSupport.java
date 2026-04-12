@@ -28,11 +28,13 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOn
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeChannelListNodeEnsurer;
@@ -47,6 +49,7 @@ import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySettings;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeExpansionStateManager;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
@@ -147,6 +150,9 @@ final class ServerTreeDockableTestSupport {
         new ServerTreeRequestApi(),
         new ServerTreeRuntimeHeaderApi(new ServerTreeServerRuntimeUiUpdater()),
         new ServerTreeUiRefreshCoordinator(),
+        new ServerTreeServerLeafVisibilityCoordinator(),
+        new ServerTreeExpansionStateManager(),
+        new ServerTreeBuiltInLayoutVisibilityFacade(),
         edtExecutor,
         newCompositionAssembler(runtimeConfig));
   }

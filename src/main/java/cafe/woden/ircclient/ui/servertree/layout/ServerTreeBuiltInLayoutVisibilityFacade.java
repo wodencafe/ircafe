@@ -13,21 +13,33 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Facade for built-in node visibility, layout ordering, and associated persistence operations. */
+@Component
 public final class ServerTreeBuiltInLayoutVisibilityFacade {
 
-  private final ServerTreeBuiltInVisibilityCoordinator builtInVisibilityCoordinator;
-  private final ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator;
-  private final ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator;
-  private final ServerTreeBuiltInLayoutOrchestrator builtInLayoutOrchestrator;
-  private final Predicate<DefaultMutableTreeNode> isMonitorGroupNode;
-  private final Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode;
-  private final Predicate<DefaultMutableTreeNode> isOtherGroupNode;
-  private final Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode;
-  private final Function<DefaultMutableTreeNode, TargetRef> targetRefForNode;
+  public interface Context {
+    ServerTreeBuiltInVisibilityCoordinator builtInVisibilityCoordinator();
 
-  public ServerTreeBuiltInLayoutVisibilityFacade(
+    ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator();
+
+    ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator();
+
+    ServerTreeBuiltInLayoutOrchestrator builtInLayoutOrchestrator();
+
+    boolean isMonitorGroupNode(DefaultMutableTreeNode node);
+
+    boolean isInterceptorsGroupNode(DefaultMutableTreeNode node);
+
+    boolean isOtherGroupNode(DefaultMutableTreeNode node);
+
+    boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node);
+
+    TargetRef targetRefForNode(DefaultMutableTreeNode node);
+  }
+
+  public static Context context(
       ServerTreeBuiltInVisibilityCoordinator builtInVisibilityCoordinator,
       ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator,
       ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator,
@@ -37,99 +49,180 @@ public final class ServerTreeBuiltInLayoutVisibilityFacade {
       Predicate<DefaultMutableTreeNode> isOtherGroupNode,
       Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
       Function<DefaultMutableTreeNode, TargetRef> targetRefForNode) {
-    this.builtInVisibilityCoordinator =
-        Objects.requireNonNull(builtInVisibilityCoordinator, "builtInVisibilityCoordinator");
-    this.builtInLayoutCoordinator =
-        Objects.requireNonNull(builtInLayoutCoordinator, "builtInLayoutCoordinator");
-    this.rootSiblingOrderCoordinator =
-        Objects.requireNonNull(rootSiblingOrderCoordinator, "rootSiblingOrderCoordinator");
-    this.builtInLayoutOrchestrator =
-        Objects.requireNonNull(builtInLayoutOrchestrator, "builtInLayoutOrchestrator");
-    this.isMonitorGroupNode = Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
-    this.isInterceptorsGroupNode =
-        Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
-    this.isOtherGroupNode = Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
-    this.isPrivateMessagesGroupNode =
-        Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
-    this.targetRefForNode = Objects.requireNonNull(targetRefForNode, "targetRefForNode");
+    Objects.requireNonNull(builtInVisibilityCoordinator, "builtInVisibilityCoordinator");
+    Objects.requireNonNull(builtInLayoutCoordinator, "builtInLayoutCoordinator");
+    Objects.requireNonNull(rootSiblingOrderCoordinator, "rootSiblingOrderCoordinator");
+    Objects.requireNonNull(builtInLayoutOrchestrator, "builtInLayoutOrchestrator");
+    Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
+    Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
+    Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
+    Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
+    Objects.requireNonNull(targetRefForNode, "targetRefForNode");
+    return new Context() {
+      @Override
+      public ServerTreeBuiltInVisibilityCoordinator builtInVisibilityCoordinator() {
+        return builtInVisibilityCoordinator;
+      }
+
+      @Override
+      public ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator() {
+        return builtInLayoutCoordinator;
+      }
+
+      @Override
+      public ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator() {
+        return rootSiblingOrderCoordinator;
+      }
+
+      @Override
+      public ServerTreeBuiltInLayoutOrchestrator builtInLayoutOrchestrator() {
+        return builtInLayoutOrchestrator;
+      }
+
+      @Override
+      public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
+        return isMonitorGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+        return isInterceptorsGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isOtherGroupNode(DefaultMutableTreeNode node) {
+        return isOtherGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+        return isPrivateMessagesGroupNode.test(node);
+      }
+
+      @Override
+      public TargetRef targetRefForNode(DefaultMutableTreeNode node) {
+        return targetRefForNode.apply(node);
+      }
+    };
   }
 
-  public void loadPersistedBuiltInNodesVisibility() {
-    builtInVisibilityCoordinator.loadPersistedBuiltInNodesVisibility();
+  public void loadPersistedBuiltInNodesVisibility(Context context) {
+    Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .loadPersistedBuiltInNodesVisibility();
   }
 
-  public ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
-    return builtInVisibilityCoordinator.builtInNodesVisibility(serverId);
+  public ServerBuiltInNodesVisibility builtInNodesVisibility(Context context, String serverId) {
+    return Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .builtInNodesVisibility(serverId);
   }
 
-  public ServerTreeBuiltInLayout builtInLayout(String serverId) {
-    return builtInLayoutCoordinator.layoutForServer(serverId);
+  public ServerTreeBuiltInLayout builtInLayout(Context context, String serverId) {
+    return Objects.requireNonNull(context, "context")
+        .builtInLayoutCoordinator()
+        .layoutForServer(serverId);
   }
 
-  public void rememberBuiltInLayout(String serverId, ServerTreeBuiltInLayout layout) {
-    builtInLayoutCoordinator.rememberLayout(serverId, layout);
+  public void rememberBuiltInLayout(
+      Context context, String serverId, ServerTreeBuiltInLayout layout) {
+    Objects.requireNonNull(context, "context")
+        .builtInLayoutCoordinator()
+        .rememberLayout(serverId, layout);
   }
 
-  public ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
-    return rootSiblingOrderCoordinator.orderForServer(serverId);
+  public ServerTreeRootSiblingOrder rootSiblingOrder(Context context, String serverId) {
+    return Objects.requireNonNull(context, "context")
+        .rootSiblingOrderCoordinator()
+        .orderForServer(serverId);
   }
 
-  public void rememberRootSiblingOrder(String serverId, ServerTreeRootSiblingOrder order) {
-    rootSiblingOrderCoordinator.rememberOrder(serverId, order);
+  public void rememberRootSiblingOrder(
+      Context context, String serverId, ServerTreeRootSiblingOrder order) {
+    Objects.requireNonNull(context, "context")
+        .rootSiblingOrderCoordinator()
+        .rememberOrder(serverId, order);
   }
 
   public void applyBuiltInNodesVisibilityGlobally(
-      UnaryOperator<ServerBuiltInNodesVisibility> mutator) {
-    builtInVisibilityCoordinator.applyBuiltInNodesVisibilityGlobally(mutator);
+      Context context, UnaryOperator<ServerBuiltInNodesVisibility> mutator) {
+    Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .applyBuiltInNodesVisibilityGlobally(mutator);
   }
 
   public void applyBuiltInNodesVisibilityForServer(
-      String serverId, ServerBuiltInNodesVisibility next, boolean persist, boolean syncUi) {
-    builtInVisibilityCoordinator.applyBuiltInNodesVisibilityForServer(
-        serverId, next, persist, syncUi);
+      Context context,
+      String serverId,
+      ServerBuiltInNodesVisibility next,
+      boolean persist,
+      boolean syncUi) {
+    Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .applyBuiltInNodesVisibilityForServer(serverId, next, persist, syncUi);
   }
 
-  public ServerBuiltInNodesVisibility defaultVisibility() {
-    return builtInVisibilityCoordinator.defaultVisibility();
+  public ServerBuiltInNodesVisibility defaultVisibility(Context context) {
+    return Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .defaultVisibility();
   }
 
-  public void setDefaultVisibility(ServerBuiltInNodesVisibility next) {
-    builtInVisibilityCoordinator.setDefaultVisibility(next);
+  public void setDefaultVisibility(Context context, ServerBuiltInNodesVisibility next) {
+    Objects.requireNonNull(context, "context")
+        .builtInVisibilityCoordinator()
+        .setDefaultVisibility(next);
   }
 
   public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
     return ServerTreeBuiltInLayoutCoordinator.nodeKindForRef(ref);
   }
 
-  public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
-    return builtInLayoutCoordinator.nodeKindForNode(
-        node, isMonitorGroupNode, isInterceptorsGroupNode, targetRefForNode);
+  public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
+      Context context, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
+    return in.builtInLayoutCoordinator()
+        .nodeKindForNode(
+            node, in::isMonitorGroupNode, in::isInterceptorsGroupNode, in::targetRefForNode);
   }
 
-  public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
-    return rootSiblingOrderCoordinator.nodeKindForNode(
-        node, isOtherGroupNode, isPrivateMessagesGroupNode, targetRefForNode);
+  public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+      Context context, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
+    return in.rootSiblingOrderCoordinator()
+        .nodeKindForNode(
+            node, in::isOtherGroupNode, in::isPrivateMessagesGroupNode, in::targetRefForNode);
   }
 
-  public int rootBuiltInInsertIndex(ServerNodes serverNodes, int desiredIndex) {
-    return builtInLayoutOrchestrator.rootBuiltInInsertIndex(serverNodes, desiredIndex);
+  public int rootBuiltInInsertIndex(Context context, ServerNodes serverNodes, int desiredIndex) {
+    return Objects.requireNonNull(context, "context")
+        .builtInLayoutOrchestrator()
+        .rootBuiltInInsertIndex(serverNodes, desiredIndex);
   }
 
   public void applyBuiltInLayoutToTree(
-      ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout) {
-    builtInLayoutOrchestrator.applyBuiltInLayoutToTree(serverNodes, requestedLayout);
+      Context context, ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout) {
+    Objects.requireNonNull(context, "context")
+        .builtInLayoutOrchestrator()
+        .applyBuiltInLayoutToTree(serverNodes, requestedLayout);
   }
 
   public void applyRootSiblingOrderToTree(
-      ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder) {
-    builtInLayoutOrchestrator.applyRootSiblingOrderToTree(serverNodes, requestedOrder);
+      Context context, ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder) {
+    Objects.requireNonNull(context, "context")
+        .builtInLayoutOrchestrator()
+        .applyRootSiblingOrderToTree(serverNodes, requestedOrder);
   }
 
-  public void persistRootSiblingOrderFromTree(String serverId) {
-    builtInLayoutOrchestrator.persistRootSiblingOrderFromTree(serverId);
+  public void persistRootSiblingOrderFromTree(Context context, String serverId) {
+    Objects.requireNonNull(context, "context")
+        .builtInLayoutOrchestrator()
+        .persistRootSiblingOrderFromTree(serverId);
   }
 
-  public void persistBuiltInLayoutFromTree(String serverId) {
-    builtInLayoutOrchestrator.persistBuiltInLayoutFromTree(serverId);
+  public void persistBuiltInLayoutFromTree(Context context, String serverId) {
+    Objects.requireNonNull(context, "context")
+        .builtInLayoutOrchestrator()
+        .persistBuiltInLayoutFromTree(serverId);
   }
 }

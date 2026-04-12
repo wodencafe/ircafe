@@ -28,11 +28,12 @@ class ServerTreeExpansionStateManagerTest {
     oldServerNode.add(oldNetworkNode);
     ircRoot.add(oldServerNode);
     JTree tree = new JTree(new DefaultTreeModel(root));
-    ServerTreeExpansionStateManager manager =
-        new ServerTreeExpansionStateManager(tree, root, ircRoot, appRoot);
+    ServerTreeExpansionStateManager manager = new ServerTreeExpansionStateManager();
+    ServerTreeExpansionStateManager.Context context =
+        ServerTreeExpansionStateManager.context(tree, root, ircRoot, appRoot);
 
     TreePath stalePath = new TreePath(new Object[] {root, ircRoot, oldServerNode, oldNetworkNode});
-    assertTrue(manager.isPathInCurrentTreeModel(stalePath));
+    assertTrue(manager.isPathInCurrentTreeModel(context, stalePath));
 
     ircRoot.remove(oldServerNode);
     DefaultMutableTreeNode newServerNode = new DefaultMutableTreeNode("quassel");
@@ -44,8 +45,8 @@ class ServerTreeExpansionStateManagerTest {
     ircRoot.add(newServerNode);
     ((DefaultTreeModel) tree.getModel()).reload(ircRoot);
 
-    assertTrue(manager.isPathInCurrentTreeModel(stalePath));
-    manager.restoreExpandedTreePaths(Set.of(stalePath));
+    assertTrue(manager.isPathInCurrentTreeModel(context, stalePath));
+    manager.restoreExpandedTreePaths(context, Set.of(stalePath));
 
     TreePath resolved = new TreePath(new Object[] {root, ircRoot, newServerNode, newNetworkNode});
     assertTrue(tree.isExpanded(resolved));
@@ -61,8 +62,9 @@ class ServerTreeExpansionStateManagerTest {
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode("quassel");
     ircRoot.add(serverNode);
     JTree tree = new JTree(new DefaultTreeModel(root));
-    ServerTreeExpansionStateManager manager =
-        new ServerTreeExpansionStateManager(tree, root, ircRoot, appRoot);
+    ServerTreeExpansionStateManager manager = new ServerTreeExpansionStateManager();
+    ServerTreeExpansionStateManager.Context context =
+        ServerTreeExpansionStateManager.context(tree, root, ircRoot, appRoot);
 
     TreePath missingPath =
         new TreePath(
@@ -73,6 +75,6 @@ class ServerTreeExpansionStateManagerTest {
               new DefaultMutableTreeNode(
                   ServerTreeQuasselNetworkNodeData.network("quassel", "oftc", "Oftc"))
             });
-    assertFalse(manager.isPathInCurrentTreeModel(missingPath));
+    assertFalse(manager.isPathInCurrentTreeModel(context, missingPath));
   }
 }

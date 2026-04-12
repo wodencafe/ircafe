@@ -322,14 +322,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
   private final ServerTreeStartupSelectionRestorer.Context startupSelectionRestorerContext;
   private final ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator;
+  private final ServerTreeServerLeafVisibilityCoordinator.Context
+      serverLeafVisibilityCoordinatorContext;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
   private final ServerTreeUiLeafVisibilitySynchronizer.Context uiLeafVisibilitySynchronizerContext;
   private final ServerTreeExpansionStateManager expansionStateManager;
+  private final ServerTreeExpansionStateManager.Context expansionStateManagerContext;
   private final ServerTreeApplicationRootVisibilityCoordinator applicationRootVisibilityCoordinator;
   private final ServerTreeApplicationRootVisibilityCoordinator.Context
       applicationRootVisibilityCoordinatorContext;
 
   private final ServerTreeBuiltInLayoutVisibilityFacade builtInLayoutVisibilityFacade;
+  private final ServerTreeBuiltInLayoutVisibilityFacade.Context
+      builtInLayoutVisibilityFacadeContext;
 
   private final ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext;
   private final ServerTreeNodeVisibilityApi nodeVisibilityApi;
@@ -426,6 +431,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerTreeRequestApi requestApi,
       ServerTreeRuntimeHeaderApi runtimeHeaderApi,
       ServerTreeUiRefreshCoordinator uiRefreshCoordinator,
+      ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator,
+      ServerTreeExpansionStateManager expansionStateManager,
+      ServerTreeBuiltInLayoutVisibilityFacade builtInLayoutVisibilityFacade,
       ServerTreeEdtExecutor edtExecutor,
       ServerTreeCompositionAssembler compositionAssembler) {
     super(new BorderLayout());
@@ -487,7 +495,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::rootSiblingNodeKindForNode,
                 model::nodeStructureChanged));
     this.builtInLayoutVisibilityFacade =
-        new ServerTreeBuiltInLayoutVisibilityFacade(
+        Objects.requireNonNull(builtInLayoutVisibilityFacade, "builtInLayoutVisibilityFacade");
+    this.builtInLayoutVisibilityFacadeContext =
+        ServerTreeBuiltInLayoutVisibilityFacade.context(
             layoutCollaborators.builtInVisibilityCoordinator(),
             layoutCollaborators.builtInLayoutCoordinator(),
             layoutCollaborators.rootSiblingOrderCoordinator(),
@@ -507,12 +517,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
           @Override
           public ServerBuiltInNodesVisibility defaultVisibility() {
-            return builtInLayoutVisibilityFacade.defaultVisibility();
+            return builtInLayoutVisibilityFacade.defaultVisibility(
+                builtInLayoutVisibilityFacadeContext);
           }
 
           @Override
           public void setDefaultVisibility(ServerBuiltInNodesVisibility next) {
-            builtInLayoutVisibilityFacade.setDefaultVisibility(next);
+            builtInLayoutVisibilityFacade.setDefaultVisibility(
+                builtInLayoutVisibilityFacadeContext, next);
           }
 
           @Override
@@ -524,13 +536,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           public void applyVisibilityForServer(
               String serverId, ServerBuiltInNodesVisibility next, boolean persist, boolean syncUi) {
             builtInLayoutVisibilityFacade.applyBuiltInNodesVisibilityForServer(
-                serverId, next, persist, syncUi);
+                builtInLayoutVisibilityFacadeContext, serverId, next, persist, syncUi);
           }
 
           @Override
           public void applyVisibilityGlobally(
               java.util.function.UnaryOperator<ServerBuiltInNodesVisibility> mutator) {
-            builtInLayoutVisibilityFacade.applyBuiltInNodesVisibilityGlobally(mutator);
+            builtInLayoutVisibilityFacade.applyBuiltInNodesVisibilityGlobally(
+                builtInLayoutVisibilityFacadeContext, mutator);
           }
 
           @Override
@@ -783,7 +796,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ServerTreeNodeVisibilityMutator nodeVisibilityMutator =
         new ServerTreeNodeVisibilityMutator(model, leaves, typingActivityNodes);
     this.serverLeafVisibilityCoordinator =
-        new ServerTreeServerLeafVisibilityCoordinator(
+        Objects.requireNonNull(serverLeafVisibilityCoordinator, "serverLeafVisibilityCoordinator");
+    this.serverLeafVisibilityCoordinatorContext =
+        ServerTreeServerLeafVisibilityCoordinator.context(
             CHANNEL_LIST_LABEL,
             WEECHAT_FILTERS_LABEL,
             IGNORES_LABEL,
@@ -814,7 +829,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             node -> nodeClassifier.isInterceptorsGroupNode(nodeClassifierContext, node),
             node -> nodeClassifier.owningServerIdForNode(nodeClassifierContext, node),
             () -> List.copyOf(servers.keySet()),
-            serverLeafVisibilityCoordinator::syncUiLeafVisibilityForServer,
+            serverId ->
+                serverLeafVisibilityCoordinator.syncUiLeafVisibilityForServer(
+                    serverLeafVisibilityCoordinatorContext, serverId),
             serverId -> builtInNodesVisibility(serverId).server(),
             serverId -> builtInNodesVisibility(serverId).notifications(),
             serverId -> builtInNodesVisibility(serverId).logViewer(),
@@ -823,7 +840,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             nodeVisibilityApi::isDccTransfersNodesVisible,
             this::selectBestFallbackForServer);
     this.expansionStateManager =
-        new ServerTreeExpansionStateManager(tree, root, ircRoot, applicationRoot);
+        Objects.requireNonNull(expansionStateManager, "expansionStateManager");
+    this.expansionStateManagerContext =
+        ServerTreeExpansionStateManager.context(tree, root, ircRoot, applicationRoot);
     this.applicationRootVisibilityCoordinator =
         Objects.requireNonNull(
             applicationRootVisibilityCoordinator, "applicationRootVisibilityCoordinator");
@@ -1044,7 +1063,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 ServerTreeDockable::normalizeServerId,
                 parentNode -> tree.expandPath(new TreePath(parentNode.getPath())),
                 () -> model.reload(root)));
-    builtInLayoutVisibilityFacade.loadPersistedBuiltInNodesVisibility();
+    builtInLayoutVisibilityFacade.loadPersistedBuiltInNodesVisibility(
+        builtInLayoutVisibilityFacadeContext);
     settingsSynchronizer.applyInitialSettings();
     this.treeCellRenderer =
         new ServerTreeCellRenderer(
@@ -1201,7 +1221,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 serverId -> servers.get(ServerTreeDockable.normalizeServerId(serverId)),
                 this::rootSiblingNodeKindForNode,
                 this::builtInLayoutNodeKindForNode,
-                builtInLayoutVisibilityFacade::rootBuiltInInsertIndex,
+                (serverNodes, desiredIndex) ->
+                    builtInLayoutVisibilityFacade.rootBuiltInInsertIndex(
+                        builtInLayoutVisibilityFacadeContext, serverNodes, desiredIndex),
                 channelStateCoordinator::persistOrderAndResortAfterManualMove,
                 this::persistBuiltInLayoutFromTree,
                 this::persistRootSiblingOrderFromTree,
@@ -1274,23 +1296,28 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
-    return builtInLayoutVisibilityFacade.builtInNodesVisibility(serverId);
+    return builtInLayoutVisibilityFacade.builtInNodesVisibility(
+        builtInLayoutVisibilityFacadeContext, serverId);
   }
 
   private ServerTreeBuiltInLayout builtInLayout(String serverId) {
-    return builtInLayoutVisibilityFacade.builtInLayout(serverId);
+    return builtInLayoutVisibilityFacade.builtInLayout(
+        builtInLayoutVisibilityFacadeContext, serverId);
   }
 
   private void persistBuiltInLayoutForServer(String serverId, ServerTreeBuiltInLayout layout) {
-    builtInLayoutVisibilityFacade.rememberBuiltInLayout(serverId, layout);
+    builtInLayoutVisibilityFacade.rememberBuiltInLayout(
+        builtInLayoutVisibilityFacadeContext, serverId, layout);
   }
 
   private ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
-    return builtInLayoutVisibilityFacade.rootSiblingOrder(serverId);
+    return builtInLayoutVisibilityFacade.rootSiblingOrder(
+        builtInLayoutVisibilityFacadeContext, serverId);
   }
 
   private void persistRootSiblingOrderForServer(String serverId, ServerTreeRootSiblingOrder order) {
-    builtInLayoutVisibilityFacade.rememberRootSiblingOrder(serverId, order);
+    builtInLayoutVisibilityFacade.rememberRootSiblingOrder(
+        builtInLayoutVisibilityFacadeContext, serverId, order);
   }
 
   private TargetRef channelTargetForTreePath(TreePath path) {
@@ -1323,11 +1350,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
-    return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForNode(node);
+    return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForNode(
+        builtInLayoutVisibilityFacadeContext, node);
   }
 
   private ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
-    return builtInLayoutVisibilityFacade.rootSiblingNodeKindForNode(node);
+    return builtInLayoutVisibilityFacade.rootSiblingNodeKindForNode(
+        builtInLayoutVisibilityFacadeContext, node);
   }
 
   @Override
@@ -1778,19 +1807,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private Set<TreePath> snapshotExpandedTreePaths() {
-    return expansionStateManager.snapshotExpandedTreePaths();
+    return expansionStateManager.snapshotExpandedTreePaths(expansionStateManagerContext);
   }
 
   private void restoreExpandedTreePaths(Set<TreePath> expanded) {
-    expansionStateManager.restoreExpandedTreePaths(expanded);
+    expansionStateManager.restoreExpandedTreePaths(expansionStateManagerContext, expanded);
   }
 
   private boolean isPathInCurrentTreeModel(TreePath path) {
-    return expansionStateManager.isPathInCurrentTreeModel(path);
+    return expansionStateManager.isPathInCurrentTreeModel(expansionStateManagerContext, path);
   }
 
   private TreePath defaultSelectionPath() {
-    return expansionStateManager.defaultSelectionPath();
+    return expansionStateManager.defaultSelectionPath(expansionStateManagerContext);
   }
 
   private String quasselNetworkTooltip(String serverId, String networkToken) {
@@ -1833,20 +1862,24 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void applyBuiltInLayoutToTree(ServerNodes sn, ServerTreeBuiltInLayout requestedLayout) {
-    builtInLayoutVisibilityFacade.applyBuiltInLayoutToTree(sn, requestedLayout);
+    builtInLayoutVisibilityFacade.applyBuiltInLayoutToTree(
+        builtInLayoutVisibilityFacadeContext, sn, requestedLayout);
   }
 
   private void applyRootSiblingOrderToTree(
       ServerNodes sn, ServerTreeRootSiblingOrder requestedOrder) {
-    builtInLayoutVisibilityFacade.applyRootSiblingOrderToTree(sn, requestedOrder);
+    builtInLayoutVisibilityFacade.applyRootSiblingOrderToTree(
+        builtInLayoutVisibilityFacadeContext, sn, requestedOrder);
   }
 
   private void persistRootSiblingOrderFromTree(String serverId) {
-    builtInLayoutVisibilityFacade.persistRootSiblingOrderFromTree(serverId);
+    builtInLayoutVisibilityFacade.persistRootSiblingOrderFromTree(
+        builtInLayoutVisibilityFacadeContext, serverId);
   }
 
   private void persistBuiltInLayoutFromTree(String serverId) {
-    builtInLayoutVisibilityFacade.persistBuiltInLayoutFromTree(serverId);
+    builtInLayoutVisibilityFacade.persistBuiltInLayoutFromTree(
+        builtInLayoutVisibilityFacadeContext, serverId);
   }
 
   private TargetRef selectedTargetRef() {
@@ -2052,7 +2085,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     String sid = normalizeServerId(serverId);
     boolean connected = runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
     quasselNetworkParentResolver.initializeServer(serverId, serverNodes, connected);
-    serverLeafVisibilityCoordinator.syncUiLeafVisibilityForServer(sid);
+    serverLeafVisibilityCoordinator.syncUiLeafVisibilityForServer(
+        serverLeafVisibilityCoordinatorContext, sid);
     ensureInterceptorNodesForServer(serverId);
     return serverNodes;
   }
