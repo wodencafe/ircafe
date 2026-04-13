@@ -9,29 +9,52 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Maintains status-node labels for regular server and bouncer-control states. */
+@Component
 public final class ServerTreeStatusLabelManager {
 
   public interface Context {
+    String statusLabel();
+
+    String bouncerControlLabel();
+
+    Map<String, Set<String>> bouncerControlServerIdsByBackendId();
+
+    Map<TargetRef, DefaultMutableTreeNode> leaves();
+
     void nodeChanged(DefaultMutableTreeNode node);
   }
 
-  private final String statusLabel;
-  private final String bouncerControlLabel;
-  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId;
-  private final Map<TargetRef, DefaultMutableTreeNode> leaves;
-  private final Context context;
+  private record DefaultContext(
+      String statusLabel,
+      String bouncerControlLabel,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<TargetRef, DefaultMutableTreeNode> leaves,
+      NodeChanged nodeChanged)
+      implements Context {
 
-  public ServerTreeStatusLabelManager(
+    @Override
+    public void nodeChanged(DefaultMutableTreeNode node) {
+      nodeChanged.nodeChanged(node);
+    }
+  }
+
+  @FunctionalInterface
+  public interface NodeChanged {
+    void nodeChanged(DefaultMutableTreeNode node);
+  }
+
+  public static Context context(
       String statusLabel,
       String bouncerControlLabel,
       Set<String> sojuBouncerControlServerIds,
       Set<String> zncBouncerControlServerIds,
       Set<String> genericBouncerControlServerIds,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
-      Context context) {
-    this(
+      NodeChanged nodeChanged) {
+    return context(
         statusLabel,
         bouncerControlLabel,
         bouncerControlStateByBackend(
@@ -39,34 +62,35 @@ public final class ServerTreeStatusLabelManager {
             zncBouncerControlServerIds,
             genericBouncerControlServerIds),
         leaves,
-        context);
+        nodeChanged);
   }
 
-  public ServerTreeStatusLabelManager(
+  public static Context context(
       String statusLabel,
       String bouncerControlLabel,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
-      Context context) {
-    this.statusLabel = Objects.toString(statusLabel, "Server");
-    this.bouncerControlLabel = Objects.toString(bouncerControlLabel, "Bouncer Control");
-    this.bouncerControlServerIdsByBackendId =
+      NodeChanged nodeChanged) {
+    return new DefaultContext(
+        Objects.toString(statusLabel, "Server"),
+        Objects.toString(bouncerControlLabel, "Bouncer Control"),
         Objects.requireNonNull(
-            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
-    this.leaves = Objects.requireNonNull(leaves, "leaves");
-    this.context = Objects.requireNonNull(context, "context");
+            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId"),
+        Objects.requireNonNull(leaves, "leaves"),
+        Objects.requireNonNull(nodeChanged, "nodeChanged"));
   }
 
-  public String statusLeafLabelForServer(String serverId) {
+  public String statusLeafLabelForServer(Context context, String serverId) {
+    Context in = Objects.requireNonNull(context, "context");
     String id = normalize(serverId);
-    if (id.isEmpty()) return statusLabel;
-    return isBouncerControlServer(id) ? bouncerControlLabel : statusLabel;
+    if (id.isEmpty()) return in.statusLabel();
+    return isBouncerControlServer(in, id) ? in.bouncerControlLabel() : in.statusLabel();
   }
 
-  public boolean isBouncerControlServer(String serverId) {
+  public boolean isBouncerControlServer(Context context, String serverId) {
     String id = normalize(serverId);
     if (id.isEmpty()) return false;
-    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+    for (Set<String> ids : context.bouncerControlServerIdsByBackendId().values()) {
       if (ids != null && ids.contains(id)) {
         return true;
       }
@@ -75,6 +99,7 @@ public final class ServerTreeStatusLabelManager {
   }
 
   public void updateBouncerControlLabels(
+      Context context,
       Set<String> nextSojuBouncerControl,
       Set<String> nextZncBouncerControl,
       Set<String> nextGenericBouncerControl) {
@@ -82,13 +107,15 @@ public final class ServerTreeStatusLabelManager {
     nextByBackendId.put(ServerTreeBouncerBackends.SOJU, nextSojuBouncerControl);
     nextByBackendId.put(ServerTreeBouncerBackends.ZNC, nextZncBouncerControl);
     nextByBackendId.put(ServerTreeBouncerBackends.GENERIC, nextGenericBouncerControl);
-    updateBouncerControlLabels(nextByBackendId);
+    updateBouncerControlLabels(context, nextByBackendId);
   }
 
-  public void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
-    Set<String> prevUnion = unionOfControlServerIds();
+  public void updateBouncerControlLabels(
+      Context context, Map<String, Set<String>> nextBouncerControlByBackendId) {
+    Context in = Objects.requireNonNull(context, "context");
+    Set<String> prevUnion = unionOfControlServerIds(in);
 
-    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+    for (Set<String> ids : in.bouncerControlServerIdsByBackendId().values()) {
       if (ids != null) {
         ids.clear();
       }
@@ -100,8 +127,8 @@ public final class ServerTreeStatusLabelManager {
           continue;
         }
         Set<String> target =
-            bouncerControlServerIdsByBackendId.computeIfAbsent(
-                backendId, ignored -> new HashSet<>());
+            in.bouncerControlServerIdsByBackendId()
+                .computeIfAbsent(backendId, ignored -> new HashSet<>());
         Set<String> nextIds = entry.getValue();
         if (nextIds == null || nextIds.isEmpty()) {
           continue;
@@ -110,7 +137,7 @@ public final class ServerTreeStatusLabelManager {
       }
     }
 
-    Set<String> nextUnion = unionOfControlServerIds();
+    Set<String> nextUnion = unionOfControlServerIds(in);
 
     Set<String> all = new HashSet<>(prevUnion);
     all.addAll(nextUnion);
@@ -121,12 +148,12 @@ public final class ServerTreeStatusLabelManager {
       if (was == now) continue;
 
       TargetRef statusRef = new TargetRef(serverId, "status");
-      DefaultMutableTreeNode node = leaves.get(statusRef);
+      DefaultMutableTreeNode node = in.leaves().get(statusRef);
       if (node == null) continue;
       Object userObject = node.getUserObject();
       if (!(userObject instanceof ServerTreeNodeData old)) continue;
 
-      String label = now ? bouncerControlLabel : statusLabel;
+      String label = now ? in.bouncerControlLabel() : in.statusLabel();
       if (Objects.equals(old.label, label)) continue;
 
       ServerTreeNodeData next = new ServerTreeNodeData(statusRef, label);
@@ -136,13 +163,13 @@ public final class ServerTreeStatusLabelManager {
       next.detachedWarning = old.detachedWarning;
       next.copyTypingFrom(old);
       node.setUserObject(next);
-      context.nodeChanged(node);
+      in.nodeChanged(node);
     }
   }
 
-  private Set<String> unionOfControlServerIds() {
+  private Set<String> unionOfControlServerIds(Context context) {
     Set<String> union = new HashSet<>();
-    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+    for (Set<String> ids : context.bouncerControlServerIdsByBackendId().values()) {
       if (ids == null || ids.isEmpty()) {
         continue;
       }

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.logging;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
@@ -10,6 +11,7 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
 import com.zaxxer.hikari.HikariConfig;
@@ -109,6 +111,18 @@ public class ChatLogDatabaseConfig {
   }
 
   @Bean
+  public ChatRedactionAuditRepository chatRedactionAuditRepository(
+      @Qualifier("chatLogJdbcTemplate") JdbcTemplate jdbc) {
+    return new ChatRedactionAuditRepository(jdbc);
+  }
+
+  @Bean
+  public ChatRedactionAuditService chatRedactionAuditService(
+      ChatRedactionAuditRepository repo, LogProperties props) {
+    return new DbChatRedactionAuditService(repo, props);
+  }
+
+  @Bean
   public ChatLogViewerService chatLogViewerService(ChatLogRepository repo) {
     return new DbChatLogViewerService(repo);
   }
@@ -130,12 +144,14 @@ public class ChatLogDatabaseConfig {
   @Bean(destroyMethod = "close")
   public ChatLogRetentionPruner chatLogRetentionPruner(
       ChatLogRepository repo,
+      ChatRedactionAuditRepository redactionAuditRepository,
       @Qualifier("chatLogTx") TransactionTemplate tx,
       LogProperties props,
       @Qualifier("chatLogFlyway") Flyway flyway,
       @Qualifier(ExecutorConfig.CHAT_LOG_RETENTION_SCHEDULER)
           ScheduledExecutorService retentionScheduler) {
-    return new ChatLogRetentionPruner(repo, tx, props, flyway, retentionScheduler);
+    return new ChatLogRetentionPruner(
+        repo, redactionAuditRepository, tx, props, flyway, retentionScheduler);
   }
 
   @Bean(destroyMethod = "close")
@@ -250,9 +266,17 @@ public class ChatLogDatabaseConfig {
       IrcClientService irc,
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryIngestBus ingestBus,
+      Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport,
       @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR) ExecutorService chatHistoryExecutor) {
     return new DbChatHistoryService(
-        repo, props, transcripts, irc, bouncerPlayback, ingestBus, chatHistoryExecutor);
+        repo,
+        props,
+        transcripts,
+        irc,
+        bouncerPlayback,
+        ingestBus,
+        chatHistoryFeatureSupport,
+        chatHistoryExecutor);
   }
 
   @Bean

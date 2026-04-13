@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,7 +34,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -67,6 +70,7 @@ public class InterceptorStore implements InterceptorIngestPort {
   private final int maxHitsPerInterceptor;
   private final ExecutorService ingestExecutor;
   private final ExecutorService persistExecutor;
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
   private final AtomicLong persistRequestSeq = new AtomicLong(0L);
   private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
       new AtomicReference<>();
@@ -223,9 +227,9 @@ public class InterceptorStore implements InterceptorIngestPort {
               name,
               true,
               sid,
-              InterceptorRuleMode.GLOB,
+              InterceptorRuleMode.ALL,
               "",
-              InterceptorRuleMode.GLOB,
+              InterceptorRuleMode.NONE,
               "",
               false,
               false,
@@ -244,9 +248,9 @@ public class InterceptorStore implements InterceptorIngestPort {
                       "",
                       InterceptorRuleMode.LIKE,
                       "",
-                      InterceptorRuleMode.LIKE,
+                      InterceptorRuleMode.ALL,
                       "",
-                      InterceptorRuleMode.GLOB,
+                      InterceptorRuleMode.ALL,
                       "")));
       defs.put(def.id(), def);
     }
@@ -481,6 +485,19 @@ public class InterceptorStore implements InterceptorIngestPort {
     return Math.max(0, total);
   }
 
+  public int hitCount(String serverId, String interceptorId) {
+    String sid = norm(serverId);
+    String iid = norm(interceptorId);
+    if (sid.isEmpty() || iid.isEmpty()) return 0;
+    Map<String, List<InterceptorHit>> perServer = hitsByServer.get(sid);
+    if (perServer == null || perServer.isEmpty()) return 0;
+    List<InterceptorHit> list = perServer.get(iid);
+    if (list == null) return 0;
+    synchronized (list) {
+      return Math.max(0, list.size());
+    }
+  }
+
   public void clearHits(String serverId, String interceptorId) {
     String sid = norm(serverId);
     String iid = norm(interceptorId);
@@ -495,6 +512,37 @@ public class InterceptorStore implements InterceptorIngestPort {
       list.clear();
     }
     changes.onNext(new Change(sid, iid));
+  }
+
+  public int clearHits(String serverId, String interceptorId, List<InterceptorHit> selectedHits) {
+    String sid = norm(serverId);
+    String iid = norm(interceptorId);
+    if (sid.isEmpty() || iid.isEmpty() || selectedHits == null || selectedHits.isEmpty()) return 0;
+
+    Map<String, List<InterceptorHit>> perServer = hitsByServer.get(sid);
+    if (perServer == null) return 0;
+    List<InterceptorHit> list = perServer.get(iid);
+    if (list == null) return 0;
+
+    IdentityHashMap<InterceptorHit, Boolean> selectedByIdentity = new IdentityHashMap<>();
+    for (InterceptorHit hit : selectedHits) {
+      if (hit != null) {
+        selectedByIdentity.put(hit, Boolean.TRUE);
+      }
+    }
+    if (selectedByIdentity.isEmpty()) return 0;
+
+    int removed;
+    synchronized (list) {
+      if (list.isEmpty()) return 0;
+      int before = list.size();
+      list.removeIf(selectedByIdentity::containsKey);
+      removed = before - list.size();
+    }
+    if (removed > 0) {
+      changes.onNext(new Change(sid, iid));
+    }
+    return removed;
   }
 
   public void clearServer(String serverId) {
@@ -524,6 +572,18 @@ public class InterceptorStore implements InterceptorIngestPort {
       String fromHostmask,
       String text,
       InterceptorEventType eventType) {
+    ingestEvent(serverId, channel, fromNick, fromHostmask, text, eventType, "");
+  }
+
+  @Override
+  public void ingestEvent(
+      String serverId,
+      String channel,
+      String fromNick,
+      String fromHostmask,
+      String text,
+      InterceptorEventType eventType,
+      String messageId) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
 
@@ -535,6 +595,7 @@ public class InterceptorStore implements InterceptorIngestPort {
 
     String hostmask = norm(fromHostmask);
     String msg = norm(text);
+    String msgId = norm(messageId);
 
     InterceptorEventType type = eventType == null ? InterceptorEventType.MESSAGE : eventType;
 
@@ -543,8 +604,20 @@ public class InterceptorStore implements InterceptorIngestPort {
     final String fFrom = from;
     final String fHostmask = hostmask;
     final String fMsg = msg;
+    final String fMsgId = msgId;
     final InterceptorEventType fType = type;
-    ingestExecutor.execute(() -> ingestNow(fSid, fChan, fFrom, fHostmask, fMsg, fType));
+    if (shuttingDown.get() || ingestExecutor.isShutdown()) {
+      return;
+    }
+    try {
+      ingestExecutor.execute(() -> ingestNow(fSid, fChan, fFrom, fHostmask, fMsg, fType, fMsgId));
+    } catch (RejectedExecutionException ex) {
+      if (shuttingDown.get() || ingestExecutor.isShutdown()) {
+        log.debug("[ircafe] Interceptor ingest rejected during shutdown");
+        return;
+      }
+      throw ex;
+    }
   }
 
   /** Backward-compatible entrypoint used by the first interceptor implementation. */
@@ -555,6 +628,9 @@ public class InterceptorStore implements InterceptorIngestPort {
 
   @PreDestroy
   void shutdown() {
+    if (!shuttingDown.compareAndSet(false, true)) {
+      return;
+    }
     flushPersistNow();
     persistExecutor.shutdownNow();
     ingestExecutor.shutdownNow();
@@ -566,7 +642,8 @@ public class InterceptorStore implements InterceptorIngestPort {
       String fromNick,
       String fromHostmask,
       String text,
-      InterceptorEventType eventType) {
+      InterceptorEventType eventType,
+      String messageId) {
     if (defsByServer.isEmpty()) return;
     String eventScopeServerId = InterceptorScope.scopedServerIdForChannel(eventServerId, channel);
 
@@ -605,7 +682,8 @@ public class InterceptorStore implements InterceptorIngestPort {
                 fromHostmask,
                 eventType.token(),
                 reason,
-                text);
+                text,
+                messageId);
 
         appendHit(ownerServerId, def.id(), hit);
         dispatchActions(def, ownerServerId, hit);
@@ -1061,7 +1139,18 @@ public class InterceptorStore implements InterceptorIngestPort {
     Map<String, List<InterceptorDefinition>> snapshot = snapshotDefinitionsByServer();
     pendingPersistSnapshot.set(snapshot);
     long seq = persistRequestSeq.incrementAndGet();
-    persistExecutor.execute(() -> persistDefinitionsNow(seq));
+    if (shuttingDown.get() || persistExecutor.isShutdown()) {
+      return;
+    }
+    try {
+      persistExecutor.execute(() -> persistDefinitionsNow(seq));
+    } catch (RejectedExecutionException ex) {
+      if (shuttingDown.get() || persistExecutor.isShutdown()) {
+        log.debug("[ircafe] Interceptor persist rejected during shutdown");
+        return;
+      }
+      throw ex;
+    }
   }
 
   private void persistDefinitionsNow(long requestSeq) {

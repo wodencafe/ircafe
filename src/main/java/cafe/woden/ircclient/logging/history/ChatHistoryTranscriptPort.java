@@ -6,11 +6,15 @@ import java.util.Map;
 import java.util.OptionalLong;
 import java.util.function.BooleanSupplier;
 import javax.swing.text.StyledDocument;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 
 /**
  * Logging-facing transcript/settings port so history services do not depend on UI implementation
  * types.
  */
+@SecondaryPort
+@InfrastructureLayer
 public interface ChatHistoryTranscriptPort {
 
   StyledDocument document(TargetRef ref);

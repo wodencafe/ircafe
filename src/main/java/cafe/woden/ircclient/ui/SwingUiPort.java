@@ -167,8 +167,19 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet, String messageId) {
+    viewStatePort.recordHighlight(target, fromNick, snippet, messageId);
+  }
+
+  @Override
   public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
     viewStatePort.recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
+
+  @Override
+  public void recordRuleMatch(
+      TargetRef target, String fromNick, String ruleLabel, String snippet, String messageId) {
+    viewStatePort.recordRuleMatch(target, fromNick, ruleLabel, snippet, messageId);
   }
 
   @Override

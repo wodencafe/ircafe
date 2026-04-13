@@ -19,13 +19,19 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** Shared pending-invite action, resolution, and auto-join support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class PendingInviteCommandSupport {
 
-  @NonNull private final IrcMediatorInteractionPort mediatorIrc;
+  @Qualifier("ircMediatorInteractionPort")
+  @NonNull
+  private final IrcMediatorInteractionPort mediatorIrc;
+
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;

@@ -22,15 +22,15 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /**
  * Factory that assembles target lifecycle coordinator dependencies for server tree construction.
  */
+@Component
 public final class ServerTreeTargetLifecycleCoordinatorFactory {
 
-  private ServerTreeTargetLifecycleCoordinatorFactory() {}
-
-  public static ServerTreeTargetLifecycleCoordinator create(Inputs inputs) {
+  public ServerTreeTargetLifecycleCoordinator create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     return new ServerTreeTargetLifecycleCoordinator(
         Objects.requireNonNull(in.servers(), "servers"),
@@ -38,10 +38,16 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
         in.serverCatalog(),
         Objects.requireNonNull(in.ensureNodeParentResolver(), "ensureNodeParentResolver"),
         Objects.requireNonNull(in.ensureNodeLeafInserter(), "ensureNodeLeafInserter"),
+        Objects.requireNonNull(in.ensureNodeLeafInserterContext(), "ensureNodeLeafInserterContext"),
         Objects.requireNonNull(in.targetNodePolicy(), "targetNodePolicy"),
         Objects.requireNonNull(in.targetSnapshotProvider(), "targetSnapshotProvider"),
+        Objects.requireNonNull(in.targetSnapshotProviderContext(), "targetSnapshotProviderContext"),
         Objects.requireNonNull(in.targetRemovalStateCoordinator(), "targetRemovalStateCoordinator"),
+        Objects.requireNonNull(
+            in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext"),
         Objects.requireNonNull(in.targetNodeRemovalMutator(), "targetNodeRemovalMutator"),
+        Objects.requireNonNull(
+            in.targetNodeRemovalMutatorContext(), "targetNodeRemovalMutatorContext"),
         ServerTreeTargetLifecycleCoordinator.context(
             Objects.requireNonNull(in.applicationRootVisible(), "applicationRootVisible"),
             Objects.requireNonNull(in.setApplicationRootVisible(), "setApplicationRootVisible"),
@@ -83,10 +89,14 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
       ServerCatalog serverCatalog,
       ServerTreeEnsureNodeParentResolver ensureNodeParentResolver,
       ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter,
+      ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
       ServerTreeTargetNodePolicy targetNodePolicy,
       ServerTreeTargetSnapshotProvider targetSnapshotProvider,
+      ServerTreeTargetSnapshotProvider.Context targetSnapshotProviderContext,
       ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator,
+      ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,
       ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator,
+      ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext,
       Supplier<Boolean> applicationRootVisible,
       Consumer<Boolean> setApplicationRootVisible,
       Function<TargetRef, String> applicationLeafLabel,

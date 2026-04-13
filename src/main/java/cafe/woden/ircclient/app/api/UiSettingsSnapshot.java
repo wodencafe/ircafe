@@ -2,8 +2,10 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.config.NotificationRule;
 import java.util.List;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** App-level projection of UI settings needed by application services. */
+@ValueObject
 public record UiSettingsSnapshot(
     List<NotificationRule> notificationRules,
     int notificationRuleCooldownSeconds,

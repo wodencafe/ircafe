@@ -55,6 +55,10 @@ class ServerTreeServerCatalogSynchronizerContextTest {
             tree,
             servers,
             leaves,
+            new java.util.HashMap<>(),
+            new java.util.HashSet<>(),
+            new java.util.HashMap<>(),
+            new java.util.HashMap<>(),
             model,
             root,
             startupSelectionCompleted::get,
@@ -117,6 +121,10 @@ class ServerTreeServerCatalogSynchronizerContextTest {
     assertEquals(serverId, context.firstServerId());
     hasValidSelection.set(true);
     assertTrue(context.hasValidTreeSelection());
+    assertTrue(context.serverDisplayNames().isEmpty());
+    assertTrue(context.ephemeralServerIds().isEmpty());
+    assertTrue(context.bouncerControlServerIdsByBackendId().isEmpty());
+    assertTrue(context.originByServerIdByBackendId().isEmpty());
 
     CountDownLatch latch = new CountDownLatch(1);
     context.runLater(latch::countDown);

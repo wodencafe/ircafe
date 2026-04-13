@@ -11,8 +11,10 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared away-command decision, routing, and rollback support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class AwayCommandSupport {

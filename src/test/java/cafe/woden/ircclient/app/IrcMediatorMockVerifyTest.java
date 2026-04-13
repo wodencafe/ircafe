@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -51,6 +52,7 @@ import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -104,6 +106,8 @@ class IrcMediatorMockVerifyTest {
   private final ServerRegistry serverRegistry = mock(ServerRegistry.class);
   private final RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder =
       mock(MediatorConnectionSubscriptionBinder.class);
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder =
@@ -116,6 +120,9 @@ class IrcMediatorMockVerifyTest {
       mock(OutboundDccCommandService.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final UiSettingsPort uiSettingsPort = mock(UiSettingsPort.class);
+  private final cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort
+      ircv3CapabilityNameResolver =
+          new cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort() {};
   private final TrayNotificationsPort trayNotificationsPort = mock(TrayNotificationsPort.class);
   private final NotificationRuleMatcherPort notificationRuleMatcherPort =
       mock(NotificationRuleMatcherPort.class);
@@ -185,10 +192,14 @@ class IrcMediatorMockVerifyTest {
           serverRegistry);
   private final MediatorRosterStatusEventHandler mediatorRosterStatusEventHandler =
       new MediatorRosterStatusEventHandler(ui, targetCoordinator);
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport =
+      new Ircv3ReadMarkerFeatureSupport(
+          readMarkerPort, outboundBackendCapabilityPolicy, ircv3CapabilityNameResolver);
   private final MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler =
-      new MediatorIrcv3PresenceEventHandler(irc, typingPort, readMarkerPort, ui, uiSettingsPort);
+      new MediatorIrcv3PresenceEventHandler(
+          irc, typingPort, readMarkerFeatureSupport, ui, uiSettingsPort);
   private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler =
-      new MediatorIrcv3EventHandler(negotiatedFeaturePort, ui, targetCoordinator);
+      new MediatorIrcv3EventHandler(ui, targetCoordinator);
   private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler =
       new MediatorAlertNotificationHandler(irc, serverIsupportState);
   private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler =
@@ -209,7 +220,8 @@ class IrcMediatorMockVerifyTest {
           outboundCommandDispatcher,
           targetCoordinator,
           whoisRoutingState,
-          ctcpRoutingState);
+          ctcpRoutingState,
+          ircv3CapabilityNameResolver);
   private final cafe.woden.ircclient.app.api.InterceptorIngestPort interceptorIngestPort =
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
@@ -438,7 +450,7 @@ class IrcMediatorMockVerifyTest {
         new ServerIrcEvent(
             "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
 
-    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(ui).recordHighlight(chan, "alice", "hi bob", "");
     verify(ui, never()).markHighlight(chan);
     verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
   }
@@ -455,7 +467,7 @@ class IrcMediatorMockVerifyTest {
             "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
 
     verify(ui).markHighlight(chan);
-    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(ui).recordHighlight(chan, "alice", "hi bob", "");
     verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
   }
 
@@ -804,7 +816,8 @@ class IrcMediatorMockVerifyTest {
             eq("FurBot"),
             anyString(),
             eq("+o Arca"),
-            eq(InterceptorEventType.MODE));
+            eq(InterceptorEventType.MODE),
+            eq(""));
   }
 
   @Test
@@ -839,7 +852,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             anyString(),
-            eq(InterceptorEventType.MESSAGE));
+            eq(InterceptorEventType.MESSAGE),
+            eq("dup-1"));
     ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
     verify(applicationEventPublisher, times(1)).publishEvent(published.capture());
     IrcMediator.InboundMessageDedupDiagnostics event =
@@ -875,7 +889,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             anyString(),
-            eq(InterceptorEventType.PRIVATE_MESSAGE));
+            eq(InterceptorEventType.PRIVATE_MESSAGE),
+            eq("pm-dup-1"));
     verify(trayNotificationsPort, times(1)).notifyPrivateMessage("libera", "alice", "hello");
   }
 
@@ -899,7 +914,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             eq("WODEN hello world"),
-            eq(InterceptorEventType.CTCP));
+            eq(InterceptorEventType.CTCP),
+            eq(""));
   }
 
   @Test
@@ -1031,7 +1047,7 @@ class IrcMediatorMockVerifyTest {
             "libera",
             new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
 
-    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString(), eq(""));
     verify(ui, never()).markHighlight(chan);
   }
 
@@ -1048,7 +1064,7 @@ class IrcMediatorMockVerifyTest {
             "libera",
             new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
 
-    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString(), eq(""));
     verify(ui).markHighlight(chan);
   }
 
@@ -1083,7 +1099,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
-    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(outboundBackendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(
@@ -1104,7 +1120,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerWildcardAppliesZeroEpoch() throws Exception {
-    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(outboundBackendCapabilityPolicy.supportsReadMarker("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(

@@ -49,12 +49,14 @@ public class ChatStyles {
   public static final String ATTR_META_EPOCH_MS = "chat.meta.epochMs";
   public static final String ATTR_META_MSGID = "chat.meta.msgid";
   public static final String ATTR_META_IRCV3_TAGS = "chat.meta.ircv3.tags";
+  public static final String ATTR_META_REDACTED = "chat.meta.redacted";
   public static final String ATTR_META_PENDING_ID = "chat.meta.pending.id";
   public static final String ATTR_META_PENDING_STATE = "chat.meta.pending.state";
   public static final String ATTR_META_FILTER_RULE_ID = "chat.meta.filter.ruleId";
   public static final String ATTR_META_FILTER_RULE_NAME = "chat.meta.filter.ruleName";
   public static final String ATTR_META_FILTER_ACTION = "chat.meta.filter.action";
   public static final String ATTR_META_FILTER_MULTIPLE = "chat.meta.filter.multiple";
+  public static final String ATTR_META_AUX_ROW_KIND = "chat.meta.auxRowKind";
 
   /** Integer background mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_BG = "chat.irc.bg";

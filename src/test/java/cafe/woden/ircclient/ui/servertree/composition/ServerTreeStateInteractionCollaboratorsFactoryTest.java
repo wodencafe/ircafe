@@ -10,9 +10,14 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,43 +60,57 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
     AtomicReference<String> clearedPrivateMessageServer = new AtomicReference<>("");
 
     ServerTreeStateInteractionCollaborators collaborators =
-        ServerTreeStateInteractionCollaboratorsFactory.create(
-            new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
-                tree,
-                model,
-                null,
-                null,
-                channelStateStore,
-                null,
-                runtimeState,
-                new HashMap<>(),
-                leaves,
-                typingActivityNodes,
-                privateMessageOnlineStateStore,
-                ref -> false,
-                node -> node != null && node.getUserObject() instanceof String,
-                __ -> {},
-                () -> 12,
-                clearedPrivateMessageServer::set,
-                noOpOverlayContext(runtimeState),
-                noOpChannelStateContext(),
-                noOpTargetRemovalContext(),
-                16,
-                12,
-                6));
+        new ServerTreeStateInteractionCollaboratorsFactory(
+                new ServerTreeEnsureNodeParentResolver(),
+                new ServerTreeEnsureNodeLeafInserter(),
+                new ServerTreeServerRuntimeUiUpdater(),
+                new ServerTreeServerStateCleaner(),
+                new ServerTreeTargetNodeRemovalMutator(),
+                new ServerTreeTargetRemovalStateCoordinator())
+            .create(
+                new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
+                    tree,
+                    model,
+                    null,
+                    null,
+                    channelStateStore,
+                    null,
+                    runtimeState,
+                    new HashMap<>(),
+                    leaves,
+                    typingActivityNodes,
+                    privateMessageOnlineStateStore,
+                    ref -> false,
+                    node -> node != null && node.getUserObject() instanceof String,
+                    __ -> {},
+                    () -> 12,
+                    clearedPrivateMessageServer::set,
+                    noOpOverlayContext(runtimeState),
+                    noOpChannelStateContext(),
+                    noOpTargetRemovalContext(),
+                    16,
+                    12,
+                    6));
 
     assertNotNull(collaborators.serverActionOverlay());
     assertNotNull(collaborators.serverRuntimeUiUpdater());
+    assertNotNull(collaborators.serverRuntimeUiUpdaterContext());
     assertNotNull(collaborators.serverStateCleaner());
+    assertNotNull(collaborators.serverStateCleanerContext());
     assertNotNull(collaborators.channelStateCoordinator());
     assertNotNull(collaborators.ensureNodeParentResolver());
     assertNotNull(collaborators.ensureNodeLeafInserter());
+    assertNotNull(collaborators.ensureNodeLeafInserterContext());
     assertNotNull(collaborators.targetNodeRemovalMutator());
+    assertNotNull(collaborators.targetNodeRemovalMutatorContext());
     assertNotNull(collaborators.targetRemovalStateCoordinator());
+    assertNotNull(collaborators.targetRemovalStateCoordinatorContext());
     assertNotNull(collaborators.detachedWarningClickHandler());
     assertNotNull(collaborators.rowInteractionHandler());
 
-    collaborators.serverStateCleaner().cleanupServerState("libera");
+    collaborators
+        .serverStateCleaner()
+        .cleanupServerState(collaborators.serverStateCleanerContext(), "libera");
 
     assertFalse(channelStateStore.channelSortModeByServer().containsKey("libera"));
     assertEquals(ConnectionState.DISCONNECTED, runtimeState.connectionStateForServer("libera"));
@@ -199,6 +218,30 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
 
       @Override
       public void emitManagedChannelsChanged(String serverId) {}
+
+      @Override
+      public void removePrivateMessageOnline(TargetRef ref) {}
+
+      @Override
+      public void forgetPrivateMessageTarget(String serverId, String target) {}
+
+      @Override
+      public void forgetJoinedChannel(String serverId, String channelName) {}
+
+      @Override
+      public void removeChannelAutoReattach(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelActivityRank(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelPinned(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelMuted(String serverId, String channelKey) {}
+
+      @Override
+      public void removeChannelCustomOrderEntries(String serverId, String channelKey) {}
     };
   }
 }

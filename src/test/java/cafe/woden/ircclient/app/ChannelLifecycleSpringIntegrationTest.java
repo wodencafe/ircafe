@@ -138,7 +138,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
   }
 
   @Test
-  void joinedDetachReconnectKeepsChannelDetachedUntilManualJoin() {
+  void localDisconnectDisablesAutoReattachAcrossReconnect() {
     String sid = primaryServerId();
     String channel = "#it-detach-reconnect";
     TargetRef ref = new TargetRef(sid, channel);
@@ -148,15 +148,35 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     markConnected(sid);
 
     targetCoordinator.disconnectChannel(ref);
+    assertFalse(runtimeConfig.readJoinedChannels(sid).contains(channel));
+    clearInvocations(ircTargetMembershipPort, swingUiPort);
     connectionCoordinator.handleConnectivityEvent(
         sid, new IrcEvent.Disconnected(Instant.now(), "test disconnect"), null);
     markConnected(sid);
 
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
+    verify(ircTargetMembershipPort, never()).joinChannel(sid, channel);
+    verify(ircTargetMembershipPort, never()).partChannel(sid, channel);
+  }
+
+  @Test
+  void unexpectedJoinAfterLocalDisconnectReattachesWithoutImmediatePart() {
+    String sid = primaryServerId();
+    String channel = "#it-remote-rejoin";
+    TargetRef ref = new TargetRef(sid, channel);
+
+    runtimeConfig.forgetJoinedChannel(sid, channel);
+    stubJoinAndPart(sid, channel);
+    markConnected(sid);
+
+    targetCoordinator.disconnectChannel(ref);
+    clearInvocations(ircTargetMembershipPort, swingUiPort);
+
     boolean accepted = targetCoordinator.onJoinedChannel(sid, channel);
 
-    assertFalse(accepted);
-    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
-    verify(ircTargetMembershipPort, atLeastOnce()).partChannel(sid, channel);
+    assertTrue(accepted);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, false);
+    verify(ircTargetMembershipPort, never()).partChannel(sid, channel);
   }
 
   @Test

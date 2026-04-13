@@ -1,17 +1,13 @@
 package cafe.woden.ircclient.app.outbound.channel;
 
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
-import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
-import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,31 +18,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundModeCommandService {
 
-  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
-  private final CommandTargetPolicy commandTargetPolicy;
-  private final ModeRoutingPort modeRoutingState;
-
-  public OutboundModeCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      ModeRoutingPort modeRoutingState,
-      OutboundRawCommandSupport rawCommandSupport) {
-    this.commandTargetPolicy = commandTargetPolicy;
-    this.modeRoutingState = modeRoutingState;
-    this.targetMembershipCommandSupport =
-        new OutboundTargetMembershipCommandSupport(
-            targetMembership,
-            ui,
-            connectionCoordinator,
-            targetCoordinator,
-            commandTargetPolicy,
-            rawCommandSupport);
-  }
+  @NonNull private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
+  @NonNull private final CommandTargetPolicy commandTargetPolicy;
+  @NonNull private final ModeRoutingPort modeRoutingState;
 
   public void handleMode(CompositeDisposable disposables, String first, String rest) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(mode)");

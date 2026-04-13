@@ -11,30 +11,59 @@ import java.util.Set;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Tracks expanded-tree paths and provides default selection targets after structure changes. */
+@Component
 public final class ServerTreeExpansionStateManager {
 
-  private final JTree tree;
-  private final DefaultMutableTreeNode root;
-  private final DefaultMutableTreeNode ircRoot;
-  private final DefaultMutableTreeNode applicationRoot;
+  public interface Context {
+    JTree tree();
 
-  public ServerTreeExpansionStateManager(
+    DefaultMutableTreeNode root();
+
+    DefaultMutableTreeNode ircRoot();
+
+    DefaultMutableTreeNode applicationRoot();
+  }
+
+  public static Context context(
       JTree tree,
       DefaultMutableTreeNode root,
       DefaultMutableTreeNode ircRoot,
       DefaultMutableTreeNode applicationRoot) {
-    this.tree = Objects.requireNonNull(tree, "tree");
-    this.root = Objects.requireNonNull(root, "root");
-    this.ircRoot = Objects.requireNonNull(ircRoot, "ircRoot");
-    this.applicationRoot = Objects.requireNonNull(applicationRoot, "applicationRoot");
+    Objects.requireNonNull(tree, "tree");
+    Objects.requireNonNull(root, "root");
+    Objects.requireNonNull(ircRoot, "ircRoot");
+    Objects.requireNonNull(applicationRoot, "applicationRoot");
+    return new Context() {
+      @Override
+      public JTree tree() {
+        return tree;
+      }
+
+      @Override
+      public DefaultMutableTreeNode root() {
+        return root;
+      }
+
+      @Override
+      public DefaultMutableTreeNode ircRoot() {
+        return ircRoot;
+      }
+
+      @Override
+      public DefaultMutableTreeNode applicationRoot() {
+        return applicationRoot;
+      }
+    };
   }
 
-  public Set<TreePath> snapshotExpandedTreePaths() {
-    TreePath rootPath = new TreePath(root.getPath());
+  public Set<TreePath> snapshotExpandedTreePaths(Context context) {
+    Context in = Objects.requireNonNull(context, "context");
+    TreePath rootPath = new TreePath(in.root().getPath());
     Set<TreePath> expanded = new HashSet<>();
-    Enumeration<TreePath> en = tree.getExpandedDescendants(rootPath);
+    Enumeration<TreePath> en = in.tree().getExpandedDescendants(rootPath);
     if (en != null) {
       while (en.hasMoreElements()) {
         expanded.add(en.nextElement());
@@ -43,28 +72,40 @@ public final class ServerTreeExpansionStateManager {
     return expanded;
   }
 
-  public void restoreExpandedTreePaths(Set<TreePath> expanded) {
+  public void restoreExpandedTreePaths(Context context, Set<TreePath> expanded) {
+    Context in = Objects.requireNonNull(context, "context");
     if (expanded == null || expanded.isEmpty()) return;
     for (TreePath path : expanded) {
-      TreePath resolved = resolvePathInCurrentTreeModel(path);
+      TreePath resolved = resolvePathInCurrentTreeModel(in, path);
       if (resolved != null) {
-        tree.expandPath(resolved);
+        in.tree().expandPath(resolved);
       }
     }
   }
 
-  public boolean isPathInCurrentTreeModel(TreePath path) {
-    return resolvePathInCurrentTreeModel(path) != null;
+  public boolean isPathInCurrentTreeModel(Context context, TreePath path) {
+    return resolvePathInCurrentTreeModel(Objects.requireNonNull(context, "context"), path) != null;
   }
 
-  private TreePath resolvePathInCurrentTreeModel(TreePath path) {
+  public TreePath defaultSelectionPath(Context context) {
+    Context in = Objects.requireNonNull(context, "context");
+    if (in.ircRoot().getParent() == in.root()) {
+      return new TreePath(in.ircRoot().getPath());
+    }
+    if (in.applicationRoot().getParent() == in.root()) {
+      return new TreePath(in.applicationRoot().getPath());
+    }
+    return new TreePath(in.root().getPath());
+  }
+
+  private TreePath resolvePathInCurrentTreeModel(Context context, TreePath path) {
     if (path == null) return null;
     Object[] nodes = path.getPath();
-    if (nodes.length == 0 || nodes[0] != root) return null;
+    if (nodes.length == 0 || nodes[0] != context.root()) return null;
 
-    DefaultMutableTreeNode cursor = root;
+    DefaultMutableTreeNode cursor = context.root();
     Object[] resolved = new Object[nodes.length];
-    resolved[0] = root;
+    resolved[0] = context.root();
     for (int i = 1; i < nodes.length; i++) {
       if (!(nodes[i] instanceof DefaultMutableTreeNode expectedNode)) return null;
       DefaultMutableTreeNode matched = findMatchingChild(cursor, expectedNode);
@@ -73,16 +114,6 @@ public final class ServerTreeExpansionStateManager {
       resolved[i] = matched;
     }
     return new TreePath(resolved);
-  }
-
-  public TreePath defaultSelectionPath() {
-    if (ircRoot.getParent() == root) {
-      return new TreePath(ircRoot.getPath());
-    }
-    if (applicationRoot.getParent() == root) {
-      return new TreePath(applicationRoot.getPath());
-    }
-    return new TreePath(root.getPath());
   }
 
   private static DefaultMutableTreeNode findMatchingChild(

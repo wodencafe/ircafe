@@ -1,10 +1,13 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -14,11 +17,11 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
@@ -35,6 +38,7 @@ import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.chat.MessageReactionToggleSupport;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.coordinator.ChatActiveTargetCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatBanListCoordinator;
@@ -64,6 +68,8 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.util.ChatRedactedMessageRevealSupport;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.reactivex.rxjava3.core.Flowable;
@@ -78,9 +84,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -150,6 +159,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
   private final InboundDedupDiagnosticsPanel appInboundDedupPanel;
+  private final RuntimeEventsPanel appPluginsPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
@@ -167,6 +177,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final ChatDockTitleCoordinator dockTitleCoordinator;
   private final ChatTranscriptInteractionCoordinator transcriptInteractionCoordinator;
   private final DccActionCoordinator dccActionCoordinator;
+  private final ChatRedactionAuditService redactionAuditService;
 
   private TargetRef activeTarget;
 
@@ -201,6 +212,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ModeRoutingPort modeRoutingState,
       ServerIsupportStatePort serverIsupportState,
       BackendUiProfileProvider backendUiProfileProvider,
@@ -217,12 +229,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ChatHistoryService chatHistoryService,
       ChannelMetadataPort channelMetadata,
       ChatLogViewerService chatLogViewerService,
+      ChatRedactionAuditService redactionAuditService,
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
       TerminalDockable terminalDockable,
       @Lazy ApplicationDiagnosticsService applicationDiagnosticsService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
+      InstalledPluginsPort installedPluginsPort,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
@@ -234,6 +248,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     this.transcripts = transcripts;
     this.serverTree = serverTree;
+    this.redactionAuditService =
+        java.util.Objects.requireNonNull(redactionAuditService, "redactionAuditService");
 
     this.activeInputRouter = activeInputRouter;
     this.proxyResolver = proxyResolver;
@@ -256,6 +272,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);
     this.appJhiccupPanel = createJhiccupEventsPanel(applicationDiagnosticsService);
     this.appInboundDedupPanel = createInboundDedupPanel(springRuntimeEventsService);
+    this.appPluginsPanel = createPluginsPanel(installedPluginsPort);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel = createSpringEventsPanel(springRuntimeEventsService);
 
@@ -311,12 +328,19 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     add(inputPanel, BorderLayout.SOUTH);
     MessageActionCapabilityPolicy capabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    configureQuickReactionToggle(
+        inputPanel,
+        () -> activeTarget,
+        transcripts,
+        capabilityPolicy,
+        sid -> irc.currentNick(sid).orElse(""));
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
     InputCoordinatorBundle inputBundle =
         createInputCoordinatorBundle(
             transcripts,
             irc,
+            readMarkerFeatureSupport,
             chatHistoryService,
             activationBus,
             outboundBus,
@@ -328,7 +352,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.dccActionCoordinator = inputBundle.dccActionCoordinator();
     this.readMarkerCoordinator = inputBundle.readMarkerCoordinator();
     this.activeTargetCoordinator = inputBundle.activeTargetCoordinator();
-    configureReactionChipActions(transcripts, capabilityPolicy, activationBus, outboundBus);
+    configureReactionChipActions(transcripts, irc, capabilityPolicy, activationBus, outboundBus);
     inputPanel.setOnTypingStateChanged(typingCoordinator::onLocalTypingStateChanged);
     bindInputOutboundMessages(outboundBus);
 
@@ -338,6 +362,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     applyMainDockVisualIdentity();
 
     this.monitorCoordinator.bind(disposables);
+  }
+
+  @Autowired
+  void wireExternalBrowserLauncher(ExternalBrowserLauncher externalBrowserLauncher) {
+    super.setExternalBrowserLauncher(externalBrowserLauncher);
   }
 
   @Override
@@ -424,6 +453,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
   }
 
+  private RuntimeEventsPanel createPluginsPanel(InstalledPluginsPort installedPluginsPort) {
+    List<RuntimeDiagnosticEvent> rows = buildInstalledPluginEvents(installedPluginsPort);
+    return new RuntimeEventsPanel(
+        "Plugins",
+        "Declared external plugin jars discovered from the plugin directory.",
+        () -> rows,
+        null,
+        "plugins",
+        Flowable.never());
+  }
+
   private InboundDedupDiagnosticsPanel createInboundDedupPanel(
       SpringRuntimeEventsService springRuntimeEventsService) {
     return new InboundDedupDiagnosticsPanel(
@@ -449,6 +489,96 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       }
     }
     return List.copyOf(out);
+  }
+
+  private static List<RuntimeDiagnosticEvent> buildInstalledPluginEvents(
+      InstalledPluginsPort installedPluginsPort) {
+    String pluginDirectory =
+        installedPluginsPort != null && installedPluginsPort.pluginDirectory() != null
+            ? installedPluginsPort.pluginDirectory().toString()
+            : "";
+    java.time.Instant recordedAt = java.time.Instant.now();
+    if (installedPluginsPort == null) {
+      return List.of(
+          new RuntimeDiagnosticEvent(
+              recordedAt,
+              "INFO",
+              "Plugins",
+              "Plugin runtime is not available in this context.",
+              pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
+    }
+    List<InstalledPluginDescriptor> installedPlugins = installedPluginsPort.installedPlugins();
+    List<InstalledPluginProblem> pluginProblems = installedPluginsPort.pluginProblems();
+    boolean hasInstalledPlugins = installedPlugins != null && !installedPlugins.isEmpty();
+    boolean hasPluginProblems = pluginProblems != null && !pluginProblems.isEmpty();
+    if (!hasInstalledPlugins && !hasPluginProblems) {
+      return List.of(
+          new RuntimeDiagnosticEvent(
+              recordedAt,
+              "INFO",
+              "Plugins",
+              "No declared plugins were found.",
+              pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
+    }
+
+    ArrayList<RuntimeDiagnosticEvent> rows =
+        new ArrayList<>(
+            (hasInstalledPlugins ? installedPlugins.size() : 0)
+                + (hasPluginProblems ? pluginProblems.size() : 0));
+    if (hasInstalledPlugins) {
+      for (InstalledPluginDescriptor descriptor : installedPlugins) {
+        if (descriptor == null) continue;
+        String pluginId = Objects.toString(descriptor.pluginId(), "").trim();
+        String pluginVersion = Objects.toString(descriptor.pluginVersion(), "").trim();
+        String versionLabel = pluginVersion.isBlank() ? "unknown" : pluginVersion;
+        String sourceJar = Objects.toString(descriptor.sourceJar(), "").trim();
+        StringBuilder details = new StringBuilder();
+        details
+            .append("Plugin ID: ")
+            .append(pluginId.isBlank() ? "(unknown)" : pluginId)
+            .append('\n')
+            .append("Version: ")
+            .append(versionLabel)
+            .append('\n')
+            .append("API Version: ")
+            .append(descriptor.pluginApiVersion());
+        if (!sourceJar.isBlank()) {
+          details.append('\n').append("Source Jar: ").append(sourceJar);
+        }
+        if (!pluginDirectory.isBlank()) {
+          details.append('\n').append("Plugin Directory: ").append(pluginDirectory);
+        }
+        rows.add(
+            new RuntimeDiagnosticEvent(
+                recordedAt,
+                "INFO",
+                "Plugin",
+                (pluginId.isBlank() ? "(unknown)" : pluginId) + " " + versionLabel,
+                details.toString()));
+      }
+    }
+    if (hasPluginProblems) {
+      for (InstalledPluginProblem problem : pluginProblems) {
+        if (problem == null) continue;
+        StringBuilder details = new StringBuilder(Objects.toString(problem.details(), ""));
+        if (!pluginDirectory.isBlank()
+            && !details.toString().contains("Plugin directory:")
+            && !details.toString().contains("Plugin Directory:")) {
+          if (!details.isEmpty()) {
+            details.append('\n');
+          }
+          details.append("Plugin directory: ").append(pluginDirectory);
+        }
+        rows.add(
+            new RuntimeDiagnosticEvent(
+                recordedAt,
+                problem.level(),
+                "Plugin Problem",
+                problem.summary(),
+                details.toString()));
+      }
+    }
+    return List.copyOf(rows);
   }
 
   private TopicCoordinatorBundle createTopicCoordinatorBundle(
@@ -595,7 +725,39 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           } else {
             ChatDockable.this.setActiveTarget(ref);
           }
-        });
+        },
+        this::navigateToInterceptorHitMessage);
+  }
+
+  private void navigateToInterceptorHitMessage(TargetRef target, String messageId) {
+    navigateToInterceptorHitMessage(target, messageId, 4);
+  }
+
+  private void navigateToInterceptorHitMessage(
+      TargetRef target, String messageId, int attemptsLeft) {
+    if (target == null) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+
+    if (!Objects.equals(activeTarget, target)) {
+      if (serverTree != null) {
+        serverTree.selectTarget(target);
+      } else {
+        setActiveTarget(target);
+      }
+      if (attemptsLeft <= 0) return;
+      SwingUtilities.invokeLater(
+          () -> navigateToInterceptorHitMessage(target, msgId, attemptsLeft - 1));
+      return;
+    }
+
+    int offset = transcripts.messageOffsetById(target, msgId);
+    if (offset >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(offset);
+      return;
+    }
+    historyActionCoordinator.requestHistoryAroundMessage(msgId);
   }
 
   private ChatTargetViewRouter createTargetViewRouter(
@@ -620,6 +782,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         appAssertjPanel,
         appJhiccupPanel,
         appInboundDedupPanel,
+        appPluginsPanel,
         appJfrPanel,
         appSpringPanel,
         channelListCoordinator::refreshManagedChannelsCard,
@@ -630,6 +793,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private InputCoordinatorBundle createInputCoordinatorBundle(
       ChatTranscriptStore transcripts,
       IrcClientService irc,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
@@ -645,7 +809,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             activationBus, outboundBus, transcripts, historyActionCoordinator);
     DccActionCoordinator dccActionCoordinator =
         createDccActionCoordinator(activationBus, outboundBus);
-    ChatReadMarkerCoordinator readMarkerCoordinator = createReadMarkerCoordinator(transcripts, irc);
+    ChatReadMarkerCoordinator readMarkerCoordinator =
+        createReadMarkerCoordinator(transcripts, readMarkerFeatureSupport);
     ChatActiveTargetCoordinator activeTargetCoordinator =
         createActiveTargetCoordinator(
             transcripts, typingCoordinator, readMarkerCoordinator, backendUiProfileProvider);
@@ -700,6 +865,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private void configureReactionChipActions(
       ChatTranscriptStore transcripts,
+      IrcClientService irc,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
@@ -711,15 +877,46 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           String token = Objects.toString(reactionToken, "").trim();
           if (msgId.isEmpty() || token.isEmpty()) return;
 
-          boolean supported =
-              unreactRequested
-                  ? messageActionCapabilityPolicy.canUnreact(target.serverId())
-                  : messageActionCapabilityPolicy.canReact(target.serverId());
-          if (!supported) return;
+          String command =
+              MessageReactionToggleSupport.resolveCommand(
+                  target,
+                  msgId,
+                  token,
+                  unreactRequested,
+                  transcripts,
+                  messageActionCapabilityPolicy,
+                  sid -> irc.currentNick(sid).orElse(""));
+          if (command.isBlank()) return;
 
           activationBus.activate(target);
           armTailPinOnNextAppendIfAtBottom();
-          outboundBus.emit((unreactRequested ? "/unreact " : "/react ") + msgId + " " + token);
+          outboundBus.emit(command);
+        });
+  }
+
+  private void configureQuickReactionToggle(
+      MessageInputPanel panel,
+      Supplier<TargetRef> targetSupplier,
+      ChatTranscriptStore transcripts,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      Function<String, String> currentNickLookup) {
+    if (panel == null) return;
+    panel.setQuickReactionCommandResolver(
+        (ircTarget, messageId, reactionToken) -> {
+          TargetRef target = targetSupplier == null ? null : targetSupplier.get();
+          if (target == null) return "";
+          String expectedTarget = Objects.toString(ircTarget, "").trim();
+          if (!expectedTarget.isEmpty() && !Objects.equals(target.target(), expectedTarget)) {
+            return "";
+          }
+          return MessageReactionToggleSupport.resolveCommand(
+              target,
+              messageId,
+              reactionToken,
+              false,
+              transcripts,
+              messageActionCapabilityPolicy,
+              currentNickLookup);
         });
   }
 
@@ -754,10 +951,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private ChatReadMarkerCoordinator createReadMarkerCoordinator(
-      ChatTranscriptStore transcripts, IrcClientService irc) {
+      ChatTranscriptStore transcripts, Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport) {
     return new ChatReadMarkerCoordinator(
         transcripts,
-        IrcReadMarkerPort.from(irc),
+        readMarkerFeatureSupport,
         () -> activeTarget,
         this::scrollToTranscriptOffset,
         this::updateScrollStateFromBar,
@@ -809,6 +1006,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             ChatDockable.this.serverTree.selectTarget(ref);
           }
         });
+    panel.setOnJumpToMessage(
+        (target, messageId) -> navigateToInterceptorHitMessage(target, messageId));
     return panel;
   }
 
@@ -937,6 +1136,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(appAssertjPanel, ChatTargetViewRouter.CARD_APP_ASSERTJ);
     centerCards.add(appJhiccupPanel, ChatTargetViewRouter.CARD_APP_JHICCUP);
     centerCards.add(appInboundDedupPanel, ChatTargetViewRouter.CARD_APP_INBOUND_DEDUP);
+    centerCards.add(appPluginsPanel, ChatTargetViewRouter.CARD_APP_PLUGINS);
     centerCards.add(appJfrPanel, ChatTargetViewRouter.CARD_APP_JFR);
     centerCards.add(appSpringPanel, ChatTargetViewRouter.CARD_APP_SPRING);
     centerCards.add(terminalPanel, ChatTargetViewRouter.CARD_TERMINAL);
@@ -1183,6 +1383,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return transcripts != null;
+  }
+
+  @Override
   protected boolean loadNewerHistoryContextActionVisible() {
     return historyActionCoordinator.loadNewerHistoryContextActionVisible();
   }
@@ -1225,6 +1430,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   @Override
   protected void onRedactMessageRequested(String messageId) {
     historyActionCoordinator.onRedactMessageRequested(messageId);
+  }
+
+  @Override
+  protected void onRevealRedactedMessageRequested(String messageId) {
+    TargetRef target = activeTarget;
+    if (target == null || target.isUiOnly()) return;
+    ChatRedactedMessageRevealSupport.reveal(
+        this, target, messageId, transcripts, redactionAuditService);
   }
 
   @Override

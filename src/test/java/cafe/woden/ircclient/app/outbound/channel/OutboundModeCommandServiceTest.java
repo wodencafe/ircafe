@@ -13,6 +13,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationService;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -36,7 +37,8 @@ class OutboundModeCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
@@ -46,17 +48,21 @@ class OutboundModeCommandServiceTest {
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundRawCommandSupport rawCommandSupport =
       new OutboundRawCommandSupport(rawLineCorrelationService);
+  private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
+      new OutboundConnectionStatusSupport(ui, connectionCoordinator);
+  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport =
+      new OutboundTargetMembershipCommandSupport(
+          irc,
+          ui,
+          outboundConnectionStatusSupport,
+          targetCoordinator,
+          commandTargetPolicy,
+          rawCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundModeCommandService service =
       new OutboundModeCommandService(
-          irc,
-          ui,
-          connectionCoordinator,
-          targetCoordinator,
-          commandTargetPolicy,
-          modeRoutingState,
-          rawCommandSupport);
+          targetMembershipCommandSupport, commandTargetPolicy, modeRoutingState);
 
   @AfterEach
   void tearDown() {

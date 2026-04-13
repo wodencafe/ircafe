@@ -10,8 +10,10 @@ import java.util.function.Function;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Encapsulates fallback and startup target-selection policy for a server tree. */
+@Component
 public final class ServerTreeSelectionFallbackPolicy {
 
   public interface Context {
@@ -178,13 +180,8 @@ public final class ServerTreeSelectionFallbackPolicy {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeSelectionFallbackPolicy(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  public void selectBestFallbackForServer(String serverId) {
+  public void selectBestFallbackForServer(Context context, String serverId) {
+    Objects.requireNonNull(context, "context");
     String sid = normalize(serverId);
     if (sid.isEmpty() || !context.serverExists(sid)) return;
 
@@ -234,7 +231,8 @@ public final class ServerTreeSelectionFallbackPolicy {
     }
   }
 
-  public void selectStartupDefaultForServer(String serverId) {
+  public void selectStartupDefaultForServer(Context context, String serverId) {
+    Objects.requireNonNull(context, "context");
     String sid = normalize(serverId);
     if (sid.isEmpty() || !context.serverExists(sid)) return;
 

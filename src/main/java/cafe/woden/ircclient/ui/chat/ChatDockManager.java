@@ -1,12 +1,15 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
@@ -26,8 +29,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
@@ -51,13 +56,16 @@ public class ChatDockManager {
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
+  private final Function<String, String> currentNickLookup;
   private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
+  private final ChatRedactionAuditService redactionAuditService;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
   private final SlashCommandPresentationCatalog slashCommandPresentationCatalog;
+  private final ExternalBrowserLauncher externalBrowserLauncher;
 
   /**
    * Registered pinned dockables.
@@ -86,13 +94,16 @@ public class ChatDockManager {
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
+      IrcCurrentNickPort currentNickPort,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      ChatRedactionAuditService redactionAuditService,
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       ChatHistoryService chatHistoryService,
-      CommandHistoryStore commandHistoryStore) {
+      CommandHistoryStore commandHistoryStore,
+      ExternalBrowserLauncher externalBrowserLauncher) {
     this.serverTree = serverTree;
     this.mainChat = mainChat;
     this.transcripts = transcripts;
@@ -101,17 +112,26 @@ public class ChatDockManager {
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
-    this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.readMarkerFeatureSupport =
+        java.util.Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
+    this.currentNickLookup =
+        currentNickPort == null
+            ? serverId -> ""
+            : serverId -> currentNickPort.currentNick(serverId).orElse("");
     this.backendUiProfileProvider = backendUiProfileProvider;
     this.messageActionCapabilityPolicy =
         java.util.Objects.requireNonNull(
             messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    this.redactionAuditService =
+        java.util.Objects.requireNonNull(redactionAuditService, "redactionAuditService");
     this.activeInputRouter = activeInputRouter;
     this.slashCommandPresentationCatalog =
         java.util.Objects.requireNonNull(
             slashCommandPresentationCatalog, "slashCommandPresentationCatalog");
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
+    this.externalBrowserLauncher =
+        Objects.requireNonNull(externalBrowserLauncher, "externalBrowserLauncher");
   }
 
   @PostConstruct
@@ -180,17 +200,20 @@ public class ChatDockManager {
         java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
-    if ("read-marker".equals(cap) || "draft/read-marker".equals(cap)) {
+    if (readMarkerFeatureSupport.matchesCapabilityName(cap)) {
       transcripts.clearReadMarkersForServer(sid);
       return;
     }
 
-    if ("typing".equals(cap) || "message-tags".equals(cap)) {
+    boolean messageTagsChanged = "message-tags".equals(cap);
+    if ("typing".equals(cap) || "draft/typing".equals(cap) || messageTagsChanged) {
       clearTypingIndicatorsForServer(sid);
-      return;
     }
-    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap))
-      return;
+    if (!messageTagsChanged
+        && !"reply".equals(cap)
+        && !"draft/reply".equals(cap)
+        && !"draft/react".equals(cap)
+        && !"draft/unreact".equals(cap)) return;
 
     boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
     boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
@@ -383,9 +406,11 @@ public class ChatDockManager {
             activationBus::activate,
             outboundBus,
             typingPort,
-            readMarkerPort,
+            readMarkerFeatureSupport,
             messageActionCapabilityPolicy,
+            redactionAuditService,
             backendUiProfileProvider::profileForServer,
+            currentNickLookup,
             activeInputRouter,
             slashCommandPresentationCatalog,
             (t, draft) -> {
@@ -399,6 +424,7 @@ public class ChatDockManager {
               if (t == null) return;
               pinnedDrafts.put(t, draft == null ? "" : draft);
             });
+    created.setExternalBrowserLauncher(externalBrowserLauncher);
     created.setDraftText(initialDraft);
     applyPinnedInputEnabled(target, created);
     created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));

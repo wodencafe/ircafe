@@ -41,7 +41,8 @@ class SlashCommandPresentationCatalogTest {
 
     SlashCommandPresentationCatalog catalog =
         new SlashCommandPresentationCatalog(
-            List.of(builtInContributor), new BackendNamedCommandCatalog(List.of(backendHandler)));
+            List.of(builtInContributor),
+            BackendNamedCommandCatalog.fromHandlers(List.of(backendHandler)));
 
     List<String> commands =
         catalog.autocompleteCommands().stream().map(SlashCommandDescriptor::command).toList();
@@ -71,7 +72,7 @@ class SlashCommandPresentationCatalogTest {
         };
     SlashCommandPresentationCatalog catalog =
         new SlashCommandPresentationCatalog(
-            List.of(), new BackendNamedCommandCatalog(List.of(backendHandler)));
+            List.of(), BackendNamedCommandCatalog.fromHandlers(List.of(backendHandler)));
     AtomicReference<String> rendered = new AtomicReference<>();
 
     catalog

@@ -15,11 +15,16 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 public record ServerTreeStateInteractionCollaborators(
     ServerTreeServerActionOverlay serverActionOverlay,
     ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater,
+    ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext,
     ServerTreeServerStateCleaner serverStateCleaner,
+    ServerTreeServerStateCleaner.Context serverStateCleanerContext,
     ServerTreeChannelStateCoordinator channelStateCoordinator,
     ServerTreeEnsureNodeParentResolver ensureNodeParentResolver,
     ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter,
+    ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
     ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator,
+    ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext,
     ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator,
+    ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,
     ServerTreeDetachedWarningClickHandler detachedWarningClickHandler,
     ServerTreeRowInteractionHandler rowInteractionHandler) {}

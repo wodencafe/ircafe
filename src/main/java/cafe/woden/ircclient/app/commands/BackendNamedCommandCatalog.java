@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.app.plugins.PluginServiceLoaderSupport;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -26,84 +26,7 @@ public class BackendNamedCommandCatalog {
 
   private static final Logger log = LoggerFactory.getLogger(BackendNamedCommandCatalog.class);
 
-  private static final Set<String> RESERVED_COMMAND_NAMES =
-      Set.of(
-          "join",
-          "j",
-          "part",
-          "leave",
-          "connect",
-          "disconnect",
-          "reconnect",
-          "quit",
-          "nick",
-          "away",
-          "query",
-          "whois",
-          "whowas",
-          "wi",
-          "msg",
-          "notice",
-          "me",
-          "topic",
-          "kick",
-          "invite",
-          "invites",
-          "invjoin",
-          "invitejoin",
-          "invignore",
-          "inviteignore",
-          "invwhois",
-          "invitewhois",
-          "invblock",
-          "inviteblock",
-          "inviteautojoin",
-          "invautojoin",
-          "ajinvite",
-          "names",
-          "who",
-          "list",
-          "monitor",
-          "mon",
-          "mode",
-          "op",
-          "deop",
-          "voice",
-          "devoice",
-          "ban",
-          "unban",
-          "ignore",
-          "unignore",
-          "ignorelist",
-          "ignores",
-          "softignore",
-          "unsoftignore",
-          "softignorelist",
-          "softignores",
-          "version",
-          "ping",
-          "time",
-          "ctcp",
-          "dcc",
-          "dccmsg",
-          "chathistory",
-          "history",
-          "markread",
-          "help",
-          "commands",
-          "upload",
-          "reply",
-          "react",
-          "unreact",
-          "edit",
-          "redact",
-          "delete",
-          "filter",
-          "quote",
-          "raw");
-
   private final Map<String, BackendNamedCommandHandler> parseHandlersByCommandName;
-  private final Map<String, BackendNamedCommandHandler> executionHandlersByCommandName;
   private final List<SlashCommandDescriptor> autocompleteCommands;
   private final List<String> generalHelpLines;
   private final Map<String, List<String>> topicHelpLines;
@@ -111,56 +34,54 @@ public class BackendNamedCommandCatalog {
 
   @Autowired
   public BackendNamedCommandCatalog(
+      InstalledPluginServices installedPluginServices,
+      List<BackendNamedCommandHandler> builtInHandlers) {
+    this(
+        loadInstalledCatalogState(
+            List.copyOf(Objects.requireNonNullElse(builtInHandlers, List.of())),
+            installedPluginServices));
+  }
+
+  public BackendNamedCommandCatalog(
       RuntimeConfigPathPort runtimeConfigPathPort,
       List<BackendNamedCommandHandler> builtInHandlers) {
     this(
         loadInstalledCatalogState(
             List.copyOf(Objects.requireNonNullElse(builtInHandlers, List.of())),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+            PluginServiceLoaderSupport.resolvePluginDirectory(
+                runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath,
+                log),
             PluginServiceLoaderSupport.defaultApplicationClassLoader(
                 BackendNamedCommandCatalog.class)));
   }
 
-  public BackendNamedCommandCatalog() {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendNamedCommandCatalog.class)));
+  public static BackendNamedCommandCatalog empty() {
+    return fromHandlers(List.of());
   }
 
-  public BackendNamedCommandCatalog(List<BackendNamedCommandHandler> handlers) {
-    this(List.copyOf(Objects.requireNonNull(handlers, "handlers")), List.of());
+  public static BackendNamedCommandCatalog installed() {
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
+        PluginServiceLoaderSupport.defaultApplicationClassLoader(BackendNamedCommandCatalog.class));
   }
 
-  BackendNamedCommandCatalog(Path pluginDirectory) {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            pluginDirectory,
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendNamedCommandCatalog.class)));
+  public static BackendNamedCommandCatalog fromHandlers(List<BackendNamedCommandHandler> handlers) {
+    return new BackendNamedCommandCatalog(
+        List.copyOf(Objects.requireNonNull(handlers, "handlers")), List.of());
   }
 
-  BackendNamedCommandCatalog(Path pluginDirectory, ClassLoader applicationClassLoader) {
-    this(loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
-  }
-
-  BackendNamedCommandCatalog(
-      List<BackendNamedCommandHandler> builtInHandlers,
-      Path pluginDirectory,
-      ClassLoader applicationClassLoader) {
-    this(loadInstalledCatalogState(builtInHandlers, pluginDirectory, applicationClassLoader));
-  }
-
-  BackendNamedCommandCatalog(
+  static BackendNamedCommandCatalog installed(
       RuntimeConfigPathPort runtimeConfigPathPort, ClassLoader applicationClassLoader) {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
-            applicationClassLoader));
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(
+            runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log),
+        applicationClassLoader);
+  }
+
+  static BackendNamedCommandCatalog installed(
+      Path pluginDirectory, ClassLoader applicationClassLoader) {
+    return new BackendNamedCommandCatalog(
+        loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
   }
 
   private BackendNamedCommandCatalog(LoadedCatalogState state) {
@@ -172,16 +93,11 @@ public class BackendNamedCommandCatalog {
     List<BackendNamedCommandHandler> safeHandlers =
         List.copyOf(Objects.requireNonNull(handlers, "handlers"));
     this.parseHandlersByCommandName = indexParseHandlersByCommandName(safeHandlers);
-    this.executionHandlersByCommandName = indexExecutionHandlersByCommandName(safeHandlers);
     this.autocompleteCommands = buildAutocompleteCommands(safeHandlers);
     this.generalHelpLines = buildGeneralHelpLines(safeHandlers);
     this.topicHelpLines = buildTopicHelpLines(safeHandlers);
     this.pluginClassLoaders =
         List.copyOf(Objects.requireNonNull(pluginClassLoaders, "pluginClassLoaders"));
-  }
-
-  public static BackendNamedCommandCatalog installed() {
-    return new BackendNamedCommandCatalog();
   }
 
   @PreDestroy
@@ -200,17 +116,6 @@ public class BackendNamedCommandCatalog {
     BackendNamedCommandHandler handler = parseHandlersByCommandName.get(commandName);
     if (handler == null) return null;
     return handler.parse(raw, commandName);
-  }
-
-  public boolean handle(
-      BackendNamedCommandExecutionContext context,
-      CompositeDisposable disposables,
-      ParsedInput.BackendNamed command) {
-    if (context == null || disposables == null || command == null) return false;
-    BackendNamedCommandHandler handler =
-        executionHandlersByCommandName.get(normalizeCommandName(command.command()));
-    if (handler == null) return false;
-    return handler.handle(context, disposables, command);
   }
 
   public List<SlashCommandDescriptor> autocompleteCommands() {
@@ -232,9 +137,10 @@ public class BackendNamedCommandCatalog {
       Set<String> commandNames =
           Objects.requireNonNullElse(handler.supportedCommandNames(), Set.<String>of());
       for (String commandName : commandNames) {
-        String normalized = normalizeCommandName(commandName);
+        String normalized =
+            BackendNamedCommandRegistrationSupport.normalizeCommandName(commandName);
         if (normalized.isEmpty()) continue;
-        if (RESERVED_COMMAND_NAMES.contains(normalized)) {
+        if (BackendNamedCommandRegistrationSupport.isReservedCommandName(normalized)) {
           throw new IllegalStateException(
               "Backend named command '"
                   + normalized
@@ -244,33 +150,6 @@ public class BackendNamedCommandCatalog {
         if (previous != null && previous != handler) {
           throw new IllegalStateException(
               "Duplicate backend named parser handler registered for command '" + normalized + "'");
-        }
-      }
-    }
-    return Map.copyOf(index);
-  }
-
-  private static Map<String, BackendNamedCommandHandler> indexExecutionHandlersByCommandName(
-      List<BackendNamedCommandHandler> handlers) {
-    LinkedHashMap<String, BackendNamedCommandHandler> index = new LinkedHashMap<>();
-    for (BackendNamedCommandHandler handler : handlers) {
-      Set<String> commandNames =
-          Objects.requireNonNullElse(handler.handledCommandNames(), Set.<String>of());
-      for (String commandName : commandNames) {
-        String normalized = normalizeCommandName(commandName);
-        if (normalized.isEmpty()) continue;
-        if (RESERVED_COMMAND_NAMES.contains(normalized)) {
-          throw new IllegalStateException(
-              "Backend named execution command '"
-                  + normalized
-                  + "' collides with a reserved built-in command");
-        }
-        BackendNamedCommandHandler previous = index.putIfAbsent(normalized, handler);
-        if (previous != null && previous != handler) {
-          throw new IllegalStateException(
-              "Duplicate backend named execution handler registered for command '"
-                  + normalized
-                  + "'");
         }
       }
     }
@@ -344,20 +223,25 @@ public class BackendNamedCommandCatalog {
     return new LoadedCatalogState(loadedServices.services(), loadedServices.pluginClassLoaders());
   }
 
+  private static LoadedCatalogState loadInstalledCatalogState(
+      List<BackendNamedCommandHandler> builtInHandlers,
+      InstalledPluginServices installedPluginServices) {
+    InstalledPluginServices pluginServices =
+        Objects.requireNonNull(installedPluginServices, "installedPluginServices");
+    return new LoadedCatalogState(
+        pluginServices.loadInstalledServices(BackendNamedCommandHandler.class, builtInHandlers),
+        List.of());
+  }
+
   static Path resolvePluginDirectory(RuntimeConfigPathPort runtimeConfigPathPort) {
-    return PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log);
+    return PluginServiceLoaderSupport.resolvePluginDirectory(
+        runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log);
   }
 
   private static String extractCommandName(String line) {
     int end = line.indexOf(' ');
     String token = end < 0 ? line : line.substring(0, end);
-    return normalizeCommandName(token);
-  }
-
-  private static String normalizeCommandName(String commandName) {
-    String name = Objects.toString(commandName, "").trim().toLowerCase(Locale.ROOT);
-    if (name.startsWith("/")) name = name.substring(1).trim();
-    return name;
+    return BackendNamedCommandRegistrationSupport.normalizeCommandName(token);
   }
 
   private static String normalizeHelpTopic(String raw) {

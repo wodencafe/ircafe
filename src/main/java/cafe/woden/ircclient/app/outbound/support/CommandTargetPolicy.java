@@ -11,8 +11,8 @@ import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,33 +23,14 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class CommandTargetPolicy {
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
   @NonNull private final ServerCatalog serverCatalog;
-  private final BackendExtensionCatalog backendExtensionCatalog;
-  private final BackendEditorProfileCatalog backendProfiles;
-
-  public CommandTargetPolicy(ServerCatalog serverCatalog) {
-    this(serverCatalog, null, AvailableBackendIdsPort.builtInsOnly());
-  }
-
-  @Deprecated(forRemoval = false)
-  public CommandTargetPolicy(
-      ServerCatalog serverCatalog, BackendExtensionCatalog backendExtensionCatalog) {
-    this(serverCatalog, backendExtensionCatalog, AvailableBackendIdsPort.builtInsOnly());
-  }
-
-  @Autowired
-  public CommandTargetPolicy(
-      ServerCatalog serverCatalog,
-      BackendExtensionCatalog backendExtensionCatalog,
-      AvailableBackendIdsPort backendMetadata) {
-    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-    this.backendExtensionCatalog = backendExtensionCatalog;
-    this.backendProfiles = BackendEditorProfileCatalog.from(backendMetadata);
-  }
+  @NonNull private final BackendExtensionCatalog backendExtensionCatalog;
+  @NonNull private final AvailableBackendIdsPort backendMetadata;
 
   public String backendIdForServer(String serverId) {
     String sid = normalize(serverId);
@@ -65,11 +46,6 @@ public class CommandTargetPolicy {
 
   public boolean persistsJoinedChannelsLocally(String serverId) {
     String backendId = backendIdForServer(serverId);
-    if (backendExtensionCatalog == null) {
-      return !BACKEND_DESCRIPTORS
-          .idFor(IrcProperties.Server.Backend.QUASSEL_CORE)
-          .equals(backendId);
-    }
     return backendExtensionCatalog.featureAdapterFor(backendId).persistsJoinedChannelsLocally();
   }
 
@@ -103,7 +79,8 @@ public class CommandTargetPolicy {
   }
 
   private BackendUiMode backendUiModeForServer(String serverId) {
-    return backendProfiles.uiModeForBackendId(backendIdForServer(serverId));
+    return BackendEditorProfileCatalog.from(backendMetadata)
+        .uiModeForBackendId(backendIdForServer(serverId));
   }
 
   private static String normalize(String value) {

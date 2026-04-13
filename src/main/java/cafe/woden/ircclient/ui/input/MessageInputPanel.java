@@ -854,6 +854,11 @@ public class MessageInputPanel extends JPanel {
     composeSupport.openQuickReactionPicker(ircTarget, messageId);
   }
 
+  public void setQuickReactionCommandResolver(
+      MessageInputComposeSupport.ReactionCommandResolver resolver) {
+    composeSupport.setQuickReactionCommandResolver(resolver);
+  }
+
   public void setBackendUiProfile(BackendUiProfile backendUiProfile) {
     this.backendUiProfile =
         backendUiProfile == null ? BackendUiProfile.ircOnly("") : backendUiProfile;

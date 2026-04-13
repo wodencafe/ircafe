@@ -1,15 +1,20 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
@@ -27,9 +32,21 @@ class OutboundChatHistoryCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
       mock(ChatHistoryRequestRoutingPort.class);
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      backendCapabilityPolicy();
+  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
+      new Ircv3ChatHistoryFeatureSupport(
+          outboundBackendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc), irc);
+  private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport =
+      new OutboundChatHistoryRequestSupport(
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          chatHistoryRequestRoutingState,
+          chatHistoryFeatureSupport);
   private final OutboundChatHistoryCommandService service =
       new OutboundChatHistoryCommandService(
-          irc, ui, connectionCoordinator, targetCoordinator, chatHistoryRequestRoutingState);
+          irc, targetCoordinator, chatHistoryFeatureSupport, chatHistoryRequestSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach
@@ -42,6 +59,7 @@ class OutboundChatHistoryCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(true);
     when(irc.requestChatHistoryBefore("libera", "#ircafe", "msgid=abc123", 40))
         .thenReturn(Completable.complete());
 
@@ -64,6 +82,7 @@ class OutboundChatHistoryCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(true);
     when(irc.requestChatHistoryLatest("libera", "#ircafe", "*", 55))
         .thenReturn(Completable.complete());
 
@@ -86,6 +105,7 @@ class OutboundChatHistoryCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(true);
     when(irc.requestChatHistoryBetween("libera", "#ircafe", "msgid=a", "msgid=b", 30))
         .thenReturn(Completable.complete());
 
@@ -108,6 +128,7 @@ class OutboundChatHistoryCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(true);
     when(irc.requestChatHistoryAround("libera", "#ircafe", "msgid=anchor", 45))
         .thenReturn(Completable.complete());
 
@@ -123,5 +144,43 @@ class OutboundChatHistoryCommandServiceTest {
             eq("msgid=anchor"),
             any(Instant.class),
             eq(QueryMode.AROUND));
+  }
+
+  @Test
+  void chatHistoryCommandRefusesWhenCapabilityIsUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(false);
+
+    service.handleChatHistoryLatest(disposables, 55, "*");
+
+    verify(ui)
+        .appendStatus(status, "(chathistory)", "chathistory is not negotiated on this server.");
+    verify(irc, never()).requestChatHistoryLatest(eq("libera"), eq("#ircafe"), any(), eq(55));
+  }
+
+  @Test
+  void helpShowsAvailabilitySuffixWhenCapabilityIsUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(irc.isChatHistoryAvailable("libera")).thenReturn(false);
+
+    service.topicHelpHandlers().get("chathistory").accept(chan);
+
+    verify(ui)
+        .appendStatus(
+            chan,
+            "(help)",
+            "/chathistory [limit] (unavailable: requires negotiated draft/chathistory or chathistory)");
+  }
+
+  private static OutboundBackendCapabilityPolicy backendCapabilityPolicy() {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.featureUnavailableMessage(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    when(policy.unavailableReasonForHelp(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    return policy;
   }
 }

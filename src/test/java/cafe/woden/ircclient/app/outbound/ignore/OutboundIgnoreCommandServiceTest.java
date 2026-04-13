@@ -31,10 +31,15 @@ class OutboundIgnoreCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final IgnoreListQueryPort ignoreListQueryPort = mock(IgnoreListQueryPort.class);
   private final IgnoreListCommandPort ignoreListCommandPort = mock(IgnoreListCommandPort.class);
+  private final IgnoreHardCommandSupport ignoreHardCommandSupport =
+      new IgnoreHardCommandSupport(
+          ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
+  private final IgnoreSoftCommandSupport ignoreSoftCommandSupport =
+      new IgnoreSoftCommandSupport(
+          ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
 
   private final OutboundIgnoreCommandService service =
-      new OutboundIgnoreCommandService(
-          ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
+      new OutboundIgnoreCommandService(ignoreHardCommandSupport, ignoreSoftCommandSupport);
 
   @Test
   void ignoreWithoutArgsListsMasksForActiveServer() {

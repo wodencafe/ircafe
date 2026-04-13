@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound.channel;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
@@ -13,34 +12,24 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** Shared active-target, connection, and raw-send support for target-membership commands. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class OutboundTargetMembershipCommandSupport {
 
-  @NonNull private final IrcTargetMembershipPort targetMembership;
+  @Qualifier("ircTargetMembershipPort")
+  @NonNull
+  private final IrcTargetMembershipPort targetMembership;
+
   @NonNull private final UiPort ui;
   @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
-
-  OutboundTargetMembershipCommandSupport(
-      IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundRawCommandSupport rawCommandSupport) {
-    this(
-        targetMembership,
-        ui,
-        new OutboundConnectionStatusSupport(ui, connectionCoordinator),
-        targetCoordinator,
-        commandTargetPolicy,
-        rawCommandSupport);
-  }
 
   TargetRef requireActiveTarget(String tag) {
     TargetRef active = targetCoordinator.getActiveTarget();

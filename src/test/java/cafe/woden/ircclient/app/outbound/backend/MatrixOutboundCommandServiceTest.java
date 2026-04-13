@@ -25,16 +25,21 @@ class MatrixOutboundCommandServiceTest {
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
 
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry backendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(List.of(new MatrixOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy capabilityPolicy =
       new OutboundBackendCapabilityPolicy(
-          commandTargetPolicy, backendFeatureRegistry, IrcNegotiatedFeaturePort.from(irc), irc);
+          commandTargetPolicy,
+          backendFeatureRegistry,
+          IrcNegotiatedFeaturePort.from(irc),
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final MatrixOutboundCommandSupport matrixCommandSupport =
       new MatrixOutboundCommandSupport();
   private final BackendUploadCommandRegistry uploadCommandRegistry =
-      new BackendUploadCommandRegistry(
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.backendUploadCommandRegistry(
           List.of(new MatrixUploadCommandTranslationHandler(matrixCommandSupport)));
   private final MatrixOutboundCommandService service =
       new MatrixOutboundCommandService(

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.interceptors;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,6 +14,24 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class InterceptorStoreTest {
+
+  @Test
+  void createInterceptorDefaultsToIncludeAllAndExcludeNone() {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      assertEquals(InterceptorRuleMode.ALL, def.channelIncludeMode());
+      assertEquals("", def.channelIncludes());
+      assertEquals(InterceptorRuleMode.NONE, def.channelExcludeMode());
+      assertEquals("", def.channelExcludes());
+      assertEquals(InterceptorRuleMode.ALL, def.rules().getFirst().nickMode());
+      assertEquals("", def.rules().getFirst().nickPattern());
+      assertEquals(InterceptorRuleMode.ALL, def.rules().getFirst().hostmaskMode());
+      assertEquals("", def.rules().getFirst().hostmaskPattern());
+    } finally {
+      store.shutdown();
+    }
+  }
 
   @Test
   void capturesMatchingEventsWithRuleDimensions() throws Exception {
@@ -88,6 +107,79 @@ class InterceptorStoreTest {
       assertEquals("Swear words", hits.getFirst().reason());
       assertEquals("message", hits.getFirst().eventType());
       assertEquals("alice!ident@host.example", hits.getFirst().fromHostmask());
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
+  void storesMessageIdsAndCanClearSelectedHitsOnly() throws Exception {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      InterceptorDefinition updated =
+          new InterceptorDefinition(
+              def.id(),
+              def.name(),
+              true,
+              "srv",
+              InterceptorRuleMode.ALL,
+              "",
+              InterceptorRuleMode.NONE,
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(
+                  new InterceptorRule(
+                      true,
+                      "Everything",
+                      "message",
+                      InterceptorRuleMode.LIKE,
+                      "line",
+                      InterceptorRuleMode.ALL,
+                      "",
+                      InterceptorRuleMode.ALL,
+                      "")));
+      store.saveInterceptor("srv", updated);
+
+      store.ingestEvent(
+          "srv",
+          "#ircafe",
+          "alice",
+          "alice!ident@host.example",
+          "first line",
+          InterceptorEventType.MESSAGE,
+          "msg-1");
+      store.ingestEvent(
+          "srv",
+          "#ircafe",
+          "alice",
+          "alice!ident@host.example",
+          "second line",
+          InterceptorEventType.MESSAGE,
+          "msg-2");
+
+      List<InterceptorHit> hits = waitForHits(store, "srv", def.id(), 2);
+      assertEquals(
+          List.of("msg-1", "msg-2"), hits.stream().map(InterceptorHit::messageId).toList());
+      assertEquals(2, store.hitCount("srv", def.id()));
+
+      int removed = store.clearHits("srv", def.id(), List.of(hits.getFirst()));
+      assertEquals(1, removed);
+
+      List<InterceptorHit> remaining = waitForHits(store, "srv", def.id(), 1);
+      assertEquals(1, remaining.size());
+      assertEquals("msg-2", remaining.getFirst().messageId());
+      assertEquals("second line", remaining.getFirst().message());
+      assertEquals(1, store.hitCount("srv", def.id()));
     } finally {
       store.shutdown();
     }
@@ -310,6 +402,25 @@ class InterceptorStoreTest {
     } finally {
       store.shutdown();
     }
+  }
+
+  @Test
+  void ingestEventAfterShutdownIsIgnored() {
+    InterceptorStore store = new InterceptorStore(200);
+    InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+    store.shutdown();
+
+    assertDoesNotThrow(
+        () ->
+            store.ingestEvent(
+                "srv",
+                "#ircafe",
+                "alice",
+                "alice!ident@host.example",
+                "late event",
+                InterceptorEventType.MESSAGE,
+                "msg-late"));
+    assertEquals(0, store.hitCount("srv", def.id()));
   }
 
   @Test

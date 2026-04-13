@@ -26,13 +26,23 @@ import java.util.function.IntSupplier;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles state/interaction collaborators for server tree construction. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeStateInteractionCollaboratorsFactory {
 
-  private ServerTreeStateInteractionCollaboratorsFactory() {}
+  @NonNull private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
+  @NonNull private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
+  @NonNull private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
+  @NonNull private final ServerTreeServerStateCleaner serverStateCleaner;
+  @NonNull private final ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator;
+  @NonNull private final ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator;
 
-  public static ServerTreeStateInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeStateInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     ServerTreeServerActionOverlay serverActionOverlay =
@@ -42,22 +52,23 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             in.serverActionButtonIconSize(),
             in.serverActionButtonMargin(),
             Objects.requireNonNull(in.serverActionOverlayContext(), "serverActionOverlayContext"));
-    ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater =
-        new ServerTreeServerRuntimeUiUpdater(
+    ServerTreeServerRuntimeUiUpdater.Context serverRuntimeUiUpdaterContext =
+        ServerTreeServerRuntimeUiUpdater.context(
             Objects.requireNonNull(in.runtimeState(), "runtimeState"),
             Objects.requireNonNull(in.servers(), "servers"),
-            Objects.requireNonNull(in.model(), "model"),
-            serverActionOverlay,
-            in.tree());
-    ServerTreeServerStateCleaner serverStateCleaner =
-        new ServerTreeServerStateCleaner(
+            Objects.requireNonNull(in.model(), "model")::nodeChanged,
+            serverActionOverlay::isHoveredServer,
+            in.tree()::repaint);
+    ServerTreeServerStateCleaner.Context serverStateCleanerContext =
+        ServerTreeServerStateCleaner.context(
             in.interceptorStore(),
-            serverActionOverlay,
-            in.runtimeState(),
-            Objects.requireNonNull(in.channelStateStore(), "channelStateStore"),
+            serverActionOverlay::clearHoveredServer,
+            Objects.requireNonNull(in.runtimeState(), "runtimeState")::removeServer,
+            Objects.requireNonNull(in.channelStateStore(), "channelStateStore")::clearServer,
+            Objects.requireNonNull(
+                in.clearPrivateMessageOnlineStates(), "clearPrivateMessageOnlineStates"),
             Objects.requireNonNull(in.leaves(), "leaves"),
-            Objects.requireNonNull(in.typingActivityNodes(), "typingActivityNodes"),
-            Objects.requireNonNull(in.serverStateCleanerContext(), "serverStateCleanerContext"));
+            Objects.requireNonNull(in.typingActivityNodes(), "typingActivityNodes"));
     ServerTreeChannelStateCoordinator channelStateCoordinator =
         new ServerTreeChannelStateCoordinator(
             in.channelStateConfig(),
@@ -65,25 +76,20 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             in.model(),
             Objects.requireNonNull(
                 in.channelStateCoordinatorContext(), "channelStateCoordinatorContext"));
-    ServerTreeEnsureNodeParentResolver ensureNodeParentResolver =
-        new ServerTreeEnsureNodeParentResolver();
-    ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter =
-        new ServerTreeEnsureNodeLeafInserter(
+    ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext =
+        ServerTreeEnsureNodeLeafInserter.context(
             in.leaves(),
             in.model(),
             Objects.requireNonNull(
                 in.privateMessageOnlineStateStore(), "privateMessageOnlineStateStore"),
             Objects.requireNonNull(
-                in.ensureNodeLeafInserterContext(), "ensureNodeLeafInserterContext"));
-    ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator =
-        new ServerTreeTargetNodeRemovalMutator(in.typingActivityNodes(), in.model());
-    ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator =
-        new ServerTreeTargetRemovalStateCoordinator(
-            in.privateMessageOnlineStateStore(),
-            in.sessionRuntimeConfig(),
-            in.channelStateStore(),
-            Objects.requireNonNull(
-                in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext"));
+                in.isPrivateMessageTargetForEnsureNodeLeafInserter(),
+                "isPrivateMessageTargetForEnsureNodeLeafInserter"));
+    ServerTreeTargetNodeRemovalMutator.Context targetNodeRemovalMutatorContext =
+        ServerTreeTargetNodeRemovalMutator.context(in.typingActivityNodes(), in.model());
+    ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext =
+        Objects.requireNonNull(
+            in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext");
     ServerTreeDetachedWarningClickHandler detachedWarningClickHandler =
         new ServerTreeDetachedWarningClickHandler(
             in.tree(),
@@ -99,12 +105,17 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
     return new ServerTreeStateInteractionCollaborators(
         serverActionOverlay,
         serverRuntimeUiUpdater,
+        serverRuntimeUiUpdaterContext,
         serverStateCleaner,
+        serverStateCleanerContext,
         channelStateCoordinator,
         ensureNodeParentResolver,
         ensureNodeLeafInserter,
+        ensureNodeLeafInserterContext,
         targetNodeRemovalMutator,
+        targetNodeRemovalMutatorContext,
         targetRemovalStateCoordinator,
+        targetRemovalStateCoordinatorContext,
         detachedWarningClickHandler,
         rowInteractionHandler);
   }
@@ -121,11 +132,11 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Set<DefaultMutableTreeNode> typingActivityNodes,
       ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore,
-      ServerTreeEnsureNodeLeafInserter.Context ensureNodeLeafInserterContext,
+      java.util.function.Predicate<TargetRef> isPrivateMessageTargetForEnsureNodeLeafInserter,
       java.util.function.Predicate<DefaultMutableTreeNode> isServerNode,
       Consumer<TargetRef> clearChannelDisconnectedWarning,
       IntSupplier typingSlotWidth,
-      ServerTreeServerStateCleaner.Context serverStateCleanerContext,
+      Consumer<String> clearPrivateMessageOnlineStates,
       ServerTreeServerActionOverlay.Context serverActionOverlayContext,
       ServerTreeChannelStateCoordinator.Context channelStateCoordinatorContext,
       ServerTreeTargetRemovalStateCoordinator.Context targetRemovalStateCoordinatorContext,

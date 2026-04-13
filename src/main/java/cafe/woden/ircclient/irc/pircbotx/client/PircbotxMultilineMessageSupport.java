@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
+import cafe.woden.ircclient.irc.ircv3.Ircv3MultilineSupport;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -135,17 +136,15 @@ final class PircbotxMultilineMessageSupport {
   private static String multilineBatchType(PircbotxConnectionState connection) {
     if (connection == null) return "";
     PircbotxConnectionState.CapabilitySnapshot caps = connection.capabilitySnapshot();
-    if (caps.multilineCapAcked()) return "multiline";
-    if (caps.draftMultilineCapAcked()) return "draft/multiline";
-    return "";
+    return Ircv3MultilineSupport.negotiatedBatchType(
+        caps.multilineCapAcked(), caps.draftMultilineCapAcked());
   }
 
   private static String multilineConcatTag(PircbotxConnectionState connection) {
     if (connection == null) return "";
     PircbotxConnectionState.CapabilitySnapshot caps = connection.capabilitySnapshot();
-    if (caps.multilineCapAcked()) return "multiline-concat";
-    if (caps.draftMultilineCapAcked()) return "draft/multiline-concat";
-    return "";
+    return Ircv3MultilineSupport.negotiatedConcatTag(
+        caps.multilineCapAcked(), caps.draftMultilineCapAcked());
   }
 
   private static long utf8Length(String value) {

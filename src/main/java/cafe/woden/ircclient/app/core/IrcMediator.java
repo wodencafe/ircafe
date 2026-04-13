@@ -453,14 +453,16 @@ public class IrcMediator implements MediatorControlPort {
         String target,
         String actorNick,
         String text,
-        InterceptorEventType eventType) {
+        InterceptorEventType eventType,
+        String messageId) {
       mediatorNotificationSupport.recordInterceptorEvent(
           serverId,
           target,
           actorNick,
           mediatorNotificationSupport.learnedHostmaskForNick(serverId, actorNick),
           text,
-          eventType);
+          eventType,
+          messageId);
     }
 
     @Override

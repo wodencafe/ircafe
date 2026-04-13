@@ -1,16 +1,19 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutionContext;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutorCatalog;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandRegistrationSupport;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -18,33 +21,24 @@ import org.springframework.stereotype.Component;
 /** Routes parsed backend-specific command names to backend command handlers. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public final class BackendNamedOutboundCommandRouter {
 
-  private final BackendNamedCommandCatalog commandCatalog;
-  private final TargetCoordinator targetCoordinator;
-  private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final BackendNamedCommandExecutorCatalog commandExecutors;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+
+  @Qualifier("ircMediatorInteractionPort")
+  @NonNull
   private final IrcMediatorInteractionPort mediatorIrc;
-  private final UiPort ui;
+
+  @NonNull private final UiPort ui;
   private final BackendNamedCommandExecutionContext pluginExecutionContext =
       new RouterCommandExecutionContext();
 
-  BackendNamedOutboundCommandRouter(
-      BackendNamedCommandCatalog commandCatalog,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      UiPort ui) {
-    this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
-    this.ui = Objects.requireNonNull(ui, "ui");
-  }
-
   public void handle(CompositeDisposable disposables, ParsedInput.BackendNamed command) {
-    String name = normalizeCommandName(command.command());
-    if (commandCatalog.handle(pluginExecutionContext, disposables, command)) {
+    String name = BackendNamedCommandRegistrationSupport.normalizeCommandName(command.command());
+    if (commandExecutors.handle(pluginExecutionContext, disposables, command)) {
       return;
     }
     TargetRef active = targetCoordinator.getActiveTarget();
@@ -101,11 +95,5 @@ public final class BackendNamedOutboundCommandRouter {
     public io.reactivex.rxjava3.core.Completable sendRaw(String serverId, String line) {
       return mediatorIrc.sendRaw(serverId, line);
     }
-  }
-
-  private static String normalizeCommandName(String commandName) {
-    String name = Objects.toString(commandName, "").trim().toLowerCase(Locale.ROOT);
-    if (name.startsWith("/")) name = name.substring(1).trim();
-    return name;
   }
 }

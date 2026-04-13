@@ -35,18 +35,23 @@ import java.util.function.IntConsumer;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles lifecycle and settings collaborators for server tree construction. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
 
-  private ServerTreeLifecycleSettingsCollaboratorsFactory() {}
+  @NonNull private final ServerTreeServerNodeBuilder serverNodeBuilder;
 
-  public static ServerTreeLifecycleSettingsCollaborators create(Inputs inputs) {
+  public ServerTreeLifecycleSettingsCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     ServerTreeServerRootLifecycleManager serverRootLifecycleManager =
         new ServerTreeServerRootLifecycleManager(
-            Objects.requireNonNull(in.serverNodeBuilder(), "serverNodeBuilder"),
+            serverNodeBuilder,
             Objects.requireNonNull(in.channelListLabel(), "channelListLabel"),
             Objects.requireNonNull(in.weechatFiltersLabel(), "weechatFiltersLabel"),
             Objects.requireNonNull(in.ignoresLabel(), "ignoresLabel"),
@@ -60,15 +65,23 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                 Objects.requireNonNull(in.runtimeState(), "runtimeState")::markServerKnown,
                 Objects.requireNonNull(in.channelStateCoordinator(), "channelStateCoordinator")
                     ::loadChannelStateForServer,
-                Objects.requireNonNull(in.serverParentResolver(), "serverParentResolver")
-                    ::resolveParentForServer,
+                serverId ->
+                    Objects.requireNonNull(in.serverParentResolver(), "serverParentResolver")
+                        .resolveParentForServer(
+                            Objects.requireNonNull(
+                                in.serverParentResolverContext(), "serverParentResolverContext"),
+                            serverId),
                 Objects.requireNonNull(in.builtInNodesVisibility(), "builtInNodesVisibility"),
                 () ->
                     Objects.requireNonNull(
                             in.isDccTransfersNodesVisible(), "isDccTransfersNodesVisible")
                         .getAsBoolean(),
-                Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager")
-                    ::statusLeafLabelForServer,
+                serverId ->
+                    Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager")
+                        .statusLeafLabelForServer(
+                            Objects.requireNonNull(
+                                in.statusLabelManagerContext(), "statusLabelManagerContext"),
+                            serverId),
                 serverId -> {
                   NotificationStore store = in.notificationStore();
                   return store == null ? 0 : store.count(serverId);
@@ -92,18 +105,35 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
                 Objects.requireNonNull(in.model(), "model"),
                 Objects.requireNonNull(in.root(), "root"),
                 Objects.requireNonNull(in.tree(), "tree"),
-                Objects.requireNonNull(in.nodeBadgeUpdater(), "nodeBadgeUpdater")
-                    ::refreshNotificationsCount,
-                Objects.requireNonNull(in.interceptorActions(), "interceptorActions")
-                    ::refreshInterceptorGroupCount,
-                Objects.requireNonNull(in.serverStateCleaner(), "serverStateCleaner")
-                    ::cleanupServerState,
-                Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
-                    ::removeEmptyGroupIfNeeded));
+                serverId ->
+                    Objects.requireNonNull(in.nodeBadgeUpdater(), "nodeBadgeUpdater")
+                        .refreshNotificationsCount(
+                            Objects.requireNonNull(
+                                in.nodeBadgeUpdaterContext(), "nodeBadgeUpdaterContext"),
+                            serverId),
+                serverId ->
+                    Objects.requireNonNull(in.interceptorActions(), "interceptorActions")
+                        .refreshInterceptorGroupCount(
+                            Objects.requireNonNull(
+                                in.interceptorActionsContext(), "interceptorActionsContext"),
+                            serverId),
+                serverId ->
+                    Objects.requireNonNull(in.serverStateCleaner(), "serverStateCleaner")
+                        .cleanupServerState(
+                            Objects.requireNonNull(
+                                in.serverStateCleanerContext(), "serverStateCleanerContext"),
+                            serverId),
+                groupNode ->
+                    Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
+                        .removeEmptyGroupIfNeeded(
+                            Objects.requireNonNull(
+                                in.networkGroupManagerContext(), "networkGroupManagerContext"),
+                            groupNode)));
     ServerTreeServerLifecycleFacade serverLifecycleFacade =
         new ServerTreeServerLifecycleFacade(
             serverRootLifecycleManager,
-            Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager"));
+            Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager"),
+            Objects.requireNonNull(in.statusLabelManagerContext(), "statusLabelManagerContext"));
     ServerTreeSettingsSynchronizer settingsSynchronizer =
         new ServerTreeSettingsSynchronizer(
             ServerTreeSettingsSynchronizer.context(
@@ -143,7 +173,6 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
   }
 
   public record Inputs(
-      ServerTreeServerNodeBuilder serverNodeBuilder,
       String channelListLabel,
       String weechatFiltersLabel,
       String ignoresLabel,
@@ -156,9 +185,11 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       ServerTreeRuntimeState runtimeState,
       ServerTreeChannelStateCoordinator channelStateCoordinator,
       ServerTreeServerParentResolver serverParentResolver,
+      ServerTreeServerParentResolver.Context serverParentResolverContext,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       BooleanSupplier isDccTransfersNodesVisible,
       ServerTreeStatusLabelManager statusLabelManager,
+      ServerTreeStatusLabelManager.Context statusLabelManagerContext,
       NotificationStore notificationStore,
       InterceptorStore interceptorStore,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
@@ -170,9 +201,13 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       DefaultMutableTreeNode root,
       JTree tree,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
+      ServerTreeNodeBadgeUpdater.Context nodeBadgeUpdaterContext,
       ServerTreeInterceptorActions interceptorActions,
+      ServerTreeInterceptorActions.Context interceptorActionsContext,
       ServerTreeServerStateCleaner serverStateCleaner,
+      ServerTreeServerStateCleaner.Context serverStateCleanerContext,
       ServerTreeNetworkGroupManager networkGroupManager,
+      ServerTreeNetworkGroupManager.Context networkGroupManagerContext,
       UiSettingsBus settingsBus,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       UiSettingsRuntimeConfigPort runtimeConfig,

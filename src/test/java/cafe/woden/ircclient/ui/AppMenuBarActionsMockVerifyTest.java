@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -23,6 +25,11 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Window;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import javax.swing.AbstractAction;
 import javax.swing.JMenuItem;
 import javax.swing.SwingUtilities;
@@ -122,12 +129,51 @@ class AppMenuBarActionsMockVerifyTest {
     verify(themeManager).applyAppearance(false);
   }
 
+  @Test
+  void jfrSnapshotCaptureRunsOffEdt() throws Exception {
+    RuntimeJfrService runtimeJfrService = mock(RuntimeJfrService.class);
+    AtomicBoolean captureRanOnEdt = new AtomicBoolean(true);
+    CountDownLatch latch = new CountDownLatch(1);
+    when(runtimeJfrService.captureSnapshot())
+        .thenAnswer(
+            __ -> {
+              captureRanOnEdt.set(SwingUtilities.isEventDispatchThread());
+              return new RuntimeJfrService.SnapshotReport(null, "snapshot ok");
+            });
+
+    AppMenuBar menuBar =
+        onEdtCall(
+            () ->
+                newMenuBar(
+                    mock(ApplicationShutdownCoordinator.class),
+                    null,
+                    null,
+                    null,
+                    null,
+                    runtimeJfrService));
+
+    Method method = AppMenuBar.class.getDeclaredMethod("captureJfrSnapshotAsync", Consumer.class);
+    method.setAccessible(true);
+    onEdt(
+        () -> {
+          try {
+            method.invoke(menuBar, (Consumer<String>) __ -> latch.countDown());
+          } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+          }
+        });
+
+    assertTrue(latch.await(5, TimeUnit.SECONDS));
+    assertFalse(captureRanOnEdt.get());
+    verify(runtimeJfrService).captureSnapshot();
+  }
+
   private static AppMenuBar newMenuBar(
       ApplicationShutdownCoordinator shutdownCoordinator,
       ChatDockable chatOverride,
       ServerTreeDockable treeOverride,
       ServerDialogs dialogsOverride) {
-    return newMenuBar(shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, null);
+    return newMenuBar(shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, null, null);
   }
 
   private static AppMenuBar newMenuBar(
@@ -136,6 +182,17 @@ class AppMenuBarActionsMockVerifyTest {
       ServerTreeDockable treeOverride,
       ServerDialogs dialogsOverride,
       ThemeManager themeOverride) {
+    return newMenuBar(
+        shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, themeOverride, null);
+  }
+
+  private static AppMenuBar newMenuBar(
+      ApplicationShutdownCoordinator shutdownCoordinator,
+      ChatDockable chatOverride,
+      ServerTreeDockable treeOverride,
+      ServerDialogs dialogsOverride,
+      ThemeManager themeOverride,
+      RuntimeJfrService runtimeJfrOverride) {
     PreferencesDialog preferencesDialog = mock(PreferencesDialog.class);
     NickColorOverridesDialog nickColorOverridesDialog = mock(NickColorOverridesDialog.class);
     IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
@@ -144,7 +201,8 @@ class AppMenuBarActionsMockVerifyTest {
     when(themeManager.featuredThemes()).thenReturn(new ThemeManager.ThemeOption[0]);
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
-    RuntimeJfrService runtimeJfrService = mock(RuntimeJfrService.class);
+    RuntimeJfrService runtimeJfrService =
+        runtimeJfrOverride != null ? runtimeJfrOverride : mock(RuntimeJfrService.class);
     ServerDialogs serverDialogs =
         dialogsOverride != null ? dialogsOverride : mock(ServerDialogs.class);
     ChatDockable chat = chatOverride != null ? chatOverride : mock(ChatDockable.class);

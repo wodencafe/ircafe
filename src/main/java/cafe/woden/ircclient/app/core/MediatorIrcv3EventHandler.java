@@ -2,34 +2,34 @@ package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Coordinates IRCv3 transcript mutation and capability side effects. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class MediatorIrcv3EventHandler {
 
   interface Callbacks {
     TargetRef resolveIrcv3Target(String sid, String target, String from, TargetRef status);
   }
 
-  private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
 
+  public MediatorIrcv3EventHandler(UiPort ui, TargetCoordinator targetCoordinator) {
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+  }
+
   public void handleMessageReactObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.MessageReactObserved event) {
-    if (!negotiatedFeaturePort.isDraftReactAvailable(sid)) {
-      return;
-    }
+    // Some servers relay mutation tags even when the corresponding CAP was never advertised.
+    // Render observed inbound mutations leniently; outbound actions remain capability-gated.
     TargetRef dest = callbacks.resolveIrcv3Target(sid, event.target(), event.from(), status);
     String from = Objects.toString(event.from(), "").trim();
     if (from.isEmpty()) {
@@ -45,9 +45,6 @@ public class MediatorIrcv3EventHandler {
 
   public void handleMessageUnreactObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.MessageUnreactObserved event) {
-    if (!negotiatedFeaturePort.isDraftUnreactAvailable(sid)) {
-      return;
-    }
     TargetRef dest = callbacks.resolveIrcv3Target(sid, event.target(), event.from(), status);
     String from = Objects.toString(event.from(), "").trim();
     if (from.isEmpty()) {
@@ -63,9 +60,6 @@ public class MediatorIrcv3EventHandler {
 
   public void handleMessageRedactionObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.MessageRedactionObserved event) {
-    if (!negotiatedFeaturePort.isMessageRedactionAvailable(sid)) {
-      return;
-    }
     TargetRef dest = callbacks.resolveIrcv3Target(sid, event.target(), event.from(), status);
     String from = Objects.toString(event.from(), "").trim();
     String targetMsgId = Objects.toString(event.messageId(), "").trim();

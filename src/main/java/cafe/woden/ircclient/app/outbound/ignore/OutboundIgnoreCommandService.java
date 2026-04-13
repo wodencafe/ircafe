@@ -1,9 +1,7 @@
 package cafe.woden.ircclient.app.outbound.ignore;
 
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
-import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -16,23 +14,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class OutboundIgnoreCommandService {
+@RequiredArgsConstructor
+public final class OutboundIgnoreCommandService {
 
-  private final IgnoreHardCommandSupport ignoreHardCommandSupport;
-  private final IgnoreSoftCommandSupport ignoreSoftCommandSupport;
-
-  public OutboundIgnoreCommandService(
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      IgnoreListQueryPort ignoreListQueryPort,
-      IgnoreListCommandPort ignoreListCommandPort) {
-    this.ignoreHardCommandSupport =
-        new IgnoreHardCommandSupport(
-            ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
-    this.ignoreSoftCommandSupport =
-        new IgnoreSoftCommandSupport(
-            ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
-  }
+  @NonNull private final IgnoreHardCommandSupport ignoreHardCommandSupport;
+  @NonNull private final IgnoreSoftCommandSupport ignoreSoftCommandSupport;
 
   public void handleIgnore(String maskOrNick) {
     ignoreHardCommandSupport.handleIgnore(maskOrNick);

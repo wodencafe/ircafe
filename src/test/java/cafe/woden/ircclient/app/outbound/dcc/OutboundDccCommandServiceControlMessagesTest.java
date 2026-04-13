@@ -28,15 +28,32 @@ class OutboundDccCommandServiceControlMessagesTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final DccTransferStore dccTransferStore = mock(DccTransferStore.class);
   private final ExecutorService io = mock(ExecutorService.class);
+  private final DccRuntimeRegistry dccRuntimeRegistry = new DccRuntimeRegistry();
+  private final DccCommandSupport dccCommandSupport =
+      new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
+  private final DccChatSessionSupport dccChatSessionSupport =
+      new DccChatSessionSupport(
+          ui, IrcMediatorInteractionPort.from(irc), io, dccCommandSupport, dccRuntimeRegistry);
+  private final DccInboundOfferSupport dccInboundOfferSupport =
+      new DccInboundOfferSupport(dccCommandSupport, dccRuntimeRegistry);
+  private final DccOfferCommandSupport dccOfferCommandSupport =
+      new DccOfferCommandSupport(
+          ui,
+          IrcMediatorInteractionPort.from(irc),
+          connectionCoordinator,
+          io,
+          dccCommandSupport,
+          dccChatSessionSupport,
+          new DccFileTransferIoSupport(ui, dccCommandSupport),
+          dccRuntimeRegistry);
 
   private final OutboundDccCommandService service =
       new OutboundDccCommandService(
           ui,
-          IrcMediatorInteractionPort.from(irc),
           targetCoordinator,
-          connectionCoordinator,
-          dccTransferStore,
-          io);
+          dccChatSessionSupport,
+          dccInboundOfferSupport,
+          dccOfferCommandSupport);
 
   @Test
   void inboundResumeControlIsRecognizedAndNotReportedAsUnsupported() {

@@ -18,6 +18,8 @@ import cafe.woden.ircclient.logging.history.LogCursor;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerServiceConfig;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.List;
 import java.util.OptionalLong;
@@ -34,6 +36,7 @@ class LoggingFallbackConfigTest {
           .withUserConfiguration(
               ChatLogWriterConfig.class,
               ChatLogMaintenanceConfig.class,
+              ChatRedactionAuditServiceConfig.class,
               ChatLogViewerServiceConfig.class,
               ChatHistoryServiceConfig.class,
               ChatHistoryIngestorConfig.class,
@@ -49,6 +52,10 @@ class LoggingFallbackConfigTest {
           ChatLogMaintenance maintenance = ctx.getBean(ChatLogMaintenance.class);
           assertFalse(maintenance.enabled());
           maintenance.clearTarget(new TargetRef("srv", "#chan"));
+
+          ChatRedactionAuditService redactionAudit = ctx.getBean(ChatRedactionAuditService.class);
+          assertFalse(redactionAudit.enabled());
+          assertTrue(redactionAudit.findLatest(new TargetRef("srv", "#chan"), "m-1").isEmpty());
 
           ChatLogViewerService viewer = ctx.getBean(ChatLogViewerService.class);
           assertFalse(viewer.enabled());
@@ -93,6 +100,7 @@ class LoggingFallbackConfigTest {
             CustomOverrideConfig.class,
             ChatLogWriterConfig.class,
             ChatLogMaintenanceConfig.class,
+            ChatRedactionAuditServiceConfig.class,
             ChatLogViewerServiceConfig.class,
             ChatHistoryServiceConfig.class,
             ChatHistoryIngestorConfig.class,
@@ -105,6 +113,9 @@ class LoggingFallbackConfigTest {
               assertSame(
                   CustomOverrideConfig.CHAT_LOG_MAINTENANCE,
                   ctx.getBean("chatLogMaintenance", ChatLogMaintenance.class));
+              assertSame(
+                  CustomOverrideConfig.CHAT_REDACTION_AUDIT,
+                  ctx.getBean("chatRedactionAuditService", ChatRedactionAuditService.class));
               assertSame(
                   CustomOverrideConfig.CHAT_LOG_VIEWER,
                   ctx.getBean("chatLogViewerService", ChatLogViewerService.class));
@@ -151,6 +162,23 @@ class LoggingFallbackConfigTest {
           @Override
           public List<String> listUniqueChannels(String serverId, int limit) {
             return List.of("#custom");
+          }
+        };
+
+    static final ChatRedactionAuditService CHAT_REDACTION_AUDIT =
+        new ChatRedactionAuditService() {
+          @Override
+          public boolean enabled() {
+            return true;
+          }
+
+          @Override
+          public void record(ChatRedactionAuditRecord record) {}
+
+          @Override
+          public java.util.Optional<ChatRedactionAuditRecord> findLatest(
+              TargetRef target, String messageId) {
+            return java.util.Optional.empty();
           }
         };
 
@@ -201,6 +229,11 @@ class LoggingFallbackConfigTest {
     @Bean
     ChatLogViewerService chatLogViewerService() {
       return CHAT_LOG_VIEWER;
+    }
+
+    @Bean
+    ChatRedactionAuditService chatRedactionAuditService() {
+      return CHAT_REDACTION_AUDIT;
     }
 
     @Bean

@@ -29,47 +29,61 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
-import java.awt.Component;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
+import java.awt.event.MouseEvent;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.Action;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.tree.TreePath;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles tooltip and context-menu collaborators for the server tree UI. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
 
-  private ServerTreeViewInteractionCollaboratorsFactory() {}
+  @NonNull private final ServerTreeContextMenuBuilder contextMenuBuilder;
+  @NonNull private final ServerTreeTooltipResolver tooltipResolver;
+  @NonNull private final ServerTreeTooltipTextPolicy tooltipTextPolicy;
 
-  public static ServerTreeViewInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeViewInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
     ServerTreeRequestStreams requestStreams =
         Objects.requireNonNull(in.requestStreams(), "requestStreams");
 
     ServerTreeTooltipProvider tooltipProvider = createTooltipProvider(in, tree);
-    ServerTreeTooltipResolver tooltipResolver =
-        new ServerTreeTooltipResolver(
-            Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
-            tooltipProvider);
-    ServerTreeContextMenuBuilder contextMenuBuilder = createContextMenuBuilder(in, requestStreams);
+    Function<MouseEvent, String> tooltipResolver =
+        event ->
+            this.tooltipResolver.toolTipForEvent(
+                Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
+                tooltipProvider,
+                event);
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        createContextMenuBuilder(in, requestStreams);
 
     return new ServerTreeViewInteractionCollaborators(
         tooltipProvider, tooltipResolver, contextMenuBuilder);
   }
 
-  private static ServerTreeTooltipProvider createTooltipProvider(Inputs in, JTree tree) {
+  private ServerTreeTooltipProvider createTooltipProvider(Inputs in, JTree tree) {
     return new ServerTreeTooltipProvider(
         tree,
         ServerTreeTooltipProvider.context(
@@ -78,9 +92,13 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             Objects.requireNonNull(in.nodeAccess(), "nodeAccess")::isIrcRootNode,
             in.nodeAccess()::isApplicationRootNode,
             node -> backendIdForNetworksGroupNode(in, node),
-            Objects.requireNonNull(in.nodeClassifier(), "nodeClassifier")::isInterceptorsGroupNode,
-            in.nodeClassifier()::isMonitorGroupNode,
-            in.nodeClassifier()::isOtherGroupNode,
+            node ->
+                Objects.requireNonNull(in.nodeClassifier(), "nodeClassifier")
+                    .isInterceptorsGroupNode(
+                        Objects.requireNonNull(in.nodeClassifierContext(), "nodeClassifierContext"),
+                        node),
+            node -> in.nodeClassifier().isMonitorGroupNode(in.nodeClassifierContext(), node),
+            node -> in.nodeClassifier().isOtherGroupNode(in.nodeClassifierContext(), node),
             in.uiHooks()::isServerNode,
             in.isQuasselNetworkNode(),
             in.isQuasselEmptyStateNode(),
@@ -97,26 +115,31 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
                 isAutoConnectEnabled(in, backendId, originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
             nodeData -> isBouncerControlStatusNode(nodeData, in),
-            in.quasselNetworkTooltip()));
+            in.quasselNetworkTooltip()),
+        tooltipTextPolicy);
   }
 
-  private static ServerTreeContextMenuBuilder createContextMenuBuilder(
+  private Function<TreePath, JPopupMenu> createContextMenuBuilder(
       Inputs in, ServerTreeRequestStreams requestStreams) {
-    return new ServerTreeContextMenuBuilder(
-        ServerTreeContextMenuBuilder.routingContext(
-            in.uiHooks()::isServerNode,
-            in.nodeClassifier()::isInterceptorsGroupNode,
-            in.isQuasselNetworkNode(),
-            in.isQuasselEmptyStateNode()),
-        createServerNodeMenuContext(in),
-        createTargetNodeMenuContext(in, requestStreams),
-        createQuasselNetworkNodeMenuContext(in));
+    ServerTreeContextMenuBuilder.Contexts contexts =
+        new ServerTreeContextMenuBuilder.Contexts(
+            ServerTreeContextMenuBuilder.routingContext(
+                in.uiHooks()::isServerNode,
+                node ->
+                    in.nodeClassifier().isInterceptorsGroupNode(in.nodeClassifierContext(), node),
+                in.isQuasselNetworkNode(),
+                in.isQuasselEmptyStateNode()),
+            createServerNodeMenuContext(in),
+            createTargetNodeMenuContext(in, requestStreams),
+            createQuasselNetworkNodeMenuContext(in));
+    return path -> contextMenuBuilder.build(contexts, path);
   }
 
   private static ServerTreeServerNodeMenuBuilder.Context createServerNodeMenuContext(Inputs in) {
     return ServerTreeServerNodeMenuBuilder.context(
         in.nodeAccess()::isRootServerNode,
-        in.serverLabelPolicy()::prettyServerLabel,
+        serverId ->
+            in.serverLabelPolicy().prettyServerLabel(in.serverLabelPolicyContext(), serverId),
         in.uiHooks()::connectionStateForServer,
         in.runtimeState()::connectionDiagnosticsTipForServer,
         serverId -> serverEntry(in.serverCatalog(), serverId),
@@ -130,7 +153,9 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
         in.supportsQuasselCoreCommands(),
         () -> in.interceptorStore() != null,
-        in.interceptorActions()::promptAndAddInterceptor,
+        serverId ->
+            in.interceptorActions()
+                .promptAndAddInterceptor(in.interceptorActionsContext(), serverId),
         () -> in.serverDialogs() != null,
         serverId -> openSaveEphemeralServer(in, serverId),
         serverId -> openEditServer(in, serverId),
@@ -143,11 +168,12 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         (backendId, serverId) -> originForServer(in, backendId, serverId),
         (backendId, originId, networkKey) ->
             isAutoConnectEnabled(in, backendId, originId, networkKey),
-        serverId -> in.serverDisplayNames().getOrDefault(serverId, serverId),
+        serverId ->
+            in.serverLabelPolicy().prettyServerLabel(in.serverLabelPolicyContext(), serverId),
         (backendId, originId, networkKey, enabled) ->
             setAutoConnectEnabled(in, backendId, originId, networkKey, enabled),
         backendId -> refreshAutoConnectBadges(in, backendId),
-        in.nodeClassifier()::owningServerIdForNode);
+        node -> in.nodeClassifier().owningServerIdForNode(in.nodeClassifierContext(), node));
   }
 
   private static ServerTreeTargetNodeMenuBuilder.Context createTargetNodeMenuContext(
@@ -161,7 +187,9 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.uiHooks()::joinChannel,
         in.uiHooks()::disconnectChannel,
         in.uiHooks()::closeChannel,
-        in.bouncerDetachPolicy()::supportsBouncerDetach,
+        serverId ->
+            in.bouncerDetachPolicy()
+                .supportsBouncerDetach(in.bouncerDetachPolicyContext(), serverId),
         in.uiHooks()::bouncerDetachChannel,
         in.isChannelAutoReattach(),
         in.setChannelAutoReattach(),
@@ -177,9 +205,15 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.uiHooks()::closeTarget,
         target -> interceptorDefinition(in.interceptorStore(), target),
         () -> in.interceptorStore() != null,
-        in.interceptorActions()::setInterceptorEnabled,
-        in.interceptorActions()::promptRenameInterceptor,
-        in.interceptorActions()::confirmDeleteInterceptor);
+        (target, enabled) ->
+            in.interceptorActions()
+                .setInterceptorEnabled(in.interceptorActionsContext(), target, enabled),
+        (target, label) ->
+            in.interceptorActions()
+                .promptRenameInterceptor(in.interceptorActionsContext(), target, label),
+        (target, label) ->
+            in.interceptorActions()
+                .confirmDeleteInterceptor(in.interceptorActionsContext(), target, label));
   }
 
   private static ServerTreeQuasselNetworkNodeMenuBuilder.Context
@@ -226,7 +260,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     String label = Objects.toString(networkLabel, "").trim();
     String display = label.isEmpty() ? token : label;
     if (display.isEmpty()) display = "this network";
-    Component owner = in.ownerComponent();
+    java.awt.Component owner = in.ownerComponent();
     int choice =
         JOptionPane.showConfirmDialog(
             owner,
@@ -283,7 +317,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       return originFromServerId(backendId, serverId);
     }
     if (inputs.serverLabelPolicy() != null) {
-      String resolved = inputs.serverLabelPolicy().originForServer(backendId, serverId);
+      String resolved =
+          inputs
+              .serverLabelPolicy()
+              .originForServer(inputs.serverLabelPolicyContext(), backendId, serverId);
       if (resolved != null && !resolved.isBlank()) {
         return resolved;
       }
@@ -295,28 +332,32 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static String backendIdForNetworksGroupNode(
       Inputs inputs, javax.swing.tree.DefaultMutableTreeNode node) {
-    if (inputs == null || inputs.networkGroupManager() == null || node == null) {
+    if (inputs == null
+        || inputs.networkGroupManager() == null
+        || inputs.networkGroupManagerContext() == null
+        || node == null) {
       return null;
     }
-    for (String backendId : orderedBackendIds(inputs)) {
-      if (inputs.networkGroupManager().isNetworksGroupNode(backendId, node)) {
-        return backendId;
-      }
-    }
-    return null;
+    return inputs
+        .networkGroupManager()
+        .backendIdForNetworksGroupNode(inputs.networkGroupManagerContext(), node);
   }
 
   private static String backendIdForEphemeralServer(Inputs inputs, String serverId) {
     if (inputs == null || inputs.serverLabelPolicy() == null) {
       return null;
     }
-    return inputs.serverLabelPolicy().backendIdForEphemeralServer(serverId);
+    return inputs
+        .serverLabelPolicy()
+        .backendIdForEphemeralServer(inputs.serverLabelPolicyContext(), serverId);
   }
 
   private static boolean isAutoConnectEnabled(
       Inputs inputs, String backendId, String originId, String networkKey) {
     if (inputs != null && inputs.serverLabelPolicy() != null) {
-      return inputs.serverLabelPolicy().isAutoConnectEnabled(backendId, originId, networkKey);
+      return inputs
+          .serverLabelPolicy()
+          .isAutoConnectEnabled(inputs.serverLabelPolicyContext(), backendId, originId, networkKey);
     }
     String backend = normalizeBackendId(backendId);
     String origin = Objects.toString(originId, "").trim();
@@ -340,7 +381,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static void refreshAutoConnectBadges(Inputs inputs, String backendId) {
     if (inputs == null || inputs.nodeBadgeUpdater() == null) return;
-    inputs.nodeBadgeUpdater().refreshAutoConnectBadges(backendId);
+    inputs.nodeBadgeUpdater().refreshAutoConnectBadges(inputs.nodeBadgeUpdaterContext(), backendId);
   }
 
   private static Set<String> orderedBackendIds(Inputs inputs) {
@@ -449,9 +490,12 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeUiHooks uiHooks,
       ServerTreeNodeAccess nodeAccess,
       ServerTreeNetworkGroupManager networkGroupManager,
+      ServerTreeNetworkGroupManager.Context networkGroupManagerContext,
       ServerTreeNodeClassifier nodeClassifier,
+      ServerTreeNodeClassifier.Context nodeClassifierContext,
       ServerTreeRuntimeState runtimeState,
       ServerTreeServerLabelPolicy serverLabelPolicy,
+      ServerTreeServerLabelPolicy.Context serverLabelPolicyContext,
       Map<String, String> serverDisplayNames,
       java.util.function.Function<String, String> backendDisplayNameForServer,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
@@ -466,11 +510,14 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRequestEmitter requestEmitter,
       InterceptorStore interceptorStore,
       ServerTreeInterceptorActions interceptorActions,
+      ServerTreeInterceptorActions.Context interceptorActionsContext,
       ServerDialogs serverDialogs,
-      Component ownerComponent,
+      java.awt.Component ownerComponent,
       ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
+      ServerTreeNodeBadgeUpdater.Context nodeBadgeUpdaterContext,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
+      ServerTreeBouncerDetachPolicy.Context bouncerDetachPolicyContext,
       Predicate<TargetRef> isChannelDisconnected,
       Predicate<TargetRef> isChannelAutoReattach,
       BiConsumer<TargetRef, Boolean> setChannelAutoReattach,

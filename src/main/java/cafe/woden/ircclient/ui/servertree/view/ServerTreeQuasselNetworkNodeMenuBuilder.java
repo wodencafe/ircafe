@@ -10,8 +10,10 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /** Builds context menus for Quassel network container and empty-state tree nodes. */
+@Component
 public final class ServerTreeQuasselNetworkNodeMenuBuilder {
 
   private static final Logger log =
@@ -110,13 +112,8 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeQuasselNetworkNodeMenuBuilder(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  JPopupMenu buildNetworkNodeMenu(ServerTreeQuasselNetworkNodeData nodeData) {
+  JPopupMenu buildNetworkNodeMenu(Context context, ServerTreeQuasselNetworkNodeData nodeData) {
+    Objects.requireNonNull(context, "context");
     if (nodeData == null) return null;
     String serverId = Objects.toString(nodeData.serverId(), "").trim();
     if (serverId.isEmpty()) return null;

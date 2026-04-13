@@ -8,11 +8,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JfrRuntimeEventsServiceTest {
+
+  @TempDir Path tempDir;
 
   @Test
   void startsWithPersistedEnabledState() {
@@ -68,5 +75,51 @@ class JfrRuntimeEventsServiceTest {
     assertNotNull(report.bundlePath());
     assertTrue(Files.exists(report.bundlePath()));
     assertTrue(report.summary().contains("Memory diagnostics bundle"));
+  }
+
+  @Test
+  void memoryDiagnosticsBundleIncludesInstalledPluginSummary() throws Exception {
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
+    Path runtimeConfigDirectory = Files.createDirectories(tempDir.resolve("config-home/ircafe"));
+    Path runtimePath = runtimeConfigDirectory.resolve("ircafe.yml");
+    Path pluginJar = runtimeConfigDirectory.resolve("plugins").resolve("sample-plugin.jar");
+    when(runtimeConfig.readApplicationJfrEnabled(true)).thenReturn(true);
+    when(runtimeConfig.runtimeConfigPath()).thenReturn(runtimePath);
+
+    JfrRuntimeEventsService service =
+        new JfrRuntimeEventsService(
+            runtimeConfig,
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(),
+            runtimeConfigDirectory.resolve("plugins"),
+            List.of(new InstalledPluginDescriptor("sample-plugin", "1.4.0", 1, pluginJar)),
+            List.of(
+                new InstalledPluginProblem(
+                    "ERROR",
+                    "Failed to load plugin providers for backend commands",
+                    "Provider class could not be loaded")));
+    try {
+      JfrRuntimeEventsService.MemoryDiagnosticsExportReport report =
+          service.captureMemoryDiagnosticsBundle(false);
+
+      assertNotNull(report.bundlePath());
+      try (ZipFile zipFile = new ZipFile(report.bundlePath().toFile())) {
+        String runtimeSummary =
+            new String(
+                zipFile.getInputStream(zipFile.getEntry("runtime-summary.txt")).readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        assertTrue(runtimeSummary.contains("Plugins:"));
+        assertTrue(runtimeSummary.contains("Installed: 1"));
+        assertTrue(runtimeSummary.contains("Problems: 1"));
+        assertTrue(runtimeSummary.contains("sample-plugin v1.4.0 (api 1)"));
+        assertTrue(runtimeSummary.contains(pluginJar.toAbsolutePath().toString()));
+        assertTrue(
+            runtimeSummary.contains(
+                "[ERROR] Failed to load plugin providers for backend commands"));
+        assertTrue(runtimeSummary.contains("Provider class could not be loaded"));
+      }
+    } finally {
+      service.stop();
+    }
   }
 }

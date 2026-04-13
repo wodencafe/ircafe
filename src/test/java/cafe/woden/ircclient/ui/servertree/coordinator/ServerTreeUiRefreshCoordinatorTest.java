@@ -31,9 +31,9 @@ class ServerTreeUiRefreshCoordinatorTest {
     AtomicInteger restoreCount = new AtomicInteger();
     AtomicReference<Set<TreePath>> restored = new AtomicReference<>();
     Set<TreePath> expanded = Set.of(new TreePath(child.getPath()));
-
-    ServerTreeUiRefreshCoordinator coordinator =
-        new ServerTreeUiRefreshCoordinator(
+    ServerTreeUiRefreshCoordinator coordinator = new ServerTreeUiRefreshCoordinator();
+    ServerTreeUiRefreshCoordinator.Context context =
+        ServerTreeUiRefreshCoordinator.context(
             tree,
             model,
             root,
@@ -47,7 +47,7 @@ class ServerTreeUiRefreshCoordinatorTest {
               restored.set(paths);
             });
 
-    coordinator.refreshTreeLayoutAfterUiChange();
+    coordinator.refreshTreeLayoutAfterUiChange(context);
 
     assertEquals(1, snapshotCount.get());
     assertEquals(1, restoreCount.get());

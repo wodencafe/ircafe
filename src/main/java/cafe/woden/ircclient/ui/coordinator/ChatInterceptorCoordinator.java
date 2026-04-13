@@ -7,6 +7,7 @@ import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.SwingUtilities;
@@ -21,13 +22,15 @@ public final class ChatInterceptorCoordinator {
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Runnable dockTitleRefresher;
   private final Consumer<TargetRef> targetSelectionHandler;
+  private final BiConsumer<TargetRef, String> hitMessageNavigator;
 
   public ChatInterceptorCoordinator(
       InterceptorStore interceptorStore,
       InterceptorPanel interceptorPanel,
       Supplier<TargetRef> activeTargetSupplier,
       Runnable dockTitleRefresher,
-      Consumer<TargetRef> targetSelectionHandler) {
+      Consumer<TargetRef> targetSelectionHandler,
+      BiConsumer<TargetRef, String> hitMessageNavigator) {
     this.interceptorStore = Objects.requireNonNull(interceptorStore, "interceptorStore");
     this.interceptorPanel = Objects.requireNonNull(interceptorPanel, "interceptorPanel");
     this.activeTargetSupplier =
@@ -35,6 +38,7 @@ public final class ChatInterceptorCoordinator {
     this.dockTitleRefresher = Objects.requireNonNull(dockTitleRefresher, "dockTitleRefresher");
     this.targetSelectionHandler =
         Objects.requireNonNull(targetSelectionHandler, "targetSelectionHandler");
+    this.hitMessageNavigator = Objects.requireNonNull(hitMessageNavigator, "hitMessageNavigator");
   }
 
   public void bind(CompositeDisposable disposables) {
@@ -45,6 +49,14 @@ public final class ChatInterceptorCoordinator {
           if (ref == null) return;
           targetSelectionHandler.accept(ref);
         });
+    interceptorPanel.setOnJumpToMessage(
+        (ref, messageId) -> {
+          if (ref == null) return;
+          String msgId = Objects.toString(messageId, "").trim();
+          if (msgId.isEmpty()) return;
+          hitMessageNavigator.accept(ref, msgId);
+        });
+    interceptorPanel.setOnLocalDefinitionNameChanged(dockTitleRefresher);
 
     disposables.add(
         interceptorStore
@@ -59,6 +71,7 @@ public final class ChatInterceptorCoordinator {
                       InterceptorScope.scopedServerIdForTarget(activeTarget);
                   if (!Objects.equals(activeScopeServerId, change.serverId())) return;
                   if (!Objects.equals(activeTarget.interceptorId(), change.interceptorId())) return;
+                  if (interceptorPanel.consumeLocalDefinitionStoreChangeRefreshSkip()) return;
 
                   SwingUtilities.invokeLater(
                       () -> {

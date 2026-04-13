@@ -44,15 +44,17 @@ class QuasselOutboundCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(List.of(new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          irc);
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final QuasselOutboundCommandSupport quasselCommandSupport =
       new QuasselOutboundCommandSupport(serverCatalog, outboundBackendCapabilityPolicy);
   private final QuasselOutboundCommandService service =

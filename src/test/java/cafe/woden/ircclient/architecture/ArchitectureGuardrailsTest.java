@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.architecture;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaAccess.Predicates.originOwnerEqualsTargetOwner;
 import static com.tngtech.archunit.core.domain.JavaCall.Predicates.target;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
 import static com.tngtech.archunit.core.domain.properties.HasOwner.Predicates.With.owner;
@@ -18,6 +20,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import java.util.Set;
 
 @AnalyzeClasses(
     packages = "cafe.woden.ircclient",
@@ -78,6 +81,112 @@ class ArchitectureGuardrailsTest {
               || name.startsWith("cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers$")
               || name.equals("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers")
               || name.startsWith("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers$");
+        }
+      };
+
+  private static final Set<String> EXTRACTED_SPRING_BEAN_TYPE_NAMES =
+      Set.of(
+          "cafe.woden.ircclient.app.outbound.channel.OutboundTargetMembershipCommandSupport",
+          "cafe.woden.ircclient.app.outbound.channel.PartCommandSupport",
+          "cafe.woden.ircclient.app.outbound.channel.OutboundModeCommandService",
+          "cafe.woden.ircclient.app.outbound.channel.OutboundNamesWhoListCommandService",
+          "cafe.woden.ircclient.app.outbound.channel.OutboundJoinPartCommandService",
+          "cafe.woden.ircclient.app.outbound.channel.OutboundTopicKickCommandService",
+          "cafe.woden.ircclient.app.outbound.ignore.IgnoreHardCommandSupport",
+          "cafe.woden.ircclient.app.outbound.ignore.IgnoreSoftCommandSupport",
+          "cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService",
+          "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandSupport",
+          "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandService",
+          "cafe.woden.ircclient.app.outbound.identity.NickCommandSupport",
+          "cafe.woden.ircclient.app.outbound.identity.AwayCommandSupport",
+          "cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService",
+          "cafe.woden.ircclient.app.outbound.dcc.DccRuntimeRegistry",
+          "cafe.woden.ircclient.app.outbound.dcc.DccCommandSupport",
+          "cafe.woden.ircclient.app.outbound.dcc.DccChatSessionSupport",
+          "cafe.woden.ircclient.app.outbound.dcc.DccInboundOfferSupport",
+          "cafe.woden.ircclient.app.outbound.dcc.DccFileTransferIoSupport",
+          "cafe.woden.ircclient.app.outbound.dcc.DccOfferCommandSupport",
+          "cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService",
+          "cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport",
+          "cafe.woden.ircclient.app.api.Ircv3MultilineFeatureSupport",
+          "cafe.woden.ircclient.app.outbound.messaging.OutboundMultilineMessageSupport",
+          "cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport",
+          "cafe.woden.ircclient.app.outbound.mutation.OutboundMessageMutationCommandService",
+          "cafe.woden.ircclient.app.outbound.invite.PendingInviteCommandSupport",
+          "cafe.woden.ircclient.app.outbound.invite.OutboundInviteCommandService",
+          "cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport",
+          "cafe.woden.ircclient.app.outbound.chathistory.OutboundChatHistoryRequestSupport",
+          "cafe.woden.ircclient.app.outbound.chathistory.OutboundChatHistoryCommandService",
+          "cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalog",
+          "cafe.woden.ircclient.app.outbound.backend.OutboundBackendFeatureRegistry",
+          "cafe.woden.ircclient.app.outbound.backend.BackendNamedOutboundCommandRouter",
+          "cafe.woden.ircclient.app.outbound.backend.QuasselOutboundCommandSupport",
+          "cafe.woden.ircclient.app.outbound.backend.MessageMutationOutboundCommandsRouter",
+          "cafe.woden.ircclient.app.outbound.backend.BackendUploadCommandRegistry",
+          "cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeCompositionAssembler",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaboratorsFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaboratorsFactory",
+          "cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory",
+          "cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier",
+          "cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator",
+          "cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade",
+          "cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator",
+          "cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder",
+          "cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory",
+          "cafe.woden.ircclient.ui.servertree.ServerTreeEdtExecutor",
+          "cafe.woden.ircclient.ui.servertree.ServerTreeExternalStreamBinder",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer",
+          "cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy",
+          "cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions",
+          "cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier",
+          "cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService",
+          "cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider",
+          "cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver",
+          "cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver",
+          "cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator",
+          "cafe.woden.ircclient.ui.servertree.mutation.ServerTreeChannelListNodeEnsurer",
+          "cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager",
+          "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator",
+          "cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySettings",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeExpansionStateManager",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater",
+          "cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy",
+          "cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder");
+
+  private static final DescribedPredicate<JavaClass> EXTRACTED_SPRING_BEAN_TYPES =
+      new DescribedPredicate<>("extracted Spring bean types") {
+        @Override
+        public boolean test(JavaClass input) {
+          return EXTRACTED_SPRING_BEAN_TYPE_NAMES.contains(input.getName());
         }
       };
 
@@ -395,6 +504,9 @@ class ArchitectureGuardrailsTest {
           .and()
           .doNotHaveFullyQualifiedName(
               "cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalog")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalogState")
           .and()
           .doNotHaveFullyQualifiedName(
               "cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension")
@@ -963,6 +1075,15 @@ class ArchitectureGuardrailsTest {
           .callConstructorWhere(target(owner(assignableTo(Thread.class))))
           .because(
               "direct new Thread(...) creation should be avoided in favor of VirtualThreads helpers");
+
+  @ArchTest
+  static final ArchRule production_code_should_not_manually_construct_extracted_spring_beans =
+      noClasses()
+          .should()
+          .callConstructorWhere(
+              target(owner(EXTRACTED_SPRING_BEAN_TYPES)).and(not(originOwnerEqualsTargetOwner())))
+          .because(
+              "standalone logic bundles promoted to Spring beans should be injected, not manually instantiated in production code");
 
   @ArchTest
   static final ArchRule app_should_not_use_rxjava_default_io_scheduler =

@@ -16,9 +16,18 @@ class PircbotxAvailabilitySupportTest {
   @Test
   void draftUnreactAvailabilityFallsBackToDraftReact() {
     PircbotxConnectionState connection = liveConnection();
-    connection.setDraftReactCapAcked(true);
+    connection.setMessageTagsCapAcked(true);
 
     assertTrue(support.isDraftUnreactAvailable(connection));
+  }
+
+  @Test
+  void draftReplyAvailabilityUsesMessageTags() {
+    PircbotxConnectionState connection = liveConnection();
+    connection.setMessageTagsCapAcked(true);
+
+    assertTrue(support.isDraftReplyAvailable(connection));
+    assertTrue(support.isDraftReactAvailable(connection));
   }
 
   @Test

@@ -5,7 +5,7 @@ import io.reactivex.rxjava3.core.Completable;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
-/** Typing capability/readiness + send API used by UI coordinators. */
+/** Typing readiness + send API used by UI coordinators. */
 @SecondaryPort
 @ApplicationLayer
 public interface IrcTypingPort {
@@ -19,7 +19,7 @@ public interface IrcTypingPort {
   }
 
   default Completable sendTyping(String serverId, String target, String state) {
-    return Completable.error(new UnsupportedOperationException("typing capability not supported"));
+    return Completable.error(new UnsupportedOperationException("typing support not available"));
   }
 
   static IrcTypingPort from(IrcClientService irc) {

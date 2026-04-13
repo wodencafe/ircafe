@@ -39,6 +39,7 @@ final class HistoryStoragePanelSupport {
             "Logging behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     behavior.add(logging.enabled, "growx");
     behavior.add(logging.logSoftIgnored, "growx");
+    behavior.add(logging.redactionAuditEnabled, "growx");
     behavior.add(logging.logPrivateMessages, "growx");
     behavior.add(logging.savePrivateMessageList, "growx, wrap");
 

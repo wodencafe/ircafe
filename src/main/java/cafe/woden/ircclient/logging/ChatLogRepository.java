@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -193,6 +194,27 @@ public class ChatLogRepository {
        LIMIT 1
       """;
 
+  private static final String SELECT_LATEST_BY_MESSAGE_ID_SQL =
+      """
+      SELECT server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
+             outgoing_local_echo, soft_ignored, meta
+        FROM chat_log
+       WHERE server_id = ?
+         AND LOWER(target) = LOWER(?)
+         AND message_id = ?
+    ORDER BY ts_epoch_ms DESC, id DESC
+       LIMIT 1
+      """;
+
+  private static final String UPDATE_TEXT_BY_MESSAGE_ID_SQL =
+      """
+      UPDATE chat_log
+         SET text = ?
+       WHERE server_id = ?
+         AND LOWER(target) = LOWER(?)
+         AND message_id = ?
+      """;
+
   private static final RowMapper<LogLine> ROW_MAPPER =
       (rs, rowNum) ->
           new LogLine(
@@ -325,6 +347,23 @@ public class ChatLogRepository {
       // Fail open: treat as "not present" so ingestion can proceed.
       return false;
     }
+  }
+
+  public Optional<LogLine> findLatestByMessageId(String serverId, String target, String messageId) {
+    String sid = Objects.toString(serverId, "").trim();
+    String tgt = Objects.toString(target, "").trim();
+    String msgId = normalizeMessageId(messageId);
+    if (sid.isEmpty() || tgt.isEmpty() || msgId == null) return Optional.empty();
+    List<LogLine> rows = jdbc.query(SELECT_LATEST_BY_MESSAGE_ID_SQL, ROW_MAPPER, sid, tgt, msgId);
+    return rows == null || rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+  }
+
+  public int updateTextByMessageId(String serverId, String target, String messageId, String text) {
+    String sid = Objects.toString(serverId, "").trim();
+    String tgt = Objects.toString(target, "").trim();
+    String msgId = normalizeMessageId(messageId);
+    if (sid.isEmpty() || tgt.isEmpty() || msgId == null) return 0;
+    return jdbc.update(UPDATE_TEXT_BY_MESSAGE_ID_SQL, truncate(text), sid, tgt, msgId);
   }
 
   /** Fetch the most recent {@code limit} lines for a given server+target (newest-first). */

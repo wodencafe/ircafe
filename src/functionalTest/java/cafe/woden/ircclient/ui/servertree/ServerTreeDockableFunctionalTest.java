@@ -11,9 +11,12 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.event.ActionEvent;
@@ -27,6 +30,7 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
@@ -110,6 +114,55 @@ class ServerTreeDockableFunctionalTest {
       assertEquals(ignores, selectedTargets.getLast());
     } finally {
       sub.dispose();
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void interceptorChildNodesShowTheirOwnHitCountsInsteadOfParentGroupBadge() throws Exception {
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    when(interceptorStore.changes()).thenReturn(Flowable.never());
+    when(interceptorStore.totalHitCount("libera")).thenReturn(5);
+    when(interceptorStore.listInterceptorRefsForBaseServer("libera"))
+        .thenReturn(
+            List.of(
+                new InterceptorStore.ScopedInterceptorRef("libera", "audit"),
+                new InterceptorStore.ScopedInterceptorRef("libera", "watcher")));
+    when(interceptorStore.interceptorName("libera", "audit")).thenReturn("Audit");
+    when(interceptorStore.interceptorName("libera", "watcher")).thenReturn("Watcher");
+    when(interceptorStore.hitCount("libera", "audit")).thenReturn(2);
+    when(interceptorStore.hitCount("libera", "watcher")).thenReturn(3);
+
+    ServerTreeDockable dockable = newDockable(interceptorStore);
+    try {
+      onEdt(() -> invokeAddServerRoot(dockable, "libera"));
+      flushEdt();
+
+      @SuppressWarnings("unchecked")
+      Map<TargetRef, DefaultMutableTreeNode> leaves =
+          onEdtCall(
+              () -> {
+                Field leavesField = ServerTreeDockable.class.getDeclaredField("leaves");
+                leavesField.setAccessible(true);
+                return (Map<TargetRef, DefaultMutableTreeNode>) leavesField.get(dockable);
+              });
+
+      ServerTreeNodeData groupData =
+          (ServerTreeNodeData) leaves.get(TargetRef.interceptorsGroup("libera")).getUserObject();
+      ServerTreeNodeData auditData =
+          (ServerTreeNodeData) leaves.get(TargetRef.interceptor("libera", "audit")).getUserObject();
+      ServerTreeNodeData watcherData =
+          (ServerTreeNodeData)
+              leaves.get(TargetRef.interceptor("libera", "watcher")).getUserObject();
+
+      assertEquals(0, groupData.unread);
+      assertEquals(0, groupData.highlightUnread);
+      assertEquals(2, auditData.unread);
+      assertEquals(0, auditData.highlightUnread);
+      assertEquals(3, watcherData.unread);
+      assertEquals(0, watcherData.highlightUnread);
+    } finally {
       onEdt(dockable::shutdown);
       flushEdt();
     }
@@ -249,7 +302,7 @@ class ServerTreeDockableFunctionalTest {
   }
 
   private static ServerTreeDockable newDockable() {
-    return new ServerTreeDockable(
+    return FunctionalTestWiringSupport.newServerTreeDockable(
         null,
         null,
         null,
@@ -265,7 +318,7 @@ class ServerTreeDockableFunctionalTest {
 
   private static ServerTreeDockable newDockable(
       ServerCatalog serverCatalog, RuntimeConfigStore runtimeConfig) {
-    return new ServerTreeDockable(
+    return FunctionalTestWiringSupport.newServerTreeDockable(
         serverCatalog,
         runtimeConfig,
         null,
@@ -275,6 +328,21 @@ class ServerTreeDockableFunctionalTest {
         new DisconnectButton(),
         null,
         null,
+        null,
+        null);
+  }
+
+  private static ServerTreeDockable newDockable(InterceptorStore interceptorStore) {
+    return FunctionalTestWiringSupport.newServerTreeDockable(
+        null,
+        null,
+        null,
+        null,
+        null,
+        new ConnectButton(),
+        new DisconnectButton(),
+        null,
+        interceptorStore,
         null,
         null);
   }
@@ -338,11 +406,9 @@ class ServerTreeDockableFunctionalTest {
 
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
-    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu =
-        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
-    buildPopupMenu.setAccessible(true);
-    return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(node.getPath()));
   }
 
   @SuppressWarnings("unchecked")
@@ -360,12 +426,9 @@ class ServerTreeDockableFunctionalTest {
 
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
-    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu =
-        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
-    buildPopupMenu.setAccessible(true);
-    return (JPopupMenu)
-        buildPopupMenu.invoke(contextMenuBuilder, new TreePath(serverNode.getPath()));
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(serverNode.getPath()));
   }
 
   private static void invokeAddServerRoot(ServerTreeDockable dockable, String serverId)

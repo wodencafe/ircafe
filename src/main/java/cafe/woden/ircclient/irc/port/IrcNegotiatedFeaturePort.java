@@ -13,6 +13,10 @@ public interface IrcNegotiatedFeaturePort {
     return false;
   }
 
+  default boolean isMessageTagsAvailable(String serverId) {
+    return false;
+  }
+
   default boolean isDraftReplyAvailable(String serverId) {
     return false;
   }
@@ -37,7 +41,7 @@ public interface IrcNegotiatedFeaturePort {
     return 0;
   }
 
-  default boolean isMessageEditAvailable(String serverId) {
+  default boolean isExperimentalMessageEditAvailable(String serverId) {
     return false;
   }
 
@@ -71,6 +75,11 @@ public interface IrcNegotiatedFeaturePort {
       }
 
       @Override
+      public boolean isMessageTagsAvailable(String serverId) {
+        return irc.isMessageTagsAvailable(serverId);
+      }
+
+      @Override
       public boolean isDraftReplyAvailable(String serverId) {
         return irc.isDraftReplyAvailable(serverId);
       }
@@ -101,8 +110,8 @@ public interface IrcNegotiatedFeaturePort {
       }
 
       @Override
-      public boolean isMessageEditAvailable(String serverId) {
-        return irc.isMessageEditAvailable(serverId);
+      public boolean isExperimentalMessageEditAvailable(String serverId) {
+        return irc.isExperimentalMessageEditAvailable(serverId);
       }
 
       @Override

@@ -5,15 +5,12 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
-import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
-import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.PendingInvitePort;
-import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -21,6 +18,7 @@ import org.springframework.stereotype.Component;
 /** Handles outbound invite command flow: /invite and pending invite actions. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundInviteCommandService {
 
   @NonNull
@@ -33,37 +31,6 @@ public final class OutboundInviteCommandService {
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final PendingInviteCommandSupport pendingInviteCommandSupport;
-
-  public OutboundInviteCommandService(
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundRawCommandSupport rawCommandSupport,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      PendingInvitePort pendingInviteState,
-      WhoisRoutingPort whoisRoutingState,
-      IgnoreListCommandPort ignoreListService) {
-    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-    this.rawCommandSupport = Objects.requireNonNull(rawCommandSupport, "rawCommandSupport");
-    this.pendingInviteCommandSupport =
-        new PendingInviteCommandSupport(
-            mediatorIrc,
-            ui,
-            connectionCoordinator,
-            targetCoordinator,
-            commandTargetPolicy,
-            Objects.requireNonNull(runtimeConfig, "runtimeConfig"),
-            Objects.requireNonNull(pendingInviteState, "pendingInviteState"),
-            Objects.requireNonNull(whoisRoutingState, "whoisRoutingState"),
-            Objects.requireNonNull(ignoreListService, "ignoreListService"));
-  }
 
   public void handleInvite(CompositeDisposable disposables, String nick, String channel) {
     TargetRef at = targetCoordinator.getActiveTarget();

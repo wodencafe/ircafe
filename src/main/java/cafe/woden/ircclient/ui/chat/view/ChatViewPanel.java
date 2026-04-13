@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.view;
 
 import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
@@ -14,11 +15,9 @@ import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.EmojiFontSupport;
 import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
 import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
-import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Point;
@@ -27,15 +26,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.net.URI;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
@@ -43,20 +35,13 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Element;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public abstract class ChatViewPanel extends JPanel implements Scrollable {
-
-  private static final Logger log = LoggerFactory.getLogger(ChatViewPanel.class);
-  private static final Pattern URL_TOKEN_PATTERN =
-      Pattern.compile("(?i)(https?://[^\\s<>\"\\u0000-\\u001F]+|www\\.[^\\s<>\"\\u0000-\\u001F]+)");
 
   protected final WrapTextPane chat = new WrapTextPane();
   protected final JScrollPane scroll = new JScrollPane(chat);
@@ -66,6 +51,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private final ChatFindBarDecorator findBar;
 
   private final UiSettingsBus settingsBus;
+  private ExternalBrowserLauncher externalBrowserLauncher;
 
   private StyledDocument currentDocument;
 
@@ -74,15 +60,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private final ChatTranscriptContextMenuDecorator transcriptMenu;
 
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
-  private final JPopupMenu hoverActionRail = new JPopupMenu();
-  private final JButton hoverReplyButton = createHoverRailButton("Reply");
-  private final JButton hoverReactButton = createHoverRailButton("React");
-  private final JButton hoverUnreactButton = createHoverRailButton("Unreact");
-  private final JButton hoverEditButton = createHoverRailButton("Edit");
-  private final JButton hoverRedactButton = createHoverRailButton("Redact");
-  private final Timer hoverActionRailHideTimer = new Timer(2400, e -> hideHoverActionRail());
-  private String hoverActionRailMessageId = "";
-  private int hoverActionRailAnchorY = Integer.MIN_VALUE;
 
   protected ChatViewPanel(UiSettingsBus settingsBus) {
     super(new BorderLayout());
@@ -121,8 +98,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
                 this::editContextActionVisible,
                 this::redactContextActionVisible,
                 this::onEditMessageRequested,
-                this::onRedactMessageRequested));
-    configureHoverActionRail();
+                this::onRedactMessageRequested,
+                this::revealRedactedMessageContextActionVisible,
+                this::onRevealRedactedMessageRequested));
     decorators.add(installTranscriptMouseBehavior());
     this.followTailScroll =
         decorators.add(
@@ -149,6 +127,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             () -> this.settingsBus == null || this.settingsBus.chatSmoothWheelScrollingEnabled()));
 
     add(scroll, BorderLayout.CENTER);
+  }
+
+  public final void setExternalBrowserLauncher(ExternalBrowserLauncher externalBrowserLauncher) {
+    this.externalBrowserLauncher = externalBrowserLauncher;
   }
 
   @Override
@@ -333,6 +315,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Reveal Redacted Message…". */
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return false;
+  }
+
   /** Whether the transcript context menu should show "Load Newer History". */
   protected boolean loadNewerHistoryContextActionVisible() {
     return false;
@@ -378,6 +365,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     // default: no-op
   }
 
+  /** Called by transcript context menu action "Reveal Redacted Message…". */
+  protected void onRevealRedactedMessageRequested(String messageId) {
+    // default: no-op
+  }
+
   /** Whether this message id belongs to the local user and is eligible for edit/redact actions. */
   protected boolean isOwnMessageForContextActions(String messageId) {
     return false;
@@ -393,7 +385,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     String msgId = Objects.toString(messageId, "").trim();
     if (target.isEmpty() || msgId.isEmpty()) return "";
     String escapedMsgId = escapeIrcv3TagValue(msgId);
-    return "/quote @+draft/reply=" + escapedMsgId + " PRIVMSG " + target + " :";
+    return "/quote @+reply=" + escapedMsgId + " PRIVMSG " + target + " :";
   }
 
   /**
@@ -407,7 +399,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     String msgId = Objects.toString(messageId, "").trim();
     if (target.isEmpty() || msgId.isEmpty()) return "";
     String escapedMsgId = escapeIrcv3TagValue(msgId);
-    return "/quote @+draft/react=:+1:;+draft/reply=" + escapedMsgId + " TAGMSG " + target;
+    return "/quote @+draft/react=:+1:;+reply=" + escapedMsgId + " TAGMSG " + target;
   }
 
   /**
@@ -507,8 +499,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    * their lifecycle shutdown (@PreDestroy).
    */
   protected void closeDecorators() {
-    hideHoverActionRail();
-    hoverActionRailHideTimer.stop();
     decorators.closeQuietly();
   }
 
@@ -693,26 +683,19 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             String ch = channelAt(e.getPoint());
             String nick = nickAt(e.getPoint());
             String msgRef = messageReferenceAt(e.getPoint());
-            String msgId = messageIdAt(e.getPoint());
             chat.setCursor(
                 (manual != null || url != null || ch != null || nick != null || msgRef != null)
                     ? hand
                     : text);
-            updateHoverActionRail(e, msgId, manual, url, ch, nick, msgRef);
           }
 
           @Override
-          public void mousePressed(MouseEvent e) {
-            if (e != null && (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e))) {
-              hideHoverActionRail();
-            }
-          }
+          public void mousePressed(MouseEvent e) {}
 
           @Override
           public void mouseClicked(MouseEvent e) {
             if (e == null || chat == null) return;
             if (!SwingUtilities.isLeftMouseButton(e)) return;
-            hideHoverActionRail();
 
             ManualPreviewHit manual = manualPreviewHitAt(e.getPoint());
             if (manual != null) {
@@ -759,9 +742,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
           }
 
           @Override
-          public void mouseExited(MouseEvent e) {
-            scheduleHoverActionRailHide();
-          }
+          public void mouseExited(MouseEvent e) {}
         };
     chat.addMouseMotionListener(listener);
     chat.addMouseListener(listener);
@@ -774,167 +755,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         chat.removeMouseListener(listener);
       } catch (Exception ignored) {
       }
-      hideHoverActionRail();
     };
-  }
-
-  private void configureHoverActionRail() {
-    hoverActionRail.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 3));
-    hoverActionRail.setBorder(
-        BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(resolveHoverRailBorderColor()),
-            BorderFactory.createEmptyBorder(0, 1, 0, 1)));
-    hoverActionRail.setFocusable(false);
-
-    hoverActionRail.add(hoverReplyButton);
-    hoverActionRail.add(hoverReactButton);
-    hoverActionRail.add(hoverUnreactButton);
-    hoverActionRail.add(hoverEditButton);
-    hoverActionRail.add(hoverRedactButton);
-
-    hoverReplyButton.addActionListener(e -> triggerHoverAction(this::onReplyToMessageRequested));
-    hoverReactButton.addActionListener(e -> triggerHoverAction(this::onReactToMessageRequested));
-    hoverUnreactButton.addActionListener(
-        e -> triggerHoverAction(this::onUnreactToMessageRequested));
-    hoverEditButton.addActionListener(e -> triggerHoverAction(this::onEditMessageRequested));
-    hoverRedactButton.addActionListener(e -> triggerHoverAction(this::onRedactMessageRequested));
-
-    hoverActionRailHideTimer.setRepeats(false);
-  }
-
-  private static Color resolveHoverRailBorderColor() {
-    Color border = UIManager.getColor("Component.borderColor");
-    if (border == null) border = UIManager.getColor("Separator.foreground");
-    if (border == null) border = new Color(0x8B8F95);
-    return border;
-  }
-
-  private static JButton createHoverRailButton(String label) {
-    JButton button = new JButton(label);
-    button.setFocusable(false);
-    button.setMargin(new java.awt.Insets(1, 6, 1, 6));
-    return button;
-  }
-
-  private void triggerHoverAction(java.util.function.Consumer<String> action) {
-    if (action == null) return;
-    String msgId = Objects.toString(hoverActionRailMessageId, "").trim();
-    if (msgId.isEmpty()) return;
-    try {
-      action.accept(msgId);
-    } catch (Exception ignored) {
-    } finally {
-      hideHoverActionRail();
-    }
-  }
-
-  private void updateHoverActionRail(
-      MouseEvent e,
-      String messageId,
-      ManualPreviewHit manual,
-      String url,
-      String channel,
-      String nick,
-      String msgRef) {
-    if (e == null || messageId == null || messageId.isBlank()) {
-      hideHoverActionRail();
-      return;
-    }
-    if (manual != null || url != null || channel != null || nick != null || msgRef != null) {
-      hideHoverActionRail();
-      return;
-    }
-    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-      hideHoverActionRail();
-      return;
-    }
-
-    boolean showReply = replyContextActionVisible();
-    boolean showReact = reactContextActionVisible();
-    boolean showUnreact = unreactContextActionVisible();
-    boolean ownMessage = isOwnMessageForContextActions(messageId);
-    boolean showEdit = editContextActionVisible() && ownMessage;
-    boolean showRedact = redactContextActionVisible() && ownMessage;
-    if (!showReply && !showReact && !showUnreact && !showEdit && !showRedact) {
-      hideHoverActionRail();
-      return;
-    }
-
-    showHoverActionRail(
-        e.getPoint(), messageId, showReply, showReact, showUnreact, showEdit, showRedact);
-  }
-
-  private void showHoverActionRail(
-      Point anchor,
-      String messageId,
-      boolean showReply,
-      boolean showReact,
-      boolean showUnreact,
-      boolean showEdit,
-      boolean showRedact) {
-    if (anchor == null || messageId == null || messageId.isBlank()) {
-      hideHoverActionRail();
-      return;
-    }
-    int pos = chat.viewToModel2D(anchor);
-    if (pos < 0) {
-      hideHoverActionRail();
-      return;
-    }
-
-    java.awt.geom.Rectangle2D lineRect;
-    try {
-      lineRect = chat.modelToView2D(pos);
-    } catch (Exception ignored) {
-      lineRect = null;
-    }
-    if (lineRect == null) {
-      hideHoverActionRail();
-      return;
-    }
-
-    hoverReplyButton.setVisible(showReply);
-    hoverReactButton.setVisible(showReact);
-    hoverUnreactButton.setVisible(showUnreact);
-    hoverEditButton.setVisible(showEdit);
-    hoverRedactButton.setVisible(showRedact);
-    String previousMessageId = hoverActionRailMessageId;
-    hoverActionRailMessageId = messageId;
-
-    Dimension pref = hoverActionRail.getPreferredSize();
-    Rectangle visible = chat.getVisibleRect();
-    int x = visible.x + Math.max(2, visible.width - pref.width - 8);
-    int y = Math.max(visible.y + 2, (int) Math.round(lineRect.getY()) - 2);
-    int maxY = visible.y + Math.max(2, visible.height - pref.height - 2);
-    y = Math.min(y, maxY);
-
-    if (hoverActionRail.isVisible()
-        && messageId.equals(previousMessageId)
-        && Math.abs(y - hoverActionRailAnchorY) <= 2) {
-      hoverActionRailHideTimer.restart();
-      return;
-    }
-
-    hoverActionRailAnchorY = y;
-    if (hoverActionRail.isVisible()) {
-      hoverActionRail.setVisible(false);
-    }
-    hoverActionRail.show(chat, x, y);
-    hoverActionRailHideTimer.restart();
-  }
-
-  private void scheduleHoverActionRailHide() {
-    if (!hoverActionRail.isVisible()) return;
-    hoverActionRailHideTimer.restart();
-  }
-
-  private void hideHoverActionRail() {
-    hoverActionRailHideTimer.stop();
-    hoverActionRailMessageId = "";
-    hoverActionRailAnchorY = Integer.MIN_VALUE;
-    if (hoverActionRail.isVisible()) {
-      hoverActionRail.setVisible(false);
-    }
   }
 
   // Keep in sync with ChatRichTextRenderer#isNickChar.
@@ -953,190 +774,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   private void openUrl(String url) {
-    String raw = sanitizeUrlForBrowser(url);
-    if (raw == null || raw.isBlank()) return;
-
-    VirtualThreads.start(
-        "ircafe-open-url",
-        () -> {
-          // On Linux, prefer explicit browser executables before Desktop/xdg handlers.
-          // Some desktop MIME associations can route URLs to non-browser apps.
-          if (isLinux() && tryPlatformOpen(raw)) return;
-          if (tryDesktopBrowse(raw)) return;
-          if (!isLinux() && tryPlatformOpen(raw)) return;
-          log.warn("[ircafe] Could not open URL in browser: {}", raw);
-        });
-  }
-
-  private static boolean tryDesktopBrowse(String url) {
-    try {
-      if (!Desktop.isDesktopSupported()) return false;
-      Desktop desktop = Desktop.getDesktop();
-      if (desktop == null) return false;
-      if (!desktop.isSupported(Desktop.Action.BROWSE)) return false;
-      desktop.browse(new URI(url));
-      return true;
-    } catch (Exception e) {
-      log.debug("[ircafe] Desktop browse failed for {}", url, e);
-      return false;
-    }
-  }
-
-  private static boolean tryPlatformOpen(String url) {
-    if (isLinux()) {
-      return tryKnownLinuxBrowser(url)
-          || tryStart("xdg-open", url)
-          || tryStart("gio", "open", url)
-          || tryStart("sensible-browser", url)
-          || tryStart("x-www-browser", url)
-          || tryStart("gnome-open", url)
-          || tryStart("kde-open", url);
-    }
-    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-    if (os.contains("mac") || os.contains("darwin")) {
-      return tryStart("open", url);
-    }
-    if (os.contains("win")) {
-      return tryStart("rundll32", "url.dll,FileProtocolHandler", url)
-          || tryStart("cmd", "/c", "start", "", url);
-    }
-    return false;
-  }
-
-  private static boolean tryKnownLinuxBrowser(String url) {
-    List<String> browsers =
-        List.of(
-            "librewolf",
-            "zen-browser",
-            "firefox",
-            "google-chrome",
-            "chromium",
-            "chromium-browser",
-            "brave-browser",
-            "microsoft-edge",
-            "opera",
-            "vivaldi");
-    for (String browser : browsers) {
-      if (tryStart(browser, url)) return true;
-    }
-    return false;
-  }
-
-  private static boolean isLinux() {
-    String os = System.getProperty("os.name", "");
-    return os.toLowerCase(Locale.ROOT).contains("linux");
-  }
-
-  private static boolean tryStart(String... cmd) {
-    if (cmd == null || cmd.length == 0) return false;
-    try {
-      Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-      if (process == null) return false;
-
-      // If the command exits immediately with a non-zero status, treat it as a failure
-      // so we can fall back to the next opener.
-      try {
-        if (process.waitFor(450, TimeUnit.MILLISECONDS)) {
-          return process.exitValue() == 0;
-        }
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-      }
-
-      // Still running after a short window generally means launch succeeded.
-      return true;
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
-  private static String sanitizeUrlForBrowser(String rawUrl) {
-    String s = Objects.toString(rawUrl, "").trim();
-    if (s.isEmpty()) return null;
-
-    // Be defensive: if a malformed token leaked extra text, pull the first URL-looking token.
-    Matcher m = URL_TOKEN_PATTERN.matcher(s);
-    if (m.find()) {
-      s = Objects.toString(m.group(1), "").trim();
-    }
-
-    s = trimEdgeNoise(s);
-    if (s.isEmpty()) return null;
-
-    if (s.startsWith("<") && s.endsWith(">") && s.length() > 2) {
-      s = s.substring(1, s.length() - 1).trim();
-    }
-
-    int ws = firstWhitespaceIndex(s);
-    if (ws > 0) {
-      // Be defensive if an invalid token accidentally captured trailing chat text.
-      s = s.substring(0, ws).trim();
-    }
-
-    // Trim common trailing punctuation introduced by prose.
-    while (!s.isEmpty()) {
-      char c = s.charAt(s.length() - 1);
-      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '>' || c == '!'
-          || c == '?' || c == ';' || c == ':' || c == '\'' || c == '"') {
-        s = s.substring(0, s.length() - 1).trim();
-        continue;
-      }
-      break;
-    }
-    s = trimEdgeNoise(s);
-
-    if (s.isBlank()) return null;
-
-    String lower = s.toLowerCase(Locale.ROOT);
-    if (lower.startsWith("www.")) {
-      s = "https://" + s;
-      lower = s.toLowerCase(Locale.ROOT);
-    }
-
-    if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
-      return null;
-    }
-
-    try {
-      URI uri = new URI(s);
-      String scheme = Objects.toString(uri.getScheme(), "").toLowerCase(Locale.ROOT);
-      if (!scheme.equals("http") && !scheme.equals("https")) return null;
-      if (Objects.toString(uri.getHost(), "").isBlank()) return null;
-      return uri.toASCIIString();
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private static String trimEdgeNoise(String s) {
-    if (s == null || s.isEmpty()) return "";
-    int start = 0;
-    int end = s.length();
-    while (start < end) {
-      char c = s.charAt(start);
-      if (Character.isWhitespace(c) || Character.isISOControl(c)) {
-        start++;
-      } else {
-        break;
-      }
-    }
-    while (end > start) {
-      char c = s.charAt(end - 1);
-      if (Character.isWhitespace(c) || Character.isISOControl(c)) {
-        end--;
-      } else {
-        break;
-      }
-    }
-    return (start == 0 && end == s.length()) ? s : s.substring(start, end);
-  }
-
-  private static int firstWhitespaceIndex(String s) {
-    if (s == null || s.isEmpty()) return -1;
-    for (int i = 0; i < s.length(); i++) {
-      if (Character.isWhitespace(s.charAt(i))) return i;
-    }
-    return -1;
+    if (externalBrowserLauncher == null) return;
+    externalBrowserLauncher.openAsync(url);
   }
 
   private static int insertionOffsetBelowLine(StyledDocument doc, int pos) {

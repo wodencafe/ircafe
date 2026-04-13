@@ -50,12 +50,22 @@ public class MediatorInboundTextEventHandler {
 
     void markPrivateMessagePeerOnline(String serverId, String nick);
 
+    default void recordInterceptorEvent(
+        String serverId,
+        String target,
+        String actorNick,
+        String text,
+        InterceptorEventType eventType) {
+      recordInterceptorEvent(serverId, target, actorNick, text, eventType, "");
+    }
+
     void recordInterceptorEvent(
         String serverId,
         String target,
         String actorNick,
         String text,
-        InterceptorEventType eventType);
+        InterceptorEventType eventType,
+        String messageId);
 
     boolean notifyIrcEvent(
         IrcEventNotificationRule.EventType eventType,
@@ -186,14 +196,28 @@ public class MediatorInboundTextEventHandler {
                   ruleMatch != null ? ruleMatch.highlightColor() : null));
     }
 
-    recordRuleMatchIfPresent(callbacks, channel, active, event.from(), event.text(), ruleMatch);
+    String notificationMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
+    recordRuleMatchIfPresent(
+        callbacks, channel, active, event.from(), event.text(), ruleMatch, notificationMessageId);
+    String interceptorMessageId = notificationMessageId;
     callbacks.recordInterceptorEvent(
-        sid, event.channel(), event.from(), event.text(), InterceptorEventType.MESSAGE);
+        sid,
+        event.channel(),
+        event.from(),
+        event.text(),
+        InterceptorEventType.MESSAGE,
+        interceptorMessageId);
 
     if (channelText.mention()) {
       callbacks.recordInterceptorEvent(
-          sid, event.channel(), event.from(), event.text(), InterceptorEventType.HIGHLIGHT);
-      recordMentionHighlight(callbacks, channel, active, event.from(), event.text());
+          sid,
+          event.channel(),
+          event.from(),
+          event.text(),
+          InterceptorEventType.HIGHLIGHT,
+          interceptorMessageId);
+      recordMentionHighlight(
+          callbacks, channel, active, event.from(), event.text(), notificationMessageId);
 
       if (!callbacks.isMutedChannel(channel)) {
         try {
@@ -258,14 +282,28 @@ public class MediatorInboundTextEventHandler {
                   ruleMatch != null ? ruleMatch.highlightColor() : null));
     }
 
-    recordRuleMatchIfPresent(callbacks, channel, active, event.from(), event.action(), ruleMatch);
+    String notificationMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
+    recordRuleMatchIfPresent(
+        callbacks, channel, active, event.from(), event.action(), ruleMatch, notificationMessageId);
+    String interceptorMessageId = notificationMessageId;
     callbacks.recordInterceptorEvent(
-        sid, event.channel(), event.from(), event.action(), InterceptorEventType.ACTION);
+        sid,
+        event.channel(),
+        event.from(),
+        event.action(),
+        InterceptorEventType.ACTION,
+        interceptorMessageId);
 
     if (channelText.mention()) {
       callbacks.recordInterceptorEvent(
-          sid, event.channel(), event.from(), event.action(), InterceptorEventType.HIGHLIGHT);
-      recordMentionHighlight(callbacks, channel, active, event.from(), "* " + event.action());
+          sid,
+          event.channel(),
+          event.from(),
+          event.action(),
+          InterceptorEventType.HIGHLIGHT,
+          interceptorMessageId);
+      recordMentionHighlight(
+          callbacks, channel, active, event.from(), "* " + event.action(), notificationMessageId);
 
       if (!callbacks.isMutedChannel(channel)) {
         try {
@@ -382,12 +420,14 @@ public class MediatorInboundTextEventHandler {
           event.ircv3Tags());
     }
 
+    String interceptorMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
     callbacks.recordInterceptorEvent(
         sid,
         "pm:" + Objects.toString(peer, "").trim(),
         event.from(),
         event.text(),
-        InterceptorEventType.PRIVATE_MESSAGE);
+        InterceptorEventType.PRIVATE_MESSAGE,
+        interceptorMessageId);
 
     if (!fromSelf) {
       String fromNick = Objects.toString(event.from(), "").trim();
@@ -477,12 +517,14 @@ public class MediatorInboundTextEventHandler {
           event.ircv3Tags());
     }
 
+    String interceptorMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
     callbacks.recordInterceptorEvent(
         sid,
         "pm:" + Objects.toString(peer, "").trim(),
         event.from(),
         event.action(),
-        InterceptorEventType.PRIVATE_ACTION);
+        InterceptorEventType.PRIVATE_ACTION,
+        interceptorMessageId);
 
     if (!fromSelf) {
       String fromNick = Objects.toString(event.from(), "").trim();
@@ -529,12 +571,14 @@ public class MediatorInboundTextEventHandler {
         event.ircv3Tags());
 
     String noticeChannel = notice.noticeChannel();
+    String interceptorMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
     callbacks.recordInterceptorEvent(
         sid,
         noticeChannel.isBlank() ? "status" : noticeChannel,
         event.from(),
         event.text(),
-        InterceptorEventType.NOTICE);
+        InterceptorEventType.NOTICE,
+        interceptorMessageId);
 
     if (!fromSelf && !suppress) {
       String fromNick = Objects.toString(event.from(), "").trim();
@@ -813,7 +857,8 @@ public class MediatorInboundTextEventHandler {
       TargetRef active,
       String from,
       String text,
-      NotificationRuleMatch match) {
+      NotificationRuleMatch match,
+      String messageId) {
     if (channel == null || match == null) {
       return;
     }
@@ -824,11 +869,20 @@ public class MediatorInboundTextEventHandler {
       ui.markHighlight(channel);
     }
     ui.recordRuleMatch(
-        channel, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
+        channel,
+        from,
+        match.ruleLabel(),
+        snippetAround(text, match.start(), match.end()),
+        messageId);
   }
 
   private void recordMentionHighlight(
-      Callbacks callbacks, TargetRef channel, TargetRef active, String fromNick, String snippet) {
+      Callbacks callbacks,
+      TargetRef channel,
+      TargetRef active,
+      String fromNick,
+      String snippet,
+      String messageId) {
     if (channel == null) {
       return;
     }
@@ -838,7 +892,7 @@ public class MediatorInboundTextEventHandler {
     if (active == null || !channel.equals(active)) {
       ui.markHighlight(channel);
     }
-    ui.recordHighlight(channel, fromNick, snippet);
+    ui.recordHighlight(channel, fromNick, snippet, messageId);
   }
 
   private boolean tryResolvePendingEchoChannelMessage(
@@ -969,7 +1023,7 @@ public class MediatorInboundTextEventHandler {
     if (target == null || target.isUiOnly()) {
       return false;
     }
-    if (!negotiatedFeaturePort.isMessageEditAvailable(sid)) {
+    if (!negotiatedFeaturePort.isExperimentalMessageEditAvailable(sid)) {
       return false;
     }
 

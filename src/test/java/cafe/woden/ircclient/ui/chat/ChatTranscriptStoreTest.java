@@ -119,6 +119,24 @@ class ChatTranscriptStoreTest {
   }
 
   @Test
+  void appendChatFromHistoryWithDuplicateMessageIdIsIgnored() throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatFromHistory(
+        ref, "alice", "first", false, 5_000L, "m-h1", Map.of("msgid", "m-h1"));
+    StyledDocument doc = store.document(ref);
+    int lenAfterFirst = doc.getLength();
+
+    store.appendChatFromHistory(
+        ref, "alice", "second", false, 5_010L, "m-h1", Map.of("msgid", "m-h1"));
+
+    assertEquals(lenAfterFirst, doc.getLength());
+    assertTrue(transcriptText(doc).contains("first"));
+    assertFalse(transcriptText(doc).contains("second"));
+  }
+
+  @Test
   void removeMessageReactionRemovesRenderedReactionSummaryWhenLastReactionIsCleared() {
     ChatTranscriptStore store = newStore();
     TargetRef ref = new TargetRef("srv", "#chan");
@@ -134,6 +152,19 @@ class ChatTranscriptStoreTest {
 
     assertTrue(withReactionLines > baseLines);
     assertEquals(baseLines, afterRemovalLines);
+  }
+
+  @Test
+  void hasReactionFromNickMatchesObservedReactorCaseInsensitively() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello", false, 6_000L, "m-42", Map.of("msgid", "m-42"));
+    store.applyMessageReaction(ref, "m-42", ":+1:", "Bob", 6_050L);
+
+    assertTrue(store.hasReactionFromNick(ref, "m-42", ":+1:", "bob"));
+    assertFalse(store.hasReactionFromNick(ref, "m-42", ":heart:", "bob"));
+    assertFalse(store.hasReactionFromNick(ref, "m-42", ":+1:", "carol"));
   }
 
   @Test
@@ -175,6 +206,59 @@ class ChatTranscriptStoreTest {
 
     String text = transcriptText(store.document(ref));
     assertTrue(text.contains("-> bob replied to m-1 (alice: after (edited))"));
+  }
+
+  @Test
+  void applyMessageRedactionPreservesRevealableOriginalWithoutLeakingIntoTranscript()
+      throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    String text = transcriptText(store.document(ref));
+    assertTrue(text.contains("[message redacted]"));
+    assertFalse(text.contains("alice: before"));
+
+    ChatTranscriptStore.RedactedMessageContent reveal = store.redactedOriginalById(ref, "m-1");
+    assertNotNull(reveal);
+    assertEquals("before", reveal.originalText());
+    assertEquals("alice", reveal.originalFromNick());
+    assertEquals("alice", reveal.redactedBy());
+    assertEquals(6_050L, reveal.redactedAtEpochMs());
+  }
+
+  @Test
+  void applyMessageRedactionKeepsEditedTextForRevealAfterEdit() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    assertTrue(store.applyMessageEdit(ref, "m-1", "after", "alice", 6_020L, "", Map.of()));
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    ChatTranscriptStore.RedactedMessageContent reveal = store.redactedOriginalById(ref, "m-1");
+    assertNotNull(reveal);
+    assertEquals("after (edited)", reveal.originalText());
+    assertEquals("alice: [message redacted]", store.messagePreviewById(ref, "m-1"));
+  }
+
+  @Test
+  void redactedMessageMetadataSurvivesTranscriptRestyle() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    assertTrue(store.messageOffsetById(ref, "m-1") >= 0);
+
+    store.restyleAllDocuments();
+
+    assertTrue(store.messageOffsetById(ref, "m-1") >= 0);
+    assertNotNull(store.redactedOriginalById(ref, "m-1"));
   }
 
   @Test
@@ -402,6 +486,60 @@ class ChatTranscriptStoreTest {
     StyledDocument doc = store.document(ref);
     assertTrue(transcriptTextUnchecked(doc).contains("hello"));
     assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.ConfirmedDot.class));
+  }
+
+  @Test
+  void resolvePendingOutgoingChatAddsConfirmedDotWhenDeliveryIndicatorsAreEnabled() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, true);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-2", "me", "hello", 10_000L);
+    boolean resolved =
+        store.resolvePendingOutgoingChat(
+            ref, "pending-2", "me", "hello", 10_100L, "msg-1", Map.of("msgid", "msg-1"));
+
+    assertTrue(resolved);
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello"));
+    assertEquals(1, inlineComponentCount(doc, OutgoingSendIndicator.ConfirmedDot.class));
+  }
+
+  @Test
+  void resolvePendingOutgoingChatAppliesReplyReactionToReferencedMessage() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, false);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello", false, 9_000L, "m-1", Map.of("msgid", "m-1"));
+    store.appendPendingOutgoingChat(ref, "pending-4", "bob", "react", 9_100L);
+
+    boolean resolved =
+        store.resolvePendingOutgoingChat(
+            ref,
+            "pending-4",
+            "bob",
+            "react",
+            9_200L,
+            "m-2",
+            Map.of("msgid", "m-2", "draft/reply", "m-1", "draft/react", ":+1:"));
+
+    assertTrue(resolved);
+    assertTrue(store.hasReactionFromNick(ref, "m-1", ":+1:", "bob"));
+  }
+
+  @Test
+  void failPendingOutgoingChatReplacesSpinnerLineWithFailedSuffix() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, true);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-3", "me", "hello", 10_000L);
+
+    boolean failed =
+        store.failPendingOutgoingChat(ref, "pending-3", "me", "hello", 10_100L, "network");
+
+    assertTrue(failed);
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello [failed: network]"));
+    assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.PendingSpinner.class));
   }
 
   @Test
@@ -738,15 +876,6 @@ class ChatTranscriptStoreTest {
   }
 
   private static int inlineComponentCount(StyledDocument doc, Class<?> componentType) {
-    if (doc == null || componentType == null) return 0;
-    int count = 0;
-    int len = doc.getLength();
-    for (int i = 0; i < len; i++) {
-      Object component = StyleConstants.getComponent(doc.getCharacterElement(i).getAttributes());
-      if (component != null && componentType.isInstance(component)) {
-        count++;
-      }
-    }
-    return count;
+    return ChatTranscriptDeliveryIndicatorSupport.inlineComponentCount(doc, componentType);
   }
 }

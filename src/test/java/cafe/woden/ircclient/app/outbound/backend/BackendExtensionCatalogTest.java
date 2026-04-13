@@ -11,17 +11,30 @@ import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapt
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.util.CompiledPluginJarSupport;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class BackendExtensionCatalogTest {
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
+  @TempDir Path tempDir;
+
   @Test
   void resolvesBuiltInBackendStrategiesFromExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(
+        BackendExtensionCatalog.fromExtensions(
             java.util.List.of(
                 new IrcBackendExtension(),
                 new MatrixBackendExtension(),
@@ -50,7 +63,7 @@ class BackendExtensionCatalogTest {
     assertThrows(
         IllegalStateException.class,
         () ->
-            new BackendExtensionCatalog(
+            BackendExtensionCatalog.fromExtensions(
                 java.util.List.of(new IrcBackendExtension(), new DuplicateIrcBackendExtension())));
   }
 
@@ -58,13 +71,15 @@ class BackendExtensionCatalogTest {
   void rejectsContributionBackendMismatch() {
     assertThrows(
         IllegalStateException.class,
-        () -> new BackendExtensionCatalog(java.util.List.of(new MismatchedBackendExtension())));
+        () ->
+            BackendExtensionCatalog.fromExtensions(
+                java.util.List.of(new MismatchedBackendExtension())));
   }
 
   @Test
   void resolvesCustomBackendIdExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(java.util.List.of(new PluginBackendExtension()));
+        BackendExtensionCatalog.fromExtensions(java.util.List.of(new PluginBackendExtension()));
 
     assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
     assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
@@ -76,12 +91,67 @@ class BackendExtensionCatalogTest {
   @Test
   void acceptsLegacyEnumOnlyExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(java.util.List.of(new LegacyMatrixBackendExtension()));
+        BackendExtensionCatalog.fromExtensions(
+            java.util.List.of(new LegacyMatrixBackendExtension()));
 
     assertTrue(catalog.featureAdapterFor("matrix").supportsSemanticUpload());
     assertInstanceOf(
         LegacyMatrixMessageMutationOutboundCommands.class,
         catalog.messageMutationCommandsFor("matrix"));
+  }
+
+  @Test
+  void loadsBackendExtensionsFromPluginDirectoryJar() throws Exception {
+    Path pluginDir = Files.createDirectories(tempDir.resolve("plugins"));
+    writePluginJar(pluginDir.resolve("plugin-backend.jar"));
+
+    BackendExtensionCatalog catalog =
+        BackendExtensionCatalog.installed(
+            pluginDir, BackendExtensionCatalogTest.class.getClassLoader());
+    try {
+      assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
+      assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
+      assertTrue("Plugin Backend".equals(catalog.backendDisplayName("plugin-backend")));
+    } finally {
+      catalog.shutdown();
+    }
+  }
+
+  @Test
+  void loadsBackendExtensionsFromPluginsNextToRuntimeConfig() throws Exception {
+    Path runtimeConfigDirectory = Files.createDirectories(tempDir.resolve("config-home/ircafe"));
+    Path pluginDir = Files.createDirectories(runtimeConfigDirectory.resolve("plugins"));
+    writePluginJar(pluginDir.resolve("plugin-backend.jar"));
+    RuntimeConfigPathPort runtimeConfigPathPort =
+        () -> runtimeConfigDirectory.resolve("ircafe.yml");
+
+    BackendExtensionCatalog catalog =
+        BackendExtensionCatalog.installed(
+            runtimeConfigPathPort, BackendExtensionCatalogTest.class.getClassLoader());
+    try {
+      assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
+      assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
+      assertTrue("Plugin Backend".equals(catalog.backendDisplayName("plugin-backend")));
+    } finally {
+      catalog.shutdown();
+    }
+  }
+
+  private static void writePluginJar(Path jarPath) throws IOException {
+    Manifest manifest = new Manifest();
+    Attributes attributes = manifest.getMainAttributes();
+    attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry :
+        CompiledPluginJarSupport.compatibleManifest("plugin-backend", "1.0.0").entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
+      out.putNextEntry(new JarEntry("META-INF/services/" + BackendExtension.class.getName()));
+      out.write(
+          (PluginBackendExtension.class.getName() + System.lineSeparator())
+              .getBytes(StandardCharsets.UTF_8));
+      out.closeEntry();
+    }
   }
 
   private static final class DuplicateIrcBackendExtension implements BackendExtension {
@@ -103,7 +173,7 @@ class BackendExtensionCatalogTest {
     }
   }
 
-  private static final class PluginBackendExtension implements BackendExtension {
+  public static final class PluginBackendExtension implements BackendExtension {
     @Override
     public String backendId() {
       return "plugin-backend";

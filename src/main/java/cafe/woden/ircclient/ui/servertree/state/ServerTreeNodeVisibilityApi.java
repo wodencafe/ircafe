@@ -12,6 +12,7 @@ public final class ServerTreeNodeVisibilityApi {
   }
 
   private final ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings;
+  private final ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext;
   private final Runnable syncUiLeafVisibility;
   private final Runnable syncApplicationRootVisibility;
   private final BooleanPropertyChangePublisher propertyChangePublisher;
@@ -29,6 +30,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public ServerTreeNodeVisibilityApi(
       ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings,
+      ServerTreeBuiltInVisibilitySettings.Context builtInVisibilitySettingsContext,
       Runnable syncUiLeafVisibility,
       Runnable syncApplicationRootVisibility,
       BooleanPropertyChangePublisher propertyChangePublisher,
@@ -41,6 +43,9 @@ public final class ServerTreeNodeVisibilityApi {
       String propApplicationRootVisible) {
     this.builtInVisibilitySettings =
         Objects.requireNonNull(builtInVisibilitySettings, "builtInVisibilitySettings");
+    this.builtInVisibilitySettingsContext =
+        Objects.requireNonNull(
+            builtInVisibilitySettingsContext, "builtInVisibilitySettingsContext");
     this.syncUiLeafVisibility =
         Objects.requireNonNull(syncUiLeafVisibility, "syncUiLeafVisibility");
     this.syncApplicationRootVisibility =
@@ -72,73 +77,93 @@ public final class ServerTreeNodeVisibilityApi {
   }
 
   public boolean isServerNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::server);
+    return builtInVisibilitySettings.defaultVisibility(
+        builtInVisibilitySettingsContext, ServerBuiltInNodesVisibility::server);
   }
 
   public boolean isLogViewerNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::logViewer);
+    return builtInVisibilitySettings.defaultVisibility(
+        builtInVisibilitySettingsContext, ServerBuiltInNodesVisibility::logViewer);
   }
 
   public boolean isNotificationsNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::notifications);
+    return builtInVisibilitySettings.defaultVisibility(
+        builtInVisibilitySettingsContext, ServerBuiltInNodesVisibility::notifications);
   }
 
   public boolean isMonitorNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::monitor);
+    return builtInVisibilitySettings.defaultVisibility(
+        builtInVisibilitySettingsContext, ServerBuiltInNodesVisibility::monitor);
   }
 
   public boolean isInterceptorsNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::interceptors);
+    return builtInVisibilitySettings.defaultVisibility(
+        builtInVisibilitySettingsContext, ServerBuiltInNodesVisibility::interceptors);
   }
 
   public boolean isServerNodeVisibleForServer(String serverId) {
     return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::server);
+        builtInVisibilitySettingsContext, serverId, ServerBuiltInNodesVisibility::server);
   }
 
   public boolean isLogViewerNodeVisibleForServer(String serverId) {
     return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::logViewer);
+        builtInVisibilitySettingsContext, serverId, ServerBuiltInNodesVisibility::logViewer);
   }
 
   public boolean isNotificationsNodeVisibleForServer(String serverId) {
     return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::notifications);
+        builtInVisibilitySettingsContext, serverId, ServerBuiltInNodesVisibility::notifications);
   }
 
   public boolean isMonitorNodeVisibleForServer(String serverId) {
     return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::monitor);
+        builtInVisibilitySettingsContext, serverId, ServerBuiltInNodesVisibility::monitor);
   }
 
   public boolean isInterceptorsNodeVisibleForServer(String serverId) {
     return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::interceptors);
+        builtInVisibilitySettingsContext, serverId, ServerBuiltInNodesVisibility::interceptors);
   }
 
   public void setServerNodeVisibleForServer(String serverId, boolean visible) {
     builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withServer);
+        builtInVisibilitySettingsContext,
+        serverId,
+        visible,
+        ServerBuiltInNodesVisibility::withServer);
   }
 
   public void setLogViewerNodeVisibleForServer(String serverId, boolean visible) {
     builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withLogViewer);
+        builtInVisibilitySettingsContext,
+        serverId,
+        visible,
+        ServerBuiltInNodesVisibility::withLogViewer);
   }
 
   public void setNotificationsNodeVisibleForServer(String serverId, boolean visible) {
     builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withNotifications);
+        builtInVisibilitySettingsContext,
+        serverId,
+        visible,
+        ServerBuiltInNodesVisibility::withNotifications);
   }
 
   public void setMonitorNodeVisibleForServer(String serverId, boolean visible) {
     builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withMonitor);
+        builtInVisibilitySettingsContext,
+        serverId,
+        visible,
+        ServerBuiltInNodesVisibility::withMonitor);
   }
 
   public void setInterceptorsNodeVisibleForServer(String serverId, boolean visible) {
     builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withInterceptors);
+        builtInVisibilitySettingsContext,
+        serverId,
+        visible,
+        ServerBuiltInNodesVisibility::withInterceptors);
   }
 
   public boolean isApplicationRootVisible() {
@@ -167,6 +192,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public void setServerNodesVisible(boolean visible) {
     builtInVisibilitySettings.setDefaultVisibility(
+        builtInVisibilitySettingsContext,
         visible,
         ServerBuiltInNodesVisibility::server,
         ServerBuiltInNodesVisibility::withServer,
@@ -175,6 +201,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public void setLogViewerNodesVisible(boolean visible) {
     builtInVisibilitySettings.setDefaultVisibility(
+        builtInVisibilitySettingsContext,
         visible,
         ServerBuiltInNodesVisibility::logViewer,
         ServerBuiltInNodesVisibility::withLogViewer,
@@ -183,6 +210,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public void setNotificationsNodesVisible(boolean visible) {
     builtInVisibilitySettings.setDefaultVisibility(
+        builtInVisibilitySettingsContext,
         visible,
         ServerBuiltInNodesVisibility::notifications,
         ServerBuiltInNodesVisibility::withNotifications,
@@ -191,6 +219,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public void setMonitorNodesVisible(boolean visible) {
     builtInVisibilitySettings.setDefaultVisibility(
+        builtInVisibilitySettingsContext,
         visible,
         ServerBuiltInNodesVisibility::monitor,
         ServerBuiltInNodesVisibility::withMonitor,
@@ -199,6 +228,7 @@ public final class ServerTreeNodeVisibilityApi {
 
   public void setInterceptorsNodesVisible(boolean visible) {
     builtInVisibilitySettings.setDefaultVisibility(
+        builtInVisibilitySettingsContext,
         visible,
         ServerBuiltInNodesVisibility::interceptors,
         ServerBuiltInNodesVisibility::withInterceptors,

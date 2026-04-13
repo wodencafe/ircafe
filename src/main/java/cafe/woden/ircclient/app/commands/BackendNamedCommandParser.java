@@ -23,7 +23,7 @@ public class BackendNamedCommandParser {
   }
 
   BackendNamedCommandParser(List<BackendNamedCommandHandler> handlers) {
-    this(new BackendNamedCommandCatalog(handlers));
+    this(BackendNamedCommandCatalog.fromHandlers(handlers));
   }
 
   public ParsedInput parse(String line) {

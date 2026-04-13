@@ -26,6 +26,11 @@ public class IrcNegotiatedFeaturePortAdapter implements IrcNegotiatedFeaturePort
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    return delegate.isMessageTagsAvailable(serverId);
+  }
+
+  @Override
   public boolean isDraftReplyAvailable(String serverId) {
     return delegate.isDraftReplyAvailable(serverId);
   }
@@ -56,8 +61,8 @@ public class IrcNegotiatedFeaturePortAdapter implements IrcNegotiatedFeaturePort
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
-    return delegate.isMessageEditAvailable(serverId);
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
+    return delegate.isExperimentalMessageEditAvailable(serverId);
   }
 
   @Override

@@ -14,7 +14,7 @@ final class MessageMutationOutboundCommandLineBuilder {
     String msgId = normalizeToken(replyToMessageId);
     String text = normalizeText(message);
     if (outTarget.isEmpty() || msgId.isEmpty() || text.isEmpty()) return "";
-    return "@+draft/reply=" + escapeIrcv3TagValue(msgId) + " PRIVMSG " + outTarget + " :" + text;
+    return "@+reply=" + escapeIrcv3TagValue(msgId) + " PRIVMSG " + outTarget + " :" + text;
   }
 
   static String buildReactRawLine(TargetRef target, String replyToMessageId, String reaction) {
@@ -54,7 +54,7 @@ final class MessageMutationOutboundCommandLineBuilder {
         + tagKey
         + "="
         + escapeIrcv3TagValue(react)
-        + ";+draft/reply="
+        + ";+reply="
         + escapeIrcv3TagValue(msgId)
         + " TAGMSG "
         + outTarget;

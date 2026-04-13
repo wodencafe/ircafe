@@ -139,6 +139,31 @@ class TargetCoordinatorChannelDetachPolicyTest {
   }
 
   @Test
+  void joinedChannelAfterLocalDisconnectReattachesWithoutSendingAnotherPart() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
+
+    coordinator.disconnectChannel(chan);
+    clearInvocations(ui, irc);
+
+    boolean accepted = coordinator.onJoinedChannel("libera", "#ircafe");
+
+    assertTrue(accepted);
+    verify(runtimeConfig).rememberServerTreeChannelAutoReattach("libera", "#ircafe", false);
+    verify(runtimeConfig).rememberServerTreeChannelAutoReattach("libera", "#ircafe", true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, false);
+    verify(irc, never()).partChannel("libera", "#ircafe");
+    verify(irc, never()).partChannel(eq("libera"), eq("#ircafe"), isNull());
+  }
+
+  @Test
   void manualJoinClearsSuppressionAndAttachedStateOnJoinedEvent() {
     UiPort ui = mock(UiPort.class);
     IrcBackendClientService irc = mock(IrcBackendClientService.class);

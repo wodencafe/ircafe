@@ -8,6 +8,8 @@ import cafe.woden.ircclient.app.InboundModeEventHandler;
 import cafe.woden.ircclient.app.JoinModeBurstService;
 import cafe.woden.ircclient.app.ModeFormattingService;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
@@ -21,13 +23,18 @@ import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiChannelListPort;
 import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiPromptPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.api.UiTranscriptPort;
+import cafe.woden.ircclient.app.api.UiViewStatePort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
@@ -76,6 +83,7 @@ import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
@@ -154,6 +162,13 @@ import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.logging.LogLine;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestResult;
+import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
+import cafe.woden.ircclient.logging.history.LoadOlderResult;
+import cafe.woden.ircclient.logging.history.LogCursor;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerQuery;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerRow;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
@@ -222,6 +237,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(UiEventPort.class, ApplicationLayer.class);
     assertAnnotated(UiPort.class, ApplicationLayer.class);
     assertAnnotated(UiPromptPort.class, ApplicationLayer.class);
+    assertAnnotated(UiChannelListPort.class, ApplicationLayer.class);
+    assertAnnotated(UiTranscriptPort.class, ApplicationLayer.class);
+    assertAnnotated(UiViewStatePort.class, ApplicationLayer.class);
     assertAnnotated(IrcClientService.class, ApplicationLayer.class);
     assertAnnotated(IrcMediator.class, ApplicationLayer.class);
     assertAnnotated(ConnectionCoordinator.class, ApplicationLayer.class);
@@ -265,6 +283,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(TargetChatHistoryPort.class, ApplicationLayer.class);
     assertAnnotated(TargetLogMaintenancePort.class, ApplicationLayer.class);
     assertAnnotated(ChatTranscriptHistoryPort.class, ApplicationLayer.class);
+    assertAnnotated(ChannelMetadataPort.class, ApplicationLayer.class);
     assertAnnotated(InterceptorIngestPort.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotifierPort.class, ApplicationLayer.class);
     assertAnnotated(NotificationRuleMatcherPort.class, ApplicationLayer.class);
@@ -606,6 +625,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(PircbotxBotFactory.class, InfrastructureLayer.class);
     assertAnnotated(PircbotxInputParserHookInstaller.class, InfrastructureLayer.class);
     assertAnnotated(PlaybackCursorProviderConfig.class, InfrastructureLayer.class);
+    assertAnnotated(ChatHistoryTranscriptPort.class, InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.irc.pircbotx.client.PircbotxConnectionTimersRx",
         InfrastructureLayer.class);
@@ -776,6 +796,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(RuntimeDiagnosticEvent.class, ValueObject.class);
     assertAnnotated(PresenceEvent.class, ValueObject.class);
     assertAnnotated(PrivateMessageRequest.class, ValueObject.class);
+    assertAnnotated(UiSettingsSnapshot.class, ValueObject.class);
+    assertAnnotated(BackendEditorProfileSpec.class, ValueObject.class);
+    assertAnnotated(QuasselNetworkManagerAction.class, ValueObject.class);
     assertAnnotated(UserActionRequest.class, ValueObject.class);
     assertAnnotated(IrcEventNotificationRule.class, ValueObject.class);
     assertAnnotated(NotificationRule.class, ValueObject.class);
@@ -788,6 +811,13 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(RegexSpec.class, ValueObject.class);
     assertAnnotated(FilterScopeOverride.class, ValueObject.class);
     assertAnnotated(ModeVocabulary.class, ValueObject.class);
+    assertAnnotated(InstalledPluginProblem.class, ValueObject.class);
+    assertAnnotated(ChatHistoryIngestResult.class, ValueObject.class);
+    assertAnnotated(LoadOlderResult.class, ValueObject.class);
+    assertAnnotated(LogCursor.class, ValueObject.class);
+    assertAnnotated(ChatLogViewerQuery.class, ValueObject.class);
+    assertAnnotated(ChatLogViewerResult.class, ValueObject.class);
+    assertAnnotated(ChatLogViewerRow.class, ValueObject.class);
   }
 
   @Test

@@ -3,11 +3,15 @@ package cafe.woden.ircclient.ui.coordinator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -22,12 +26,11 @@ class ChatHistoryActionCoordinatorTest {
   void replyContextActionVisibleUsesIrcCapabilityForActiveTarget() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             target -> {},
@@ -52,7 +55,7 @@ class ChatHistoryActionCoordinatorTest {
   void onReplyToMessageRequestedActivatesInputAndBeginsCompose() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
     AtomicInteger activateInputCalls = new AtomicInteger();
     AtomicInteger focusInputCalls = new AtomicInteger();
@@ -62,8 +65,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             activatedTarget::set,
@@ -96,16 +98,14 @@ class ChatHistoryActionCoordinatorTest {
   }
 
   @Test
-  void unreactContextActionVisibleRequiresReplyAndUnreactCapabilities() {
+  void unreactContextActionVisibleRequiresMessageTagsForActiveTarget() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             target -> {},
@@ -124,7 +124,7 @@ class ChatHistoryActionCoordinatorTest {
             offset -> {});
 
     assertTrue(coordinator.unreactContextActionVisible());
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(false);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(false);
     assertFalse(coordinator.unreactContextActionVisible());
   }
 
@@ -132,8 +132,7 @@ class ChatHistoryActionCoordinatorTest {
   void onUnreactToMessageRequestedPrefillsCommandAndFocusesInput() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
     AtomicInteger activateInputCalls = new AtomicInteger();
     AtomicInteger focusInputCalls = new AtomicInteger();
@@ -141,8 +140,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             activatedTarget::set,
@@ -181,8 +179,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             chatHistoryService,
             () -> channel,
             activatedTarget::set,
@@ -220,8 +217,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             chatHistoryService,
             () -> channel,
             target -> {},
@@ -252,8 +248,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             target -> {},
@@ -283,8 +278,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            IrcNegotiatedFeaturePort.from(irc),
-            irc,
+            capabilityPolicy(irc),
             null,
             () -> channel,
             target -> {},
@@ -305,5 +299,32 @@ class ChatHistoryActionCoordinatorTest {
     coordinator.onRedactMessageRequested("abc123");
 
     assertEquals("/redact abc123", emittedCommand.get());
+  }
+
+  private static MessageActionCapabilityPolicy capabilityPolicy(IrcBackendClientService irc) {
+    IrcNegotiatedFeaturePort negotiatedFeaturePort = IrcNegotiatedFeaturePort.from(irc);
+    Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
+        new Ircv3ChatHistoryFeatureSupport(chatHistoryPolicy(irc), negotiatedFeaturePort, irc);
+    Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =
+        new Ircv3MessageRedactionFeatureSupport(messageRedactionPolicy(irc));
+    return new IrcMessageActionCapabilityPolicy(
+        negotiatedFeaturePort, chatHistoryFeatureSupport, messageRedactionFeatureSupport);
+  }
+
+  private static OutboundBackendCapabilityPolicy chatHistoryPolicy(IrcBackendClientService irc) {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.featureUnavailableMessage(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    when(policy.unavailableReasonForHelp(anyString(), anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+    return policy;
+  }
+
+  private static OutboundBackendCapabilityPolicy messageRedactionPolicy(
+      IrcBackendClientService irc) {
+    OutboundBackendCapabilityPolicy policy = mock(OutboundBackendCapabilityPolicy.class);
+    when(policy.supportsMessageRedaction(anyString()))
+        .thenAnswer(invocation -> irc.isMessageRedactionAvailable(invocation.getArgument(0)));
+    return policy;
   }
 }

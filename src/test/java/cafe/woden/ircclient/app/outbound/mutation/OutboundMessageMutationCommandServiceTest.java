@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -26,7 +27,6 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,18 +38,19 @@ class OutboundMessageMutationCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
-      new OutboundBackendFeatureRegistry(
-          List.of(
-              new MatrixOutboundBackendFeatureAdapter(),
-              new QuasselOutboundBackendFeatureAdapter()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.builtInOutboundBackendFeatureRegistry();
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
-          irc);
+          irc,
+          cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
+  private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =
+      new Ircv3MessageRedactionFeatureSupport(outboundBackendCapabilityPolicy);
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
@@ -61,11 +62,8 @@ class OutboundMessageMutationCommandServiceTest {
       new OutboundRawLineCorrelationService(
           outboundBackendCapabilityPolicy, labeledResponseRoutingState);
   private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter =
-      new MessageMutationOutboundCommandsRouter(
-          List.of(
-              new IrcMessageMutationOutboundCommands(),
-              new MatrixMessageMutationOutboundCommands(),
-              new QuasselMessageMutationOutboundCommands()));
+      cafe.woden.ircclient.app.outbound.TestBackendSupport
+          .builtInMessageMutationOutboundCommandsRouter();
   private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
       new OutboundMessageMutationSendSupport(
           IrcTargetMembershipPort.from(irc),
@@ -80,6 +78,7 @@ class OutboundMessageMutationCommandServiceTest {
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           outboundBackendCapabilityPolicy,
+          messageRedactionFeatureSupport,
           outboundCommandAvailabilitySupport,
           ui,
           targetCoordinator,
@@ -96,15 +95,15 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello there"))
+    when(irc.sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello there"))
         .thenReturn(Completable.complete());
 
     service.handleReplyMessage(disposables, "abc123", "hello there");
 
-    verify(irc).sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello there");
+    verify(irc).sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello there");
     verify(ui).appendChat(chan, "(me)", "hello there", true);
   }
 
@@ -117,12 +116,12 @@ class OutboundMessageMutationCommandServiceTest {
             "pending-reply", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
         .thenReturn(pending);
-    when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello"))
+    when(irc.sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello"))
         .thenReturn(Completable.complete());
 
     service.handleReplyMessage(disposables, "abc123", "hello");
@@ -136,16 +135,15 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftReactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "@+draft/react=:+1:;+reply=abc123 TAGMSG #ircafe"))
         .thenReturn(Completable.complete());
 
     service.handleReactMessage(disposables, "abc123", ":+1:");
 
-    verify(irc).sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "@+draft/react=:+1:;+reply=abc123 TAGMSG #ircafe");
     verify(ui)
         .applyMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
   }
@@ -155,16 +153,15 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+reply=abc123 TAGMSG #ircafe"))
         .thenReturn(Completable.complete());
 
     service.handleUnreactMessage(disposables, "abc123", ":+1:");
 
-    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+reply=abc123 TAGMSG #ircafe");
     verify(ui)
         .removeMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
   }
@@ -174,7 +171,7 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(irc.isExperimentalMessageEditAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
@@ -199,7 +196,7 @@ class OutboundMessageMutationCommandServiceTest {
   void editCommandRejectsNonOwnedMessageBeforeSending() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(irc.isExperimentalMessageEditAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
 
     service.handleEditMessage(disposables, "abc123", "fixed text");

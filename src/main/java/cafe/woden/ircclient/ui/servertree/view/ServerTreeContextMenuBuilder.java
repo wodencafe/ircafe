@@ -7,8 +7,12 @@ import java.util.function.Predicate;
 import javax.swing.JPopupMenu;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Builds context menus for server tree nodes. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeContextMenuBuilder {
 
   public interface RoutingContext {
@@ -53,61 +57,43 @@ public final class ServerTreeContextMenuBuilder {
     };
   }
 
-  private final RoutingContext routingContext;
+  public record Contexts(
+      RoutingContext routingContext,
+      ServerTreeServerNodeMenuBuilder.Context serverNodeContext,
+      ServerTreeTargetNodeMenuBuilder.Context targetNodeContext,
+      ServerTreeQuasselNetworkNodeMenuBuilder.Context quasselNetworkNodeContext) {}
+
   private final ServerTreeServerNodeMenuBuilder serverNodeMenuBuilder;
   private final ServerTreeTargetNodeMenuBuilder targetNodeMenuBuilder;
   private final ServerTreeQuasselNetworkNodeMenuBuilder quasselNetworkNodeMenuBuilder;
 
-  public ServerTreeContextMenuBuilder(
-      RoutingContext routingContext,
-      ServerTreeServerNodeMenuBuilder.Context serverNodeContext,
-      ServerTreeTargetNodeMenuBuilder.Context targetNodeContext,
-      ServerTreeQuasselNetworkNodeMenuBuilder.Context quasselNetworkNodeContext) {
-    this(
-        routingContext,
-        new ServerTreeServerNodeMenuBuilder(serverNodeContext),
-        new ServerTreeTargetNodeMenuBuilder(targetNodeContext),
-        new ServerTreeQuasselNetworkNodeMenuBuilder(quasselNetworkNodeContext));
-  }
-
-  public ServerTreeContextMenuBuilder(
-      RoutingContext routingContext,
-      ServerTreeServerNodeMenuBuilder serverNodeMenuBuilder,
-      ServerTreeTargetNodeMenuBuilder targetNodeMenuBuilder,
-      ServerTreeQuasselNetworkNodeMenuBuilder quasselNetworkNodeMenuBuilder) {
-    this.routingContext = Objects.requireNonNull(routingContext, "routingContext");
-    this.serverNodeMenuBuilder =
-        Objects.requireNonNull(serverNodeMenuBuilder, "serverNodeMenuBuilder");
-    this.targetNodeMenuBuilder =
-        Objects.requireNonNull(targetNodeMenuBuilder, "targetNodeMenuBuilder");
-    this.quasselNetworkNodeMenuBuilder =
-        Objects.requireNonNull(quasselNetworkNodeMenuBuilder, "quasselNetworkNodeMenuBuilder");
-  }
-
-  public JPopupMenu build(TreePath path) {
+  public JPopupMenu build(Contexts contexts, TreePath path) {
+    Contexts ctx = Objects.requireNonNull(contexts, "contexts");
     if (path == null) return null;
 
     Object last = path.getLastPathComponent();
     if (!(last instanceof DefaultMutableTreeNode node)) return null;
 
-    if (routingContext.isServerNode(node)) {
-      return serverNodeMenuBuilder.buildServerNodeMenu(node);
+    if (ctx.routingContext().isServerNode(node)) {
+      return serverNodeMenuBuilder.buildServerNodeMenu(ctx.serverNodeContext(), node);
     }
 
-    if (routingContext.isInterceptorsGroupNode(node)) {
-      return serverNodeMenuBuilder.buildInterceptorsGroupMenu(node);
+    if (ctx.routingContext().isInterceptorsGroupNode(node)) {
+      return serverNodeMenuBuilder.buildInterceptorsGroupMenu(ctx.serverNodeContext(), node);
     }
 
-    if (routingContext.isQuasselNetworkNode(node) || routingContext.isQuasselEmptyStateNode(node)) {
+    if (ctx.routingContext().isQuasselNetworkNode(node)
+        || ctx.routingContext().isQuasselEmptyStateNode(node)) {
       Object userObject = node.getUserObject();
       if (userObject instanceof ServerTreeQuasselNetworkNodeData networkNodeData) {
-        return quasselNetworkNodeMenuBuilder.buildNetworkNodeMenu(networkNodeData);
+        return quasselNetworkNodeMenuBuilder.buildNetworkNodeMenu(
+            ctx.quasselNetworkNodeContext(), networkNodeData);
       }
     }
 
     Object userObject = node.getUserObject();
     if (userObject instanceof ServerTreeNodeData nodeData && nodeData.ref != null) {
-      return targetNodeMenuBuilder.buildTargetNodeMenu(nodeData);
+      return targetNodeMenuBuilder.buildTargetNodeMenu(ctx.targetNodeContext(), nodeData);
     }
 
     return null;

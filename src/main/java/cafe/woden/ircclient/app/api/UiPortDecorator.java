@@ -90,8 +90,19 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet, String messageId) {
+    delegate.recordHighlight(target, fromNick, snippet, messageId);
+  }
+
+  @Override
   public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
     delegate.recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
+
+  @Override
+  public void recordRuleMatch(
+      TargetRef target, String fromNick, String ruleLabel, String snippet, String messageId) {
+    delegate.recordRuleMatch(target, fromNick, ruleLabel, snippet, messageId);
   }
 
   @Override

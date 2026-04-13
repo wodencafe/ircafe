@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
@@ -208,6 +210,16 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
                 return server;
               });
       return catalog;
+    }
+
+    @Bean
+    InstalledPluginServices installedPluginServices() {
+      InstalledPluginServices installedPlugins = mock(InstalledPluginServices.class);
+      when(installedPlugins.loadInstalledServices(
+              eq(IrcBackendClientService.class),
+              org.mockito.ArgumentMatchers.<List<IrcBackendClientService>>any()))
+          .thenAnswer(invocation -> invocation.getArgument(1));
+      return installedPlugins;
     }
 
     @Bean("ircBackendStream")

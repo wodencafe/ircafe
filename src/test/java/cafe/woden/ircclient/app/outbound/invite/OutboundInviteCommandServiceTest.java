@@ -38,7 +38,8 @@ class OutboundInviteCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final CommandTargetPolicy commandTargetPolicy =
+      cafe.woden.ircclient.app.outbound.TestBackendSupport.commandTargetPolicy(serverCatalog);
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
@@ -52,6 +53,17 @@ class OutboundInviteCommandServiceTest {
   private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
   private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
   private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
+  private final PendingInviteCommandSupport pendingInviteCommandSupport =
+      new PendingInviteCommandSupport(
+          IrcMediatorInteractionPort.from(irc),
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          commandTargetPolicy,
+          runtimeConfig,
+          pendingInviteState,
+          whoisRoutingState,
+          ignoreListService);
   private final OutboundInviteCommandService service =
       new OutboundInviteCommandService(
           IrcMediatorInteractionPort.from(irc),
@@ -60,10 +72,7 @@ class OutboundInviteCommandServiceTest {
           targetCoordinator,
           commandTargetPolicy,
           rawCommandSupport,
-          runtimeConfig,
-          pendingInviteState,
-          whoisRoutingState,
-          ignoreListService);
+          pendingInviteCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

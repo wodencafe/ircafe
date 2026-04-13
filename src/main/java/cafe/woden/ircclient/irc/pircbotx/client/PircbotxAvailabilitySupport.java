@@ -9,16 +9,20 @@ final class PircbotxAvailabilitySupport {
     return hasLiveBot(connection) && connection.capabilitySnapshot().echoMessageCapAcked();
   }
 
+  boolean isMessageTagsAvailable(PircbotxConnectionState connection) {
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
+  }
+
   boolean isDraftReplyAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReplyCapAcked();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isDraftReactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReactCapAcked();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isDraftUnreactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftUnreactAvailable();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isMultilineAvailable(PircbotxConnectionState connection) {
@@ -34,7 +38,7 @@ final class PircbotxAvailabilitySupport {
     return toBoundedInt(max);
   }
 
-  boolean isMessageEditAvailable(PircbotxConnectionState connection) {
+  boolean isExperimentalMessageEditAvailable(PircbotxConnectionState connection) {
     return hasLiveBot(connection) && connection.capabilitySnapshot().draftMessageEditCapAcked();
   }
 

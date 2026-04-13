@@ -1,12 +1,10 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -16,37 +14,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /chathistory command flow and targeted /help chathistory output. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
-  private final IrcClientService irc;
-  private final TargetCoordinator targetCoordinator;
-  private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
-
-  public OutboundChatHistoryCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.chatHistoryRequestSupport =
-        new OutboundChatHistoryRequestSupport(
-            Objects.requireNonNull(ui, "ui"),
-            Objects.requireNonNull(connectionCoordinator, "connectionCoordinator"),
-            targetCoordinator,
-            Objects.requireNonNull(
-                chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState"));
-  }
+  @NonNull private final IrcClientService irc;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
+  @NonNull private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
 
   @Override
   public void appendGeneralHelp(TargetRef out) {}
@@ -226,7 +211,8 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
 
   private void appendChatHistoryUsage(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
-    chatHistoryRequestSupport.appendHelp(target, "/chathistory [limit]");
+    chatHistoryRequestSupport.appendHelp(
+        target, "/chathistory [limit]" + helpAvailabilitySuffix(target.serverId()));
     chatHistoryRequestSupport.appendHelp(
         target, "/chathistory before <msgid=...|timestamp=...> [limit]");
     chatHistoryRequestSupport.appendHelp(
@@ -234,5 +220,16 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
     chatHistoryRequestSupport.appendHelp(
         target, "/chathistory around <msgid=...|timestamp=...> [limit]");
     chatHistoryRequestSupport.appendHelp(target, "/chathistory between <start> <end> [limit]");
+  }
+
+  private String helpAvailabilitySuffix(String serverId) {
+    if (chatHistoryFeatureSupport.isAvailable(serverId)) {
+      return "";
+    }
+    String reason = chatHistoryFeatureSupport.unavailableReasonForHelp(serverId);
+    if (reason.isBlank()) {
+      return "";
+    }
+    return " (unavailable: " + reason + ")";
   }
 }

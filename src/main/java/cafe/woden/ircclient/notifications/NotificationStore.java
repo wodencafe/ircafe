@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +24,19 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class NotificationStore {
 
+  public sealed interface NotificationEvent
+      permits HighlightEvent, RuleMatchEvent, IrcEventRuleEvent {
+    String serverId();
+
+    String channel();
+
+    String fromNick();
+
+    Instant at();
+
+    String messageId();
+  }
+
   /**
    * A single highlight/mention event.
    *
@@ -33,7 +47,13 @@ public class NotificationStore {
    * @param at timestamp (Instant)
    */
   public record HighlightEvent(
-      String serverId, String channel, String fromNick, String snippet, Instant at) {}
+      String serverId,
+      String channel,
+      String fromNick,
+      String snippet,
+      Instant at,
+      String messageId)
+      implements NotificationEvent {}
 
   /**
    * A rule match event (WORD/REGEX) from a channel message/action.
@@ -51,11 +71,20 @@ public class NotificationStore {
       String fromNick,
       String ruleLabel,
       String snippet,
-      Instant at) {}
+      Instant at,
+      String messageId)
+      implements NotificationEvent {}
 
   /** A configured IRC event notification entry (kick/invite/mode/etc). */
   public record IrcEventRuleEvent(
-      String serverId, String channel, String fromNick, String title, String body, Instant at) {}
+      String serverId,
+      String channel,
+      String fromNick,
+      String title,
+      String body,
+      Instant at,
+      String messageId)
+      implements NotificationEvent {}
 
   /** Notification store update signal (used by the UI to refresh). */
   public record Change(String serverId) {}
@@ -114,11 +143,17 @@ public class NotificationStore {
 
   /** Record a new highlight event. */
   public void recordHighlight(TargetRef channelTarget, String fromNick) {
-    recordHighlight(channelTarget, fromNick, "");
+    recordHighlight(channelTarget, fromNick, "", "");
   }
 
   /** Record a new highlight event with optional message snippet context. */
   public void recordHighlight(TargetRef channelTarget, String fromNick, String snippet) {
+    recordHighlight(channelTarget, fromNick, snippet, "");
+  }
+
+  /** Record a new highlight event with optional snippet context and backing message id. */
+  public void recordHighlight(
+      TargetRef channelTarget, String fromNick, String snippet, String messageId) {
     if (channelTarget == null) return;
     if (channelTarget.isUiOnly()) return;
     if (!channelTarget.isChannel()) return;
@@ -131,13 +166,14 @@ public class NotificationStore {
 
     String nick = normalizeNick(fromNick);
     String snip = normalizeSnippet(snippet);
+    String msgId = normalizeMessageId(messageId);
     Instant now = Instant.now();
 
     List<HighlightEvent> list =
         eventsByServer.computeIfAbsent(sid, k -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
-      list.add(new HighlightEvent(sid, channel, nick, snip, now));
+      list.add(new HighlightEvent(sid, channel, nick, snip, now, msgId));
       // Enforce cap (drop oldest first).
       int overflow = list.size() - maxEventsPerServer;
       if (overflow > 0) {
@@ -151,6 +187,16 @@ public class NotificationStore {
   /** Record a new rule match event. */
   public void recordRuleMatch(
       TargetRef channelTarget, String fromNick, String ruleLabel, String snippet) {
+    recordRuleMatch(channelTarget, fromNick, ruleLabel, snippet, "");
+  }
+
+  /** Record a new rule match event with an optional backing message id. */
+  public void recordRuleMatch(
+      TargetRef channelTarget,
+      String fromNick,
+      String ruleLabel,
+      String snippet,
+      String messageId) {
     if (channelTarget == null) return;
     if (channelTarget.isUiOnly()) return;
     if (!channelTarget.isChannel()) return;
@@ -164,6 +210,7 @@ public class NotificationStore {
     String nick = normalizeNick(fromNick);
     String label = normalizeLabel(ruleLabel);
     String snip = normalizeSnippet(snippet);
+    String msgId = normalizeMessageId(messageId);
     Instant now = Instant.now();
 
     RuleMatchKey key =
@@ -181,7 +228,7 @@ public class NotificationStore {
             sid, k -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
-      list.add(new RuleMatchEvent(sid, channel, nick, label, snip, now));
+      list.add(new RuleMatchEvent(sid, channel, nick, label, snip, now, msgId));
       int overflow = list.size() - maxEventsPerServer;
       if (overflow > 0) {
         list.subList(0, overflow).clear();
@@ -194,6 +241,17 @@ public class NotificationStore {
   /** Record a configured IRC event notification for the Notifications node. */
   public void recordIrcEvent(
       String serverId, String target, String fromNick, String title, String body) {
+    recordIrcEvent(serverId, target, fromNick, title, body, "");
+  }
+
+  /** Record a configured IRC event notification for the Notifications node. */
+  public void recordIrcEvent(
+      String serverId,
+      String target,
+      String fromNick,
+      String title,
+      String body,
+      String messageId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
 
@@ -203,6 +261,7 @@ public class NotificationStore {
     String nick = normalizeNick(fromNick);
     String normalizedTitle = normalizeLabel(title);
     String normalizedBody = normalizeSnippet(body);
+    String msgId = normalizeMessageId(messageId);
     Instant now = Instant.now();
 
     List<IrcEventRuleEvent> list =
@@ -210,7 +269,7 @@ public class NotificationStore {
             sid, k -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
-      list.add(new IrcEventRuleEvent(sid, chan, nick, normalizedTitle, normalizedBody, now));
+      list.add(new IrcEventRuleEvent(sid, chan, nick, normalizedTitle, normalizedBody, now, msgId));
       int overflow = list.size() - maxEventsPerServer;
       if (overflow > 0) {
         list.subList(0, overflow).clear();
@@ -367,6 +426,54 @@ public class NotificationStore {
     changes.onNext(new Change(sid));
   }
 
+  public int clearSelected(String serverId, List<? extends NotificationEvent> selectedEvents) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || selectedEvents == null || selectedEvents.isEmpty()) return 0;
+
+    IdentityHashMap<NotificationEvent, Boolean> selectedByIdentity = new IdentityHashMap<>();
+    for (NotificationEvent event : selectedEvents) {
+      if (event != null) {
+        selectedByIdentity.put(event, Boolean.TRUE);
+      }
+    }
+    if (selectedByIdentity.isEmpty()) return 0;
+
+    int removed = 0;
+
+    List<HighlightEvent> highlights = eventsByServer.get(sid);
+    if (highlights != null) {
+      synchronized (highlights) {
+        int before = highlights.size();
+        highlights.removeIf(selectedByIdentity::containsKey);
+        removed += before - highlights.size();
+      }
+    }
+
+    List<RuleMatchEvent> rules = ruleEventsByServer.get(sid);
+    if (rules != null) {
+      synchronized (rules) {
+        int before = rules.size();
+        rules.removeIf(selectedByIdentity::containsKey);
+        removed += before - rules.size();
+      }
+    }
+
+    List<IrcEventRuleEvent> ircEvents = ircEventRuleEventsByServer.get(sid);
+    if (ircEvents != null) {
+      synchronized (ircEvents) {
+        int before = ircEvents.size();
+        ircEvents.removeIf(selectedByIdentity::containsKey);
+        removed += before - ircEvents.size();
+      }
+    }
+
+    clearRuleMatchCooldownForSelectedRules(sid, selectedEvents);
+    if (removed > 0) {
+      changes.onNext(new Change(sid));
+    }
+    return removed;
+  }
+
   private int currentRuleMatchCooldownSeconds() {
     try {
       if (uiSettingsPort == null) return DEFAULT_RULE_MATCH_COOLDOWN_SECONDS;
@@ -452,6 +559,30 @@ public class NotificationStore {
     lastRuleMatchAt.keySet().removeIf(k -> k != null && sidKey.equals(k.serverId()));
   }
 
+  private void clearRuleMatchCooldownForSelectedRules(
+      String serverId, List<? extends NotificationEvent> selectedEvents) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || selectedEvents == null || selectedEvents.isEmpty()) return;
+
+    String sidKey = sid.toLowerCase(Locale.ROOT);
+    lastRuleMatchAt
+        .keySet()
+        .removeIf(
+            key -> {
+              if (key == null || !sidKey.equals(key.serverId())) return false;
+              for (NotificationEvent event : selectedEvents) {
+                if (!(event instanceof RuleMatchEvent ruleMatch)) continue;
+                if (!sid.equalsIgnoreCase(ruleMatch.serverId())) continue;
+                if (!key.channel().equalsIgnoreCase(normalizeChannel(ruleMatch.channel())))
+                  continue;
+                if (!key.ruleLabel().equalsIgnoreCase(normalizeLabel(ruleMatch.ruleLabel())))
+                  continue;
+                return true;
+              }
+              return false;
+            });
+  }
+
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
@@ -463,6 +594,10 @@ public class NotificationStore {
   private static String normalizeNick(String nick) {
     String s = Objects.toString(nick, "").trim();
     return s.isEmpty() ? "?" : s;
+  }
+
+  private static String normalizeMessageId(String messageId) {
+    return Objects.toString(messageId, "").trim();
   }
 
   private static String normalizeLabel(String label) {

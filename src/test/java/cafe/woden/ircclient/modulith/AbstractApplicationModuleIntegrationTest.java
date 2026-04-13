@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -14,6 +15,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
@@ -89,6 +91,13 @@ public abstract class AbstractApplicationModuleIntegrationTest {
     return new BouncerBackendRegistry(List.of());
   }
 
+  @TestBean Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolverPort;
+
+  @SuppressWarnings("unused")
+  static Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolverPort() {
+    return new Ircv3CapabilityNameResolverPort() {};
+  }
+
   @BeforeEach
   void resetIrcClientServiceDefaults() {
     when(ircClientService.events()).thenReturn(Flowable.empty());
@@ -134,7 +143,9 @@ public abstract class AbstractApplicationModuleIntegrationTest {
   @MockitoBean(name = "ircNegotiatedFeaturePort", answers = Answers.RETURNS_DEEP_STUBS)
   IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
 
-  @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
+  @MockitoBean Ircv3ChatHistoryFeatureSupport ircv3ChatHistoryFeatureSupport;
+
+  @MockitoBean(name = "ircReadMarkerPort", answers = Answers.RETURNS_DEEP_STUBS)
   IrcReadMarkerPort ircReadMarkerPort;
 
   @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)

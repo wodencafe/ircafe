@@ -1,23 +1,16 @@
 package cafe.woden.ircclient.app.outbound.dcc;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
-import java.net.ServerSocket;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,60 +22,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundDccCommandService {
   private static final String DCC_TAG = "(dcc)";
 
-  private final UiPort ui;
-  private final TargetCoordinator targetCoordinator;
-  private final DccChatSessionSupport dccChatSessionSupport;
-  private final DccInboundOfferSupport dccInboundOfferSupport;
-  private final DccOfferCommandSupport dccOfferCommandSupport;
-
-  private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, DccChatSession> chatSessions = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, ServerSocket> outgoingChatListeners =
-      new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, ServerSocket> outgoingSendListeners =
-      new ConcurrentHashMap<>();
-
-  public OutboundDccCommandService(
-      UiPort ui,
-      IrcMediatorInteractionPort mediatorIrc,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      DccTransferStore dccTransferStore,
-      @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR) ExecutorService io) {
-    this.ui = ui;
-    this.targetCoordinator = targetCoordinator;
-    DccCommandSupport dccCommandSupport =
-        new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
-    this.dccChatSessionSupport =
-        new DccChatSessionSupport(ui, mediatorIrc, io, dccCommandSupport, chatSessions);
-    DccFileTransferIoSupport dccFileTransferIoSupport =
-        new DccFileTransferIoSupport(ui, dccCommandSupport, 20_000, 30_000, 64 * 1024);
-    this.dccInboundOfferSupport =
-        new DccInboundOfferSupport(dccCommandSupport, pendingChatOffers, pendingSendOffers);
-    this.dccOfferCommandSupport =
-        new DccOfferCommandSupport(
-            ui,
-            mediatorIrc,
-            connectionCoordinator,
-            io,
-            dccCommandSupport,
-            dccChatSessionSupport,
-            dccFileTransferIoSupport,
-            pendingChatOffers,
-            pendingSendOffers,
-            chatSessions,
-            outgoingChatListeners,
-            outgoingSendListeners,
-            120_000,
-            20_000,
-            30_000);
-  }
+  @NonNull private final UiPort ui;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final DccChatSessionSupport dccChatSessionSupport;
+  @NonNull private final DccInboundOfferSupport dccInboundOfferSupport;
+  @NonNull private final DccOfferCommandSupport dccOfferCommandSupport;
 
   public void handleDcc(
       CompositeDisposable disposables, String subcommand, String nick, String argument) {

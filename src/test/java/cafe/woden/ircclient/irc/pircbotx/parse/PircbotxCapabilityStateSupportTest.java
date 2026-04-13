@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.parse;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,24 +15,37 @@ class PircbotxCapabilityStateSupportTest {
     PircbotxCapabilityStateSupport support = new PircbotxCapabilityStateSupport("libera", conn);
 
     support.apply("chathistory", true, "ACK");
-    support.apply("draft/typing", true, "ACK");
     support.apply("draft/read-marker", true, "ACK");
     support.apply("draft/extended-monitor", true, "ACK");
 
     assertTrue(conn.capabilitySnapshot().chatHistoryCapAcked());
-    assertTrue(conn.capabilitySnapshot().typingCapAcked());
     assertTrue(conn.capabilitySnapshot().readMarkerCapAcked());
     assertTrue(conn.capabilitySnapshot().extendedMonitorCapAcked());
 
     support.apply("draft/chathistory", false, "DEL");
-    support.apply("typing", false, "DEL");
     support.apply("read-marker", false, "DEL");
     support.apply("extended-monitor", false, "DEL");
 
     assertFalse(conn.capabilitySnapshot().chatHistoryCapAcked());
-    assertFalse(conn.capabilitySnapshot().typingCapAcked());
     assertFalse(conn.capabilitySnapshot().readMarkerCapAcked());
     assertFalse(conn.capabilitySnapshot().extendedMonitorCapAcked());
+  }
+
+  @Test
+  void tagOnlyCapabilityNamesDoNotChangeTrackedCapabilityState() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    PircbotxCapabilityStateSupport support = new PircbotxCapabilityStateSupport("libera", conn);
+
+    PircbotxConnectionState.CapabilitySnapshot before = conn.capabilitySnapshot();
+
+    support.apply("draft/typing", true, "ACK");
+    support.apply("typing", false, "DEL");
+    support.apply("draft/reply", true, "ACK");
+    support.apply("draft/react", true, "ACK");
+    support.apply("draft/unreact", true, "ACK");
+    support.apply("draft/channel-context", true, "ACK");
+
+    assertEquals(before, conn.capabilitySnapshot());
   }
 
   @Test

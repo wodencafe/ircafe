@@ -5,14 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.CompiledPluginJarSupport;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,7 +29,7 @@ class BackendNamedCommandCatalogTest {
     writePluginJar(pluginDir.resolve("backendping.jar"));
 
     BackendNamedCommandCatalog catalog =
-        new BackendNamedCommandCatalog(
+        BackendNamedCommandCatalog.installed(
             pluginDir, BackendNamedCommandCatalogTest.class.getClassLoader());
 
     ParsedInput parsed = catalog.parse("/backendping hello");
@@ -45,7 +48,7 @@ class BackendNamedCommandCatalogTest {
         () -> runtimeConfigDirectory.resolve("ircafe.yml");
 
     BackendNamedCommandCatalog catalog =
-        new BackendNamedCommandCatalog(
+        BackendNamedCommandCatalog.installed(
             runtimeConfigPathPort, BackendNamedCommandCatalogTest.class.getClassLoader());
 
     ParsedInput parsed = catalog.parse("/backendping hello");
@@ -59,7 +62,7 @@ class BackendNamedCommandCatalogTest {
   }
 
   @Test
-  void duplicateExecutionCommandRegistrationsFailFast() {
+  void duplicateParserCommandRegistrationsFailFast() {
     BackendNamedCommandHandler first =
         new BackendNamedCommandHandler() {
           @Override
@@ -71,36 +74,35 @@ class BackendNamedCommandCatalogTest {
           public ParsedInput parse(String line, String matchedCommandName) {
             return null;
           }
-
-          @Override
-          public Set<String> handledCommandNames() {
-            return Set.of("backendexec");
-          }
         };
     BackendNamedCommandHandler second =
         new BackendNamedCommandHandler() {
           @Override
           public Set<String> supportedCommandNames() {
-            return Set.of("backendpong");
+            return Set.of("backendping");
           }
 
           @Override
           public ParsedInput parse(String line, String matchedCommandName) {
             return null;
           }
-
-          @Override
-          public Set<String> handledCommandNames() {
-            return Set.of("backendexec");
-          }
         };
 
     assertThrows(
-        IllegalStateException.class, () -> new BackendNamedCommandCatalog(List.of(first, second)));
+        IllegalStateException.class,
+        () -> BackendNamedCommandCatalog.fromHandlers(List.of(first, second)));
   }
 
   private static void writePluginJar(Path jarPath) throws IOException {
-    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
+    Manifest manifest = new Manifest();
+    Attributes attributes = manifest.getMainAttributes();
+    attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry :
+        CompiledPluginJarSupport.compatibleManifest("backend-named-command-test", "1.0.0")
+            .entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
       out.putNextEntry(
           new JarEntry("META-INF/services/" + BackendNamedCommandHandler.class.getName()));
       out.write(

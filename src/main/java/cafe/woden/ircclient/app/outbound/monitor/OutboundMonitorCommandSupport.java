@@ -12,8 +12,10 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared monitor command target resolution, transport, and fallback support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class OutboundMonitorCommandSupport {

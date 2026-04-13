@@ -1,13 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
-import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
-import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
-import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
-import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
-import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
-import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy.IconSpec;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy.Presentation;
 import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -17,12 +12,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
-import java.util.Enumeration;
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.IntSupplier;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.UIManager;
@@ -32,241 +22,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 /** Dedicated tree cell renderer for server tree nodes, badges, and typing indicators. */
 public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
-  public interface Context {
-    boolean serverTreeNotificationBadgesEnabled();
-
-    int unreadBadgeScalePercent();
-
-    ServerTreeTypingIndicatorStyle typingIndicatorStyle();
-
-    boolean typingIndicatorsTreeEnabled();
-
-    boolean isPrivateMessageTarget(TargetRef ref);
-
-    boolean isPrivateMessageOnline(TargetRef ref);
-
-    boolean isChannelPinned(TargetRef ref);
-
-    boolean isChannelMuted(TargetRef ref);
-
-    Color unreadChannelTextColor();
-
-    Color highlightChannelTextColor();
-
-    boolean isApplicationJfrActive();
-
-    boolean isInterceptorEnabled(TargetRef ref);
-
-    boolean isMonitorGroupNode(DefaultMutableTreeNode node);
-
-    boolean isInterceptorsGroupNode(DefaultMutableTreeNode node);
-
-    boolean isOtherGroupNode(DefaultMutableTreeNode node);
-
-    boolean isServerNode(DefaultMutableTreeNode node);
-
-    String serverNodeDisplayLabel(String serverId);
-
-    boolean isEphemeralServer(String serverId);
-
-    ConnectionState connectionStateForServer(String serverId);
-
-    boolean isIrcRootNode(DefaultMutableTreeNode node);
-
-    boolean isApplicationRootNode(DefaultMutableTreeNode node);
-
-    boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node);
-
-    String backendIdForNetworksGroupNode(DefaultMutableTreeNode node);
-
-    boolean isQuasselNetworkNode(DefaultMutableTreeNode node);
-
-    boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node);
-  }
-
-  public static Context context(
-      Supplier<Boolean> serverTreeNotificationBadgesEnabled,
-      IntSupplier unreadBadgeScalePercent,
-      Supplier<ServerTreeTypingIndicatorStyle> typingIndicatorStyle,
-      Supplier<Boolean> typingIndicatorsTreeEnabled,
-      Predicate<TargetRef> isPrivateMessageTarget,
-      Predicate<TargetRef> isPrivateMessageOnline,
-      Predicate<TargetRef> isChannelPinned,
-      Predicate<TargetRef> isChannelMuted,
-      Supplier<Color> unreadChannelTextColor,
-      Supplier<Color> highlightChannelTextColor,
-      Supplier<Boolean> isApplicationJfrActive,
-      Predicate<TargetRef> isInterceptorEnabled,
-      Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
-      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
-      Predicate<DefaultMutableTreeNode> isOtherGroupNode,
-      Predicate<DefaultMutableTreeNode> isServerNode,
-      Function<String, String> serverNodeDisplayLabel,
-      Predicate<String> isEphemeralServer,
-      Function<String, ConnectionState> connectionStateForServer,
-      Predicate<DefaultMutableTreeNode> isIrcRootNode,
-      Predicate<DefaultMutableTreeNode> isApplicationRootNode,
-      Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
-      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode,
-      Predicate<DefaultMutableTreeNode> isQuasselNetworkNode,
-      Predicate<DefaultMutableTreeNode> isQuasselEmptyStateNode) {
-    Objects.requireNonNull(
-        serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
-    Objects.requireNonNull(unreadBadgeScalePercent, "unreadBadgeScalePercent");
-    Objects.requireNonNull(typingIndicatorStyle, "typingIndicatorStyle");
-    Objects.requireNonNull(typingIndicatorsTreeEnabled, "typingIndicatorsTreeEnabled");
-    Objects.requireNonNull(isPrivateMessageTarget, "isPrivateMessageTarget");
-    Objects.requireNonNull(isPrivateMessageOnline, "isPrivateMessageOnline");
-    Objects.requireNonNull(isChannelPinned, "isChannelPinned");
-    Objects.requireNonNull(isChannelMuted, "isChannelMuted");
-    Objects.requireNonNull(unreadChannelTextColor, "unreadChannelTextColor");
-    Objects.requireNonNull(highlightChannelTextColor, "highlightChannelTextColor");
-    Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
-    Objects.requireNonNull(isInterceptorEnabled, "isInterceptorEnabled");
-    Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
-    Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
-    Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
-    Objects.requireNonNull(isServerNode, "isServerNode");
-    Objects.requireNonNull(serverNodeDisplayLabel, "serverNodeDisplayLabel");
-    Objects.requireNonNull(isEphemeralServer, "isEphemeralServer");
-    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
-    Objects.requireNonNull(isIrcRootNode, "isIrcRootNode");
-    Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
-    Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
-    Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
-    Objects.requireNonNull(isQuasselNetworkNode, "isQuasselNetworkNode");
-    Objects.requireNonNull(isQuasselEmptyStateNode, "isQuasselEmptyStateNode");
-    return new Context() {
-      @Override
-      public boolean serverTreeNotificationBadgesEnabled() {
-        return serverTreeNotificationBadgesEnabled.get();
-      }
-
-      @Override
-      public int unreadBadgeScalePercent() {
-        return unreadBadgeScalePercent.getAsInt();
-      }
-
-      @Override
-      public ServerTreeTypingIndicatorStyle typingIndicatorStyle() {
-        return typingIndicatorStyle.get();
-      }
-
-      @Override
-      public boolean typingIndicatorsTreeEnabled() {
-        return typingIndicatorsTreeEnabled.get();
-      }
-
-      @Override
-      public boolean isPrivateMessageTarget(TargetRef ref) {
-        return isPrivateMessageTarget.test(ref);
-      }
-
-      @Override
-      public boolean isPrivateMessageOnline(TargetRef ref) {
-        return isPrivateMessageOnline.test(ref);
-      }
-
-      @Override
-      public boolean isChannelPinned(TargetRef ref) {
-        return isChannelPinned.test(ref);
-      }
-
-      @Override
-      public boolean isChannelMuted(TargetRef ref) {
-        return isChannelMuted.test(ref);
-      }
-
-      @Override
-      public Color unreadChannelTextColor() {
-        return unreadChannelTextColor.get();
-      }
-
-      @Override
-      public Color highlightChannelTextColor() {
-        return highlightChannelTextColor.get();
-      }
-
-      @Override
-      public boolean isApplicationJfrActive() {
-        return isApplicationJfrActive.get();
-      }
-
-      @Override
-      public boolean isInterceptorEnabled(TargetRef ref) {
-        return isInterceptorEnabled.test(ref);
-      }
-
-      @Override
-      public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
-        return isMonitorGroupNode.test(node);
-      }
-
-      @Override
-      public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
-        return isInterceptorsGroupNode.test(node);
-      }
-
-      @Override
-      public boolean isOtherGroupNode(DefaultMutableTreeNode node) {
-        return isOtherGroupNode.test(node);
-      }
-
-      @Override
-      public boolean isServerNode(DefaultMutableTreeNode node) {
-        return isServerNode.test(node);
-      }
-
-      @Override
-      public String serverNodeDisplayLabel(String serverId) {
-        return serverNodeDisplayLabel.apply(serverId);
-      }
-
-      @Override
-      public boolean isEphemeralServer(String serverId) {
-        return isEphemeralServer.test(serverId);
-      }
-
-      @Override
-      public ConnectionState connectionStateForServer(String serverId) {
-        return connectionStateForServer.apply(serverId);
-      }
-
-      @Override
-      public boolean isIrcRootNode(DefaultMutableTreeNode node) {
-        return isIrcRootNode.test(node);
-      }
-
-      @Override
-      public boolean isApplicationRootNode(DefaultMutableTreeNode node) {
-        return isApplicationRootNode.test(node);
-      }
-
-      @Override
-      public boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
-        return isPrivateMessagesGroupNode.test(node);
-      }
-
-      @Override
-      public String backendIdForNetworksGroupNode(DefaultMutableTreeNode node) {
-        return backendIdForNetworksGroupNode.apply(node);
-      }
-
-      @Override
-      public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
-        return isQuasselNetworkNode.test(node);
-      }
-
-      @Override
-      public boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node) {
-        return isQuasselEmptyStateNode.test(node);
-      }
-    };
-  }
-
   private static final int TREE_NODE_ICON_SIZE = 13;
-  private static final int TYPING_ACTIVITY_FADE_MS = 900;
-  private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
   private static final int TYPING_ACTIVITY_DOT_COUNT = 3;
   private static final int TYPING_ACTIVITY_DOT_SIZE = 3;
   private static final int TYPING_ACTIVITY_DOT_GAP = 2;
@@ -290,7 +46,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
   private final String ircRootLabel;
   private final String applicationRootLabel;
-  private final Context context;
+  private final ServerTreeCellPresentationPolicy presentationPolicy;
+  private final ServerTreeCellPresentationPolicy.Context context;
 
   private float typingIndicatorAlpha = 0f;
   private boolean typingIndicatorSlotVisible = false;
@@ -298,10 +55,15 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
   private int unreadBadgeCount = 0;
   private int highlightBadgeCount = 0;
 
-  public ServerTreeCellRenderer(String ircRootLabel, String applicationRootLabel, Context context) {
+  public ServerTreeCellRenderer(
+      String ircRootLabel,
+      String applicationRootLabel,
+      ServerTreeCellPresentationPolicy presentationPolicy,
+      ServerTreeCellPresentationPolicy.Context context) {
     this.ircRootLabel = Objects.requireNonNull(ircRootLabel, "ircRootLabel");
     this.applicationRootLabel =
         Objects.requireNonNull(applicationRootLabel, "applicationRootLabel");
+    this.presentationPolicy = Objects.requireNonNull(presentationPolicy, "presentationPolicy");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -341,177 +103,10 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     highlightBadgeCount = 0;
 
     if (value instanceof DefaultMutableTreeNode node) {
-      Object userObject = node.getUserObject();
-      if (userObject instanceof ServerTreeNodeData nodeData) {
-        setText(nodeData.label);
-        boolean detachedChannel =
-            nodeData.ref != null && nodeData.ref.isChannel() && nodeData.detached;
-        int style = nodeData.highlightUnread > 0 ? Font.BOLD : Font.PLAIN;
-        if (context.serverTreeNotificationBadgesEnabled()) {
-          unreadBadgeCount = Math.max(0, nodeData.unread);
-          highlightBadgeCount = Math.max(0, nodeData.highlightUnread);
-        }
-        if (detachedChannel) {
-          style |= Font.ITALIC;
-        }
-        setFont(base.deriveFont(style));
-        if (nodeData.ref != null && nodeData.ref.isChannel()) {
-          boolean mutedChannel = context.isChannelMuted(nodeData.ref);
-          if (mutedChannel) {
-            setTreeIcon("pause");
-          } else {
-            setTreeIcon(context.isChannelPinned(nodeData.ref) ? "star" : "channel");
-          }
-          if (!sel) {
-            Color textColor =
-                nodeData.highlightUnread > 0
-                    ? context.highlightChannelTextColor()
-                    : (nodeData.unread > 0 ? context.unreadChannelTextColor() : null);
-            if (textColor != null) {
-              setForeground(textColor);
-            }
-          }
-        } else if (context.isPrivateMessageTarget(nodeData.ref)) {
-          boolean online = context.isPrivateMessageOnline(nodeData.ref);
-          String name = online ? "pm-online" : "pm-offline";
-          Palette palette = online ? Palette.TREE_PM_ONLINE : Palette.TREE_PM_OFFLINE;
-          Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, palette);
-          setIcon(icon);
-          setDisabledIcon(icon);
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationUnhandledErrors()) {
-          setTreeIcon("info");
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationAssertjSwing()) {
-          setTreeIcon("settings");
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationJhiccup()) {
-          setTreeIcon("refresh");
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationInboundDedup()) {
-          setTreeIcon("copy");
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationJfr()) {
-          boolean active = context.isApplicationJfrActive();
-          String iconName = active ? "play" : "pause";
-          Palette palette = active ? Palette.TREE_PM_ONLINE : Palette.TREE_DISABLED;
-          Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
-          setIcon(icon);
-          setDisabledIcon(icon);
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationSpring()) {
-          setTreeIcon("theme");
-        } else if (nodeData.ref != null && nodeData.ref.isApplicationTerminal()) {
-          setTreeIcon("terminal");
-        } else if (nodeData.ref != null && nodeData.ref.isStatus()) {
-          setTreeIcon("dock-left");
-        } else if (nodeData.ref != null && nodeData.ref.isNotifications()) {
-          setTreeIcon("info");
-        } else if (nodeData.ref != null && nodeData.ref.isLogViewer()) {
-          setTreeIcon("copy");
-        } else if (nodeData.ref != null && nodeData.ref.isInterceptor()) {
-          setTreeIcon(context.isInterceptorEnabled(nodeData.ref) ? "interceptor" : "pause");
-        } else if (nodeData.ref != null && nodeData.ref.isChannelList()) {
-          setTreeIcon("add");
-        } else if (nodeData.ref != null && nodeData.ref.isWeechatFilters()) {
-          setTreeIcon("settings");
-        } else if (nodeData.ref != null && nodeData.ref.isIgnores()) {
-          setTreeIcon("ban");
-        } else if (nodeData.ref != null && nodeData.ref.isDccTransfers()) {
-          setTreeIcon("dock-right");
-        } else if (nodeData.ref == null && context.isMonitorGroupNode(node)) {
-          setTreeIcon("eye");
-        } else if (nodeData.ref == null && context.isInterceptorsGroupNode(node)) {
-          setTreeIcon("yin-yang");
-        } else if (nodeData.ref == null && context.isOtherGroupNode(node)) {
-          setTreeIcon("settings");
-        }
-        if (!sel && detachedChannel) {
-          Color muted = UIManager.getColor("Label.disabledForeground");
-          if (muted == null) muted = UIManager.getColor("Component.disabledForeground");
-          if (muted != null) setForeground(muted);
-        }
-        if (ServerTreeTypingTargetPolicy.supportsTypingActivity(nodeData.ref)) {
-          detachedWarningIndicatorVisible = nodeData.hasDetachedWarning();
-          typingIndicatorSlotVisible =
-              detachedWarningIndicatorVisible || context.typingIndicatorsTreeEnabled();
-          if (context.typingIndicatorsTreeEnabled() && !detachedWarningIndicatorVisible) {
-            typingIndicatorAlpha =
-                nodeData.typingDotAlpha(
-                    System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
-          }
-        }
-      } else if (userObject instanceof ServerTreeQuasselNetworkNodeData networkNodeData
-          && (context.isQuasselNetworkNode(node) || context.isQuasselEmptyStateNode(node))) {
-        setText(networkNodeData.label());
-        int[] rollup = rollupUnreadCounts(node);
-        if (context.serverTreeNotificationBadgesEnabled() && !networkNodeData.emptyState()) {
-          unreadBadgeCount = rollup[0];
-          highlightBadgeCount = rollup[1];
-        }
-        int style = (highlightBadgeCount > 0 || unreadBadgeCount > 0) ? Font.BOLD : Font.PLAIN;
-        if (networkNodeData.emptyState()) {
-          style |= Font.ITALIC;
-        }
-        if (Boolean.FALSE.equals(networkNodeData.enabled())) {
-          style |= Font.ITALIC;
-        }
-        setFont(base.deriveFont(style));
-        String iconName;
-        Palette palette;
-        if (networkNodeData.emptyState()) {
-          iconName = "dock-left";
-          palette = Palette.TREE_DISABLED;
-        } else if (Boolean.FALSE.equals(networkNodeData.enabled())) {
-          iconName = "pause";
-          palette = Palette.TREE_DISABLED;
-        } else {
-          ConnectionState state =
-              networkNodeData.connected() == null
-                  ? context.connectionStateForServer(networkNodeData.serverId())
-                  : (Boolean.TRUE.equals(networkNodeData.connected())
-                      ? ConnectionState.CONNECTED
-                      : ConnectionState.DISCONNECTED);
-          iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
-          palette = ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
-        }
-        Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
-        setIcon(icon);
-        setDisabledIcon(SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED));
-      } else if (userObject instanceof String id && context.isServerNode(node)) {
-        setText(context.serverNodeDisplayLabel(id));
-        if (context.isEphemeralServer(id)) {
-          setFont(base.deriveFont(Font.ITALIC));
-        } else {
-          setFont(base.deriveFont(Font.PLAIN));
-        }
-        ConnectionState state = context.connectionStateForServer(id);
-        String iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
-        Palette palette = ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
-        Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
-        Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
-        setIcon(icon);
-        setDisabledIcon(disabled);
-      } else if (context.isIrcRootNode(node)) {
-        setText(ircRootLabel);
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("chat");
-      } else if (context.isApplicationRootNode(node)) {
-        setText(applicationRootLabel);
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("settings");
-      } else if (context.isPrivateMessagesGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("account-unknown");
-      } else if (context.isMonitorGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("eye");
-      } else if (context.isInterceptorsGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("yin-yang");
-      } else if (context.isOtherGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("settings");
-      } else if (isNetworksGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("dock-left");
-      } else {
-        setFont(base.deriveFont(Font.PLAIN));
-      }
+      applyPresentation(
+          presentationPolicy.presentationForNode(
+              context, node, ircRootLabel, applicationRootLabel, sel),
+          base);
     } else {
       setFont(base.deriveFont(Font.PLAIN));
     }
@@ -582,32 +177,31 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     }
   }
 
-  private void setTreeIcon(String name) {
-    Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
-    Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
+  private void applyPresentation(Presentation presentation, Font base) {
+    Presentation resolved =
+        presentation == null ? ServerTreeCellPresentationPolicy.Presentation.plain() : presentation;
+    if (resolved.text() != null) {
+      setText(resolved.text());
+    }
+    setFont(base.deriveFont(resolved.fontStyle()));
+    if (resolved.iconSpec() != null) {
+      setIconSpec(resolved.iconSpec());
+    }
+    if (resolved.foreground() != null) {
+      setForeground(resolved.foreground());
+    }
+    unreadBadgeCount = Math.max(0, resolved.unreadBadgeCount());
+    highlightBadgeCount = Math.max(0, resolved.highlightBadgeCount());
+    typingIndicatorSlotVisible = resolved.typingIndicatorSlotVisible();
+    detachedWarningIndicatorVisible = resolved.detachedWarningIndicatorVisible();
+    typingIndicatorAlpha = Math.max(0f, resolved.typingIndicatorAlpha());
+  }
+
+  private void setIconSpec(IconSpec iconSpec) {
+    Icon icon = SvgIcons.icon(iconSpec.name(), TREE_NODE_ICON_SIZE, iconSpec.palette());
+    Icon disabled = SvgIcons.icon(iconSpec.name(), TREE_NODE_ICON_SIZE, iconSpec.disabledPalette());
     setIcon(icon);
     setDisabledIcon(disabled);
-  }
-
-  private boolean isNetworksGroupNode(DefaultMutableTreeNode node) {
-    String backendId = context.backendIdForNetworksGroupNode(node);
-    return backendId != null && !backendId.isBlank();
-  }
-
-  private static int[] rollupUnreadCounts(DefaultMutableTreeNode rootNode) {
-    if (rootNode == null) return new int[] {0, 0};
-    int unread = 0;
-    int highlight = 0;
-    Enumeration<?> walk = rootNode.depthFirstEnumeration();
-    while (walk.hasMoreElements()) {
-      Object next = walk.nextElement();
-      if (!(next instanceof DefaultMutableTreeNode node) || node == rootNode) continue;
-      Object userObject = node.getUserObject();
-      if (!(userObject instanceof ServerTreeNodeData data)) continue;
-      unread += Math.max(0, data.unread);
-      highlight += Math.max(0, data.highlightUnread);
-    }
-    return new int[] {unread, highlight};
   }
 
   private ServerTreeTypingIndicatorStyle typingStyle() {

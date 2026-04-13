@@ -3,33 +3,51 @@ package cafe.woden.ircclient.ui.servertree.model;
 import java.util.Objects;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Shared node classification helpers used by server-tree collaborators. */
+@Component
 public final class ServerTreeNodeClassifier {
 
-  private final String privateMessagesLabel;
-  private final String interceptorsGroupLabel;
-  private final String monitorGroupLabel;
-  private final String otherGroupLabel;
-  private final Predicate<DefaultMutableTreeNode> isServerNode;
+  public interface Context {
+    String privateMessagesLabel();
 
-  public ServerTreeNodeClassifier(
+    String interceptorsGroupLabel();
+
+    String monitorGroupLabel();
+
+    String otherGroupLabel();
+
+    Predicate<DefaultMutableTreeNode> isServerNode();
+  }
+
+  private record DefaultContext(
+      String privateMessagesLabel,
+      String interceptorsGroupLabel,
+      String monitorGroupLabel,
+      String otherGroupLabel,
+      Predicate<DefaultMutableTreeNode> isServerNode)
+      implements Context {}
+
+  public static Context context(
       String privateMessagesLabel,
       String interceptorsGroupLabel,
       String monitorGroupLabel,
       String otherGroupLabel,
       Predicate<DefaultMutableTreeNode> isServerNode) {
-    this.privateMessagesLabel = Objects.toString(privateMessagesLabel, "Private Messages").trim();
-    this.interceptorsGroupLabel = Objects.toString(interceptorsGroupLabel, "Interceptors").trim();
-    this.monitorGroupLabel = Objects.toString(monitorGroupLabel, "Monitor").trim();
-    this.otherGroupLabel = Objects.toString(otherGroupLabel, "Other").trim();
-    this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
+    return new DefaultContext(
+        privateMessagesLabel,
+        interceptorsGroupLabel,
+        monitorGroupLabel,
+        otherGroupLabel,
+        Objects.requireNonNull(isServerNode, "isServerNode"));
   }
 
-  public String owningServerIdForNode(DefaultMutableTreeNode node) {
+  public String owningServerIdForNode(Context context, DefaultMutableTreeNode node) {
+    Context in = Objects.requireNonNull(context, "context");
     DefaultMutableTreeNode current = node;
     while (current != null) {
-      if (isServerNode.test(current)) {
+      if (in.isServerNode().test(current)) {
         Object userObject = current.getUserObject();
         if (userObject instanceof String serverId) {
           return serverId.trim();
@@ -41,24 +59,24 @@ public final class ServerTreeNodeClassifier {
     return "";
   }
 
-  public boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+  public boolean isPrivateMessagesGroupNode(Context context, DefaultMutableTreeNode node) {
     String label = nodeLabel(node);
     if (label.isEmpty()) return false;
-    return privateMessagesLabel.equalsIgnoreCase(label)
+    return privateMessagesLabel(context).equalsIgnoreCase(label)
         || "Private messages".equalsIgnoreCase(label)
         || "Private Messages".equalsIgnoreCase(label);
   }
 
-  public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
-    return groupNodeMatchesLabel(node, interceptorsGroupLabel);
+  public boolean isInterceptorsGroupNode(Context context, DefaultMutableTreeNode node) {
+    return groupNodeMatchesLabel(node, interceptorsGroupLabel(context));
   }
 
-  public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
-    return groupNodeMatchesLabel(node, monitorGroupLabel);
+  public boolean isMonitorGroupNode(Context context, DefaultMutableTreeNode node) {
+    return groupNodeMatchesLabel(node, monitorGroupLabel(context));
   }
 
-  public boolean isOtherGroupNode(DefaultMutableTreeNode node) {
-    return groupNodeMatchesLabel(node, otherGroupLabel);
+  public boolean isOtherGroupNode(Context context, DefaultMutableTreeNode node) {
+    return groupNodeMatchesLabel(node, otherGroupLabel(context));
   }
 
   private static String nodeLabel(DefaultMutableTreeNode node) {
@@ -80,5 +98,28 @@ public final class ServerTreeNodeClassifier {
     if (node == null) return false;
     String label = nodeLabel(node);
     return !label.isEmpty() && expectedLabel.equalsIgnoreCase(label);
+  }
+
+  private static String privateMessagesLabel(Context context) {
+    return Objects.toString(
+            Objects.requireNonNull(context, "context").privateMessagesLabel(), "Private Messages")
+        .trim();
+  }
+
+  private static String interceptorsGroupLabel(Context context) {
+    return Objects.toString(
+            Objects.requireNonNull(context, "context").interceptorsGroupLabel(), "Interceptors")
+        .trim();
+  }
+
+  private static String monitorGroupLabel(Context context) {
+    return Objects.toString(
+            Objects.requireNonNull(context, "context").monitorGroupLabel(), "Monitor")
+        .trim();
+  }
+
+  private static String otherGroupLabel(Context context) {
+    return Objects.toString(Objects.requireNonNull(context, "context").otherGroupLabel(), "Other")
+        .trim();
   }
 }

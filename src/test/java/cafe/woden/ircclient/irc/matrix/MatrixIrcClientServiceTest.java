@@ -88,7 +88,7 @@ class MatrixIrcClientServiceTest {
     assertFalse(service.isDraftReplyAvailable("matrix"));
     assertFalse(service.isDraftReactAvailable("matrix"));
     assertFalse(service.isDraftUnreactAvailable("matrix"));
-    assertFalse(service.isMessageEditAvailable("matrix"));
+    assertFalse(service.isExperimentalMessageEditAvailable("matrix"));
     assertFalse(service.isMessageRedactionAvailable("matrix"));
     assertFalse(service.isMultilineAvailable("matrix"));
     assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));
@@ -138,7 +138,7 @@ class MatrixIrcClientServiceTest {
     assertTrue(service.isDraftReplyAvailable("matrix"));
     assertTrue(service.isDraftReactAvailable("matrix"));
     assertTrue(service.isDraftUnreactAvailable("matrix"));
-    assertTrue(service.isMessageEditAvailable("matrix"));
+    assertTrue(service.isExperimentalMessageEditAvailable("matrix"));
     assertTrue(service.isMessageRedactionAvailable("matrix"));
     assertTrue(service.isMultilineAvailable("matrix"));
     assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));
@@ -4503,7 +4503,7 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
 
     service
-        .sendRaw("matrix", "@+draft/reply=$msg-1 PRIVMSG !room:matrix.example.org :reply text")
+        .sendRaw("matrix", "@+reply=$msg-1 PRIVMSG !room:matrix.example.org :reply text")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -4796,7 +4796,7 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
 
     service
-        .sendRaw("matrix", "@+draft/react=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .sendRaw("matrix", "@+draft/react=:+1:;+reply=$msg-1 TAGMSG !room:matrix.example.org")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -4863,8 +4863,7 @@ class MatrixIrcClientServiceTest {
     events.awaitCount(4);
 
     service
-        .sendRaw(
-            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .sendRaw("matrix", "@+draft/unreact=:+1:;+reply=$msg-1 TAGMSG !room:matrix.example.org")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -4943,8 +4942,7 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
 
     service
-        .sendRaw(
-            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .sendRaw("matrix", "@+draft/unreact=:+1:;+reply=$msg-1 TAGMSG !room:matrix.example.org")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -5050,8 +5048,7 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
 
     service
-        .sendRaw(
-            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .sendRaw("matrix", "@+draft/unreact=:+1:;+reply=$msg-1 TAGMSG !room:matrix.example.org")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -5161,8 +5158,7 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
 
     service
-        .sendRaw(
-            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .sendRaw("matrix", "@+draft/unreact=:+1:;+reply=$msg-1 TAGMSG !room:matrix.example.org")
         .blockingAwait();
 
     verify(roomMessageSender, times(1))
@@ -5244,7 +5240,7 @@ class MatrixIrcClientServiceTest {
                     .sendRaw("matrix", "@+draft/react=:+1: TAGMSG !room:matrix.example.org")
                     .blockingAwait());
 
-    assertEquals("TAGMSG draft reactions require +draft/reply=<msgid>", err.getMessage());
+    assertEquals("TAGMSG draft reactions require +reply=<msgid>", err.getMessage());
   }
 
   @Test

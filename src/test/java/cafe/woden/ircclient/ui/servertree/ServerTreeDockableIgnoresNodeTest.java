@@ -84,7 +84,7 @@ class ServerTreeDockableIgnoresNodeTest {
   }
 
   private static ServerTreeDockable newDockable() {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         null,
         null,
         null,
@@ -107,11 +107,12 @@ class ServerTreeDockableIgnoresNodeTest {
 
   private static void invokeSyncServers(ServerTreeDockable dockable, List<ServerEntry> entries)
       throws Exception {
-    Field f = ServerTreeDockable.class.getDeclaredField("serverCatalogSynchronizer");
-    f.setAccessible(true);
-    ServerTreeServerCatalogSynchronizer synchronizer =
-        (ServerTreeServerCatalogSynchronizer) f.get(dockable);
-    synchronizer.syncServers(entries);
+    Field contextField =
+        ServerTreeDockable.class.getDeclaredField("serverCatalogSynchronizerContext");
+    contextField.setAccessible(true);
+    ServerTreeServerCatalogSynchronizer.Context context =
+        (ServerTreeServerCatalogSynchronizer.Context) contextField.get(dockable);
+    new ServerTreeServerCatalogSynchronizer().syncServers(context, entries);
   }
 
   private static TargetRef selectedTargetRef(ServerTreeDockable dockable) throws Exception {

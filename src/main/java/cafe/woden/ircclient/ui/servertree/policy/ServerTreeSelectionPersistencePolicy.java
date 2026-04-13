@@ -6,8 +6,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Resolves the current best-effort selection used for persistence. */
+@Component
 public final class ServerTreeSelectionPersistencePolicy {
 
   public interface Context {
@@ -79,13 +81,8 @@ public final class ServerTreeSelectionPersistencePolicy {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeSelectionPersistencePolicy(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  public TargetRef selectedTargetForPersistence() {
+  public TargetRef selectedTargetForPersistence(Context context) {
+    Objects.requireNonNull(context, "context");
     TargetRef emitted = context.lastBroadcastSelection();
     if (emitted != null) return emitted;
 

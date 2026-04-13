@@ -13,51 +13,53 @@ class ServerTreeBouncerDetachPolicyTest {
 
   @Test
   void supportsDetachForEphemeralBackendWhenConnected() {
-    ServerTreeBouncerDetachPolicy policy =
-        new ServerTreeBouncerDetachPolicy(
+    ServerTreeBouncerDetachPolicy policy = new ServerTreeBouncerDetachPolicy();
+    ServerTreeBouncerDetachPolicy.Context context =
+        ServerTreeBouncerDetachPolicy.context(
             Map.of(),
-            ServerTreeBouncerDetachPolicy.context(
-                __ -> ConnectionState.CONNECTED,
-                __ -> ServerTreeBouncerBackends.GENERIC,
-                (serverId, capability) -> false));
+            __ -> ConnectionState.CONNECTED,
+            __ -> ServerTreeBouncerBackends.GENERIC,
+            (serverId, capability) -> false);
 
-    assertTrue(policy.supportsBouncerDetach("bouncer:origin:network"));
+    assertTrue(policy.supportsBouncerDetach(context, "bouncer:origin:network"));
   }
 
   @Test
   void supportsDetachForBackendControlServerWhenConnected() {
-    ServerTreeBouncerDetachPolicy policy =
-        new ServerTreeBouncerDetachPolicy(
+    ServerTreeBouncerDetachPolicy policy = new ServerTreeBouncerDetachPolicy();
+    ServerTreeBouncerDetachPolicy.Context context =
+        ServerTreeBouncerDetachPolicy.context(
             Map.of(ServerTreeBouncerBackends.GENERIC, Set.of("origin")),
-            ServerTreeBouncerDetachPolicy.context(
-                __ -> ConnectionState.CONNECTED, __ -> null, (serverId, capability) -> false));
+            __ -> ConnectionState.CONNECTED,
+            __ -> null,
+            (serverId, capability) -> false);
 
-    assertTrue(policy.supportsBouncerDetach("origin"));
+    assertTrue(policy.supportsBouncerDetach(context, "origin"));
   }
 
   @Test
   void fallsBackToCapabilityChecks() {
-    ServerTreeBouncerDetachPolicy policy =
-        new ServerTreeBouncerDetachPolicy(
+    ServerTreeBouncerDetachPolicy policy = new ServerTreeBouncerDetachPolicy();
+    ServerTreeBouncerDetachPolicy.Context context =
+        ServerTreeBouncerDetachPolicy.context(
             Map.of(),
-            ServerTreeBouncerDetachPolicy.context(
-                __ -> ConnectionState.CONNECTED,
-                __ -> null,
-                (serverId, capability) -> "znc.in/playback".equals(capability)));
+            __ -> ConnectionState.CONNECTED,
+            __ -> null,
+            (serverId, capability) -> "znc.in/playback".equals(capability));
 
-    assertTrue(policy.supportsBouncerDetach("libera"));
+    assertTrue(policy.supportsBouncerDetach(context, "libera"));
   }
 
   @Test
   void refusesDetachWhenDisconnected() {
-    ServerTreeBouncerDetachPolicy policy =
-        new ServerTreeBouncerDetachPolicy(
+    ServerTreeBouncerDetachPolicy policy = new ServerTreeBouncerDetachPolicy();
+    ServerTreeBouncerDetachPolicy.Context context =
+        ServerTreeBouncerDetachPolicy.context(
             Map.of(ServerTreeBouncerBackends.SOJU, Set.of("origin")),
-            ServerTreeBouncerDetachPolicy.context(
-                __ -> ConnectionState.DISCONNECTED,
-                __ -> ServerTreeBouncerBackends.SOJU,
-                (serverId, capability) -> true));
+            __ -> ConnectionState.DISCONNECTED,
+            __ -> ServerTreeBouncerBackends.SOJU,
+            (serverId, capability) -> true);
 
-    assertFalse(policy.supportsBouncerDetach("origin"));
+    assertFalse(policy.supportsBouncerDetach(context, "origin"));
   }
 }

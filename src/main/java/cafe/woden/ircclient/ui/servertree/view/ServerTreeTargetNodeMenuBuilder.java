@@ -15,8 +15,10 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import org.springframework.stereotype.Component;
 
 /** Builds target-node context menus for server tree channels and built-ins. */
+@Component
 public final class ServerTreeTargetNodeMenuBuilder {
 
   public interface Context {
@@ -259,13 +261,8 @@ public final class ServerTreeTargetNodeMenuBuilder {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeTargetNodeMenuBuilder(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  JPopupMenu buildTargetNodeMenu(ServerTreeNodeData nodeData) {
+  JPopupMenu buildTargetNodeMenu(Context context, ServerTreeNodeData nodeData) {
+    Objects.requireNonNull(context, "context");
     TargetRef ref = nodeData.ref;
     if (ref == null) return null;
 
@@ -289,7 +286,7 @@ public final class ServerTreeTargetNodeMenuBuilder {
     if (!ref.isStatus() && !ref.isUiOnly()) {
       menu.addSeparator();
       if (ref.isChannel()) {
-        addChannelNodeActions(menu, nodeData);
+        addChannelNodeActions(context, menu, nodeData);
       } else {
         JMenuItem close = new JMenuItem("Close \"" + nodeData.label + "\"");
         close.addActionListener(ev -> context.requestCloseTarget(ref));
@@ -298,13 +295,14 @@ public final class ServerTreeTargetNodeMenuBuilder {
     }
 
     if (ref.isInterceptor()) {
-      addInterceptorActions(menu, nodeData);
+      addInterceptorActions(context, menu, nodeData);
     }
 
     return menu;
   }
 
-  private void addChannelNodeActions(JPopupMenu menu, ServerTreeNodeData nodeData) {
+  private void addChannelNodeActions(
+      Context context, JPopupMenu menu, ServerTreeNodeData nodeData) {
     TargetRef ref = nodeData.ref;
     if (ref == null) return;
 
@@ -373,7 +371,8 @@ public final class ServerTreeTargetNodeMenuBuilder {
     }
   }
 
-  private void addInterceptorActions(JPopupMenu menu, ServerTreeNodeData nodeData) {
+  private void addInterceptorActions(
+      Context context, JPopupMenu menu, ServerTreeNodeData nodeData) {
     TargetRef ref = nodeData.ref;
     if (ref == null) return;
 

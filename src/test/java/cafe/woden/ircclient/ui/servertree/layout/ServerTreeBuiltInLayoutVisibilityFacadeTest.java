@@ -25,47 +25,62 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
 
   @Test
   void builtInAndRootNodeKindClassificationUsesPredicatesAndRefs() {
-    ServerTreeBuiltInLayoutVisibilityFacade facade =
-        newFacade(new HashSet<>(), new AtomicInteger());
+    Harness harness = newHarness(new HashSet<>(), new AtomicInteger());
 
     assertEquals(
         ServerTreeBuiltInLayoutNode.MONITOR,
-        facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode("monitor")));
+        harness
+            .facade()
+            .builtInLayoutNodeKindForNode(
+                harness.context(), new DefaultMutableTreeNode("monitor")));
     assertEquals(
         ServerTreeBuiltInLayoutNode.INTERCEPTORS,
-        facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode("interceptors")));
+        harness
+            .facade()
+            .builtInLayoutNodeKindForNode(
+                harness.context(), new DefaultMutableTreeNode("interceptors")));
     assertEquals(
         ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-        facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode(TargetRef.logViewer("s"))));
+        harness.facade().builtInLayoutNodeKindForRef(TargetRef.logViewer("s")));
 
     assertEquals(
         ServerTreeRootSiblingNode.OTHER,
-        facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode("other")));
+        harness
+            .facade()
+            .rootSiblingNodeKindForNode(harness.context(), new DefaultMutableTreeNode("other")));
     assertEquals(
         ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
-        facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode("pm")));
+        harness
+            .facade()
+            .rootSiblingNodeKindForNode(harness.context(), new DefaultMutableTreeNode("pm")));
     assertEquals(
         ServerTreeRootSiblingNode.CHANNEL_LIST,
-        facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode(TargetRef.channelList("s"))));
+        harness
+            .facade()
+            .rootSiblingNodeKindForNode(
+                harness.context(), new DefaultMutableTreeNode(TargetRef.channelList("s"))));
   }
 
   @Test
   void applyBuiltInVisibilityGloballyUpdatesKnownServersAndSyncsOnce() {
     Set<String> serverIds = new HashSet<>(Set.of("libera", "oftc"));
     AtomicInteger syncCalls = new AtomicInteger();
-    ServerTreeBuiltInLayoutVisibilityFacade facade = newFacade(serverIds, syncCalls);
+    Harness harness = newHarness(serverIds, syncCalls);
 
-    facade.applyBuiltInNodesVisibilityGlobally(visibility -> visibility.withNotifications(false));
+    harness
+        .facade()
+        .applyBuiltInNodesVisibilityGlobally(
+            harness.context(), visibility -> visibility.withNotifications(false));
 
-    assertFalse(facade.builtInNodesVisibility("libera").notifications());
-    assertFalse(facade.builtInNodesVisibility("oftc").notifications());
+    assertFalse(
+        harness.facade().builtInNodesVisibility(harness.context(), "libera").notifications());
+    assertFalse(harness.facade().builtInNodesVisibility(harness.context(), "oftc").notifications());
     assertEquals(1, syncCalls.get());
   }
 
   @Test
   void rememberLayoutAndRootSiblingOrderRoundTripsThroughFacade() {
-    ServerTreeBuiltInLayoutVisibilityFacade facade =
-        newFacade(new HashSet<>(), new AtomicInteger());
+    Harness harness = newHarness(new HashSet<>(), new AtomicInteger());
 
     ServerTreeBuiltInLayout layout =
         new ServerTreeBuiltInLayout(
@@ -75,29 +90,33 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
         new ServerTreeRootSiblingOrder(
             List.of(ServerTreeRootSiblingNode.OTHER, ServerTreeRootSiblingNode.CHANNEL_LIST));
 
-    facade.rememberBuiltInLayout("libera", layout);
-    facade.rememberRootSiblingOrder("libera", order);
+    harness.facade().rememberBuiltInLayout(harness.context(), "libera", layout);
+    harness.facade().rememberRootSiblingOrder(harness.context(), "libera", order);
 
     assertTrue(
-        facade.builtInLayout("libera").rootOrder().contains(ServerTreeBuiltInLayoutNode.SERVER));
-    assertEquals(ServerTreeRootSiblingNode.OTHER, facade.rootSiblingOrder("libera").order().get(0));
+        harness
+            .facade()
+            .builtInLayout(harness.context(), "libera")
+            .rootOrder()
+            .contains(ServerTreeBuiltInLayoutNode.SERVER));
+    assertEquals(
+        ServerTreeRootSiblingNode.OTHER,
+        harness.facade().rootSiblingOrder(harness.context(), "libera").order().get(0));
   }
 
   @Test
   void defaultVisibilityCanBeUpdatedThroughFacade() {
-    ServerTreeBuiltInLayoutVisibilityFacade facade =
-        newFacade(new HashSet<>(), new AtomicInteger());
+    Harness harness = newHarness(new HashSet<>(), new AtomicInteger());
     ServerBuiltInNodesVisibility next =
         new ServerBuiltInNodesVisibility(false, false, false, false, false);
 
-    facade.setDefaultVisibility(next);
+    harness.facade().setDefaultVisibility(harness.context(), next);
 
-    assertEquals(next, facade.defaultVisibility());
-    assertEquals(next, facade.builtInNodesVisibility("unknown"));
+    assertEquals(next, harness.facade().defaultVisibility(harness.context()));
+    assertEquals(next, harness.facade().builtInNodesVisibility(harness.context(), "unknown"));
   }
 
-  private static ServerTreeBuiltInLayoutVisibilityFacade newFacade(
-      Set<String> serverIds, AtomicInteger syncCalls) {
+  private static Harness newHarness(Set<String> serverIds, AtomicInteger syncCalls) {
     ServerTreeBuiltInVisibilityCoordinator visibilityCoordinator =
         new ServerTreeBuiltInVisibilityCoordinator(
             null,
@@ -198,22 +217,29 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
               public void nodeStructureChanged(DefaultMutableTreeNode node) {}
             });
 
-    return new ServerTreeBuiltInLayoutVisibilityFacade(
-        visibilityCoordinator,
-        layoutCoordinator,
-        rootSiblingOrderCoordinator,
-        layoutOrchestrator,
-        node -> node != null && "monitor".equals(node.getUserObject()),
-        node -> node != null && "interceptors".equals(node.getUserObject()),
-        node -> node != null && "other".equals(node.getUserObject()),
-        node -> node != null && "pm".equals(node.getUserObject()),
-        node -> {
-          if (node == null) return null;
-          Object userObject = node.getUserObject();
-          if (userObject instanceof TargetRef ref) {
-            return ref;
-          }
-          return null;
-        });
+    ServerTreeBuiltInLayoutVisibilityFacade facade = new ServerTreeBuiltInLayoutVisibilityFacade();
+    ServerTreeBuiltInLayoutVisibilityFacade.Context context =
+        ServerTreeBuiltInLayoutVisibilityFacade.context(
+            visibilityCoordinator,
+            layoutCoordinator,
+            rootSiblingOrderCoordinator,
+            layoutOrchestrator,
+            node -> node != null && "monitor".equals(node.getUserObject()),
+            node -> node != null && "interceptors".equals(node.getUserObject()),
+            node -> node != null && "other".equals(node.getUserObject()),
+            node -> node != null && "pm".equals(node.getUserObject()),
+            node -> {
+              if (node == null) return null;
+              Object userObject = node.getUserObject();
+              if (userObject instanceof TargetRef ref) {
+                return ref;
+              }
+              return null;
+            });
+    return new Harness(facade, context);
   }
+
+  private record Harness(
+      ServerTreeBuiltInLayoutVisibilityFacade facade,
+      ServerTreeBuiltInLayoutVisibilityFacade.Context context) {}
 }

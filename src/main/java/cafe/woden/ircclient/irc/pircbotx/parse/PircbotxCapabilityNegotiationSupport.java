@@ -2,13 +2,16 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.pircbotx.capability.BatchedEnableCapHandler;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.pircbotx.PircBotX;
+import org.pircbotx.cap.CapHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +42,10 @@ public final class PircbotxCapabilityNegotiationSupport {
   }
 
   public void observe(ParsedCapLine capLine) {
+    observe(capLine, List.of());
+  }
+
+  public void observe(ParsedCapLine capLine, List<CapHandler> remainingCapHandlers) {
     if (!capLine.hasTokens()) return;
 
     if (capLine.isAction("ACK", "DEL")) {
@@ -49,8 +56,8 @@ public final class PircbotxCapabilityNegotiationSupport {
       emitCapNakFromCapLine(capLine);
     }
 
-    maybeRequestMessageTagsFallback(capLine);
-    maybeRequestHistoryCapabilityFallback(capLine);
+    maybeRequestMessageTagsFallback(capLine, remainingCapHandlers);
+    maybeRequestHistoryCapabilityFallback(capLine, remainingCapHandlers);
   }
 
   private void applyCapStateFromCapLine(ParsedCapLine capLine) {
@@ -105,9 +112,11 @@ public final class PircbotxCapabilityNegotiationSupport {
     }
   }
 
-  private void maybeRequestMessageTagsFallback(ParsedCapLine capLine) {
+  private void maybeRequestMessageTagsFallback(
+      ParsedCapLine capLine, List<CapHandler> remainingCapHandlers) {
     if (!capLine.isAction("LS", "NEW")) return;
     if (conn.isMessageTagsCapAcked()) return;
+    if (isCapabilityRequestPending(remainingCapHandlers, "message-tags")) return;
     if (!conn.beginMessageTagsFallbackRequest()) return;
 
     boolean offered = false;
@@ -134,7 +143,8 @@ public final class PircbotxCapabilityNegotiationSupport {
     }
   }
 
-  private void maybeRequestHistoryCapabilityFallback(ParsedCapLine capLine) {
+  private void maybeRequestHistoryCapabilityFallback(
+      ParsedCapLine capLine, List<CapHandler> remainingCapHandlers) {
     if (!capLine.isAction("LS", "NEW")) return;
 
     boolean offeredBatch = false;
@@ -155,7 +165,10 @@ public final class PircbotxCapabilityNegotiationSupport {
     boolean requestedBatch = false;
     boolean requestedHistory = false;
 
-    if (offeredBatch && !conn.isBatchCapAcked() && conn.beginBatchFallbackRequest()) {
+    if (offeredBatch
+        && !conn.isBatchCapAcked()
+        && !isCapabilityRequestPending(remainingCapHandlers, "batch")
+        && conn.beginBatchFallbackRequest()) {
       requestedCaps.add("batch");
       requestedBatch = true;
     }
@@ -168,7 +181,9 @@ public final class PircbotxCapabilityNegotiationSupport {
         historyCapToRequest = "draft/chathistory";
       }
     }
-    if (!historyCapToRequest.isEmpty() && conn.beginChatHistoryFallbackRequest()) {
+    if (!historyCapToRequest.isEmpty()
+        && !isCapabilityRequestPending(remainingCapHandlers, historyCapToRequest)
+        && conn.beginChatHistoryFallbackRequest()) {
       requestedCaps.add(historyCapToRequest);
       requestedHistory = true;
     }
@@ -218,5 +233,23 @@ public final class PircbotxCapabilityNegotiationSupport {
     int eq = value.indexOf('=');
     if (eq >= 0) value = value.substring(0, eq).trim();
     return value.isEmpty() ? null : value;
+  }
+
+  private static boolean isCapabilityRequestPending(
+      List<CapHandler> remainingCapHandlers, String capability) {
+    String normalizedCapability = canonicalCapName(capability);
+    if (normalizedCapability == null || normalizedCapability.isBlank()) {
+      return false;
+    }
+    if (remainingCapHandlers == null || remainingCapHandlers.isEmpty()) {
+      return false;
+    }
+    for (CapHandler handler : remainingCapHandlers) {
+      if (handler instanceof BatchedEnableCapHandler batched
+          && batched.isPending(normalizedCapability)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

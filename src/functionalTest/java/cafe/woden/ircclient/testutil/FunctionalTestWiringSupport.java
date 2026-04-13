@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.InboundModeEventHandler;
 import cafe.woden.ircclient.app.JoinModeBurstService;
 import cafe.woden.ircclient.app.ModeFormattingService;
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiPortDecorator;
@@ -15,6 +16,8 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
+import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -25,14 +28,19 @@ import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
+import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.logging.ChatLogWriter;
 import cafe.woden.ircclient.logging.LogLineFactory;
 import cafe.woden.ircclient.logging.LoggingUiPortDecorator;
+import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
@@ -50,9 +58,62 @@ import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.controls.ConnectButton;
+import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import cafe.woden.ircclient.ui.servertree.ServerTreeEdtExecutor;
+import cafe.woden.ircclient.ui.servertree.ServerTreeExternalStreamBinder;
+import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeCompositionAssembler;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeRootSiblingOrderCoordinator;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeChannelListNodeEnsurer;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
+import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
+import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySettings;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeExpansionStateManager;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellPresentationPolicy;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipTextPolicy;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
@@ -105,6 +166,102 @@ public final class FunctionalTestWiringSupport {
     } catch (Exception e) {
       throw new IllegalStateException("Unable to construct ModeFormattingService", e);
     }
+  }
+
+  public static ServerTreeDockable newServerTreeDockable(
+      ServerCatalog serverCatalog,
+      ServerTreeRuntimeConfigPort runtimeConfig,
+      LogProperties logProps,
+      SojuAutoConnectStore sojuAutoConnect,
+      ZncAutoConnectStore zncAutoConnect,
+      ConnectButton connectBtn,
+      DisconnectButton disconnectBtn,
+      NotificationStore notificationStore,
+      InterceptorStore interceptorStore,
+      UiSettingsBus settingsBus,
+      ServerDialogs serverDialogs) {
+    ServerTreeEdtExecutor edtExecutor = new ServerTreeEdtExecutor();
+    return new ServerTreeDockable(
+        serverCatalog,
+        runtimeConfig,
+        logProps,
+        null,
+        sojuAutoConnect,
+        zncAutoConnect,
+        connectBtn,
+        disconnectBtn,
+        notificationStore,
+        interceptorStore,
+        settingsBus,
+        serverDialogs,
+        null,
+        null,
+        new ServerTreeNetworkInfoDialogBuilder(
+            runtimeConfig, Ircv3ExtensionCatalog.builtInCatalog()),
+        new ServerTreeBuiltInVisibilitySettings(),
+        new ServerTreeCellPresentationPolicy(),
+        new ServerTreeServerLabelPolicy(),
+        new ServerTreeBouncerDetachPolicy(),
+        new ServerTreeSelectionFallbackPolicy(),
+        new ServerTreeSelectionPersistencePolicy(),
+        new ServerTreeStartupSelectionRestorer(),
+        new ServerTreeTargetNodePolicy(interceptorStore),
+        new cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver(),
+        new cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier(),
+        new cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver(),
+        new cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager(),
+        new ServerTreeNetworkGroupManager(),
+        new cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater(),
+        new cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions(),
+        new ServerTreeServerCatalogSynchronizer(),
+        new ServerTreePrivateMessageOnlineStateCoordinator(),
+        new ServerTreeUiLeafVisibilitySynchronizer(),
+        new ServerTreeApplicationRootVisibilityCoordinator(),
+        new ServerTreeChannelListNodeEnsurer(),
+        new ServerTreeTargetSnapshotProvider(),
+        new ServerTreeChannelQueryService(edtExecutor),
+        new ServerTreeChannelTargetOperations(edtExecutor),
+        new ServerTreeRequestApi(),
+        new ServerTreeRuntimeHeaderApi(new ServerTreeServerRuntimeUiUpdater()),
+        new ServerTreeUiRefreshCoordinator(),
+        new ServerTreeServerLeafVisibilityCoordinator(),
+        new ServerTreeExpansionStateManager(),
+        new ServerTreeBuiltInLayoutVisibilityFacade(),
+        new ServerTreeExternalStreamBinder(),
+        edtExecutor,
+        newServerTreeCompositionAssembler(runtimeConfig));
+  }
+
+  private static ServerTreeCompositionAssembler newServerTreeCompositionAssembler(
+      ServerTreeRuntimeConfigPort runtimeConfig) {
+    ServerTreeLayoutApplier layoutApplier = new ServerTreeLayoutApplier();
+    ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator =
+        new ServerTreeBuiltInLayoutCoordinator(runtimeConfig);
+    ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator =
+        new ServerTreeRootSiblingOrderCoordinator(runtimeConfig);
+    ServerTreeServerNodeBuilder serverNodeBuilder = new ServerTreeServerNodeBuilder();
+    ServerTreeNodeActionsFactory nodeActionsFactory = new ServerTreeNodeActionsFactory();
+    return new ServerTreeCompositionAssembler(
+        new ServerTreeLayoutCollaboratorsFactory(
+            layoutApplier, builtInLayoutCoordinator, rootSiblingOrderCoordinator),
+        new ServerTreeStateInteractionCollaboratorsFactory(
+            new ServerTreeEnsureNodeParentResolver(),
+            new ServerTreeEnsureNodeLeafInserter(),
+            new ServerTreeServerRuntimeUiUpdater(),
+            new ServerTreeServerStateCleaner(),
+            new cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator(),
+            new ServerTreeTargetRemovalStateCoordinator()),
+        new ServerTreeViewInteractionCollaboratorsFactory(
+            new ServerTreeContextMenuBuilder(
+                new ServerTreeServerNodeMenuBuilder(),
+                new ServerTreeTargetNodeMenuBuilder(),
+                new ServerTreeQuasselNetworkNodeMenuBuilder()),
+            new ServerTreeTooltipResolver(),
+            new ServerTreeTooltipTextPolicy()),
+        new ServerTreeLifecycleSettingsCollaboratorsFactory(serverNodeBuilder),
+        new ServerTreeTargetLifecycleCoordinatorFactory(),
+        new ServerTreeChannelInteractionCollaboratorsFactory(),
+        new ServerTreeTreeInteractionBindingsFactory(nodeActionsFactory));
   }
 
   public static InboundModeEventHandler newInboundModeEventHandler(
@@ -300,231 +457,62 @@ public final class FunctionalTestWiringSupport {
       CommandHistoryStore commandHistoryStore,
       ExecutorService logViewerExecutor,
       ExecutorService interceptorRefreshExecutor) {
-    try {
-      Constructor<ChatDockable> ctor =
-          ChatDockable.class.getConstructor(
-              ChatTranscriptStore.class,
-              ServerTreeDockable.class,
-              NotificationStore.class,
-              TargetActivationBus.class,
-              OutboundLineBus.class,
-              IrcClientService.class,
-              ModeRoutingPort.class,
-              ServerIsupportStatePort.class,
-              BackendUiProfileProvider.class,
-              MessageActionCapabilityPolicy.class,
-              ActiveInputRouter.class,
-              IgnoreListService.class,
-              IgnoreStatusService.class,
-              IgnoreListDialog.class,
-              MonitorListService.class,
-              UserListStore.class,
-              UserListDockable.class,
-              NickContextMenuFactory.class,
-              ServerProxyResolver.class,
-              ChatHistoryService.class,
-              ChannelMetadataPort.class,
-              ChatLogViewerService.class,
-              InterceptorStore.class,
-              DccTransferStore.class,
-              TerminalDockable.class,
-              ApplicationDiagnosticsService.class,
-              JfrRuntimeEventsService.class,
-              SpringRuntimeEventsService.class,
-              SlashCommandPresentationCatalog.class,
-              UiSettingsBus.class,
-              SpellcheckSettingsBus.class,
-              CommandHistoryStore.class,
-              ExecutorService.class,
-              ExecutorService.class);
-      return ctor.newInstance(
-          transcripts,
-          serverTree,
-          notificationStore,
-          activationBus,
-          outboundBus,
-          irc,
-          modeRoutingState,
-          serverIsupportState,
-          backendUiProfileProvider,
-          messageActionCapabilityPolicy,
-          activeInputRouter,
-          ignoreListService,
-          ignoreStatusService,
-          ignoreListDialog,
-          monitorListService,
-          userListStore,
-          usersDock,
-          nickContextMenuFactory,
-          proxyResolver,
-          chatHistoryService,
-          channelMetadata,
-          chatLogViewerService,
-          interceptorStore,
-          dccTransferStore,
-          terminalDockable,
-          applicationDiagnosticsService,
-          jfrRuntimeEventsService,
-          springRuntimeEventsService,
-          Mockito.mock(SlashCommandPresentationCatalog.class),
-          settingsBus,
-          spellcheckSettingsBus,
-          commandHistoryStore,
-          logViewerExecutor,
-          interceptorRefreshExecutor);
-    } catch (NoSuchMethodException ignored) {
-      try {
-        Constructor<ChatDockable> ctor =
-            ChatDockable.class.getConstructor(
-                ChatTranscriptStore.class,
-                ServerTreeDockable.class,
-                NotificationStore.class,
-                TargetActivationBus.class,
-                OutboundLineBus.class,
-                IrcClientService.class,
-                ModeRoutingPort.class,
-                ServerIsupportStatePort.class,
-                BackendUiProfileProvider.class,
-                MessageActionCapabilityPolicy.class,
-                ActiveInputRouter.class,
-                IgnoreListService.class,
-                IgnoreStatusService.class,
-                IgnoreListDialog.class,
-                MonitorListService.class,
-                UserListStore.class,
-                UserListDockable.class,
-                NickContextMenuFactory.class,
-                ServerProxyResolver.class,
-                ChatHistoryService.class,
-                ChannelMetadataPort.class,
-                ChatLogViewerService.class,
-                InterceptorStore.class,
-                DccTransferStore.class,
-                TerminalDockable.class,
-                ApplicationDiagnosticsService.class,
-                JfrRuntimeEventsService.class,
-                SpringRuntimeEventsService.class,
-                UiSettingsBus.class,
-                SpellcheckSettingsBus.class,
-                CommandHistoryStore.class,
-                ExecutorService.class,
-                ExecutorService.class);
-        return ctor.newInstance(
-            transcripts,
-            serverTree,
-            notificationStore,
-            activationBus,
-            outboundBus,
-            irc,
-            modeRoutingState,
-            serverIsupportState,
-            backendUiProfileProvider,
-            messageActionCapabilityPolicy,
-            activeInputRouter,
-            ignoreListService,
-            ignoreStatusService,
-            ignoreListDialog,
-            monitorListService,
-            userListStore,
-            usersDock,
-            nickContextMenuFactory,
-            proxyResolver,
-            chatHistoryService,
-            channelMetadata,
-            chatLogViewerService,
-            interceptorStore,
-            dccTransferStore,
-            terminalDockable,
-            applicationDiagnosticsService,
-            jfrRuntimeEventsService,
-            springRuntimeEventsService,
-            settingsBus,
-            spellcheckSettingsBus,
-            commandHistoryStore,
-            logViewerExecutor,
-            interceptorRefreshExecutor);
-      } catch (NoSuchMethodException ignoredAgain) {
-        try {
-          Constructor<ChatDockable> ctor =
-              ChatDockable.class.getConstructor(
-                  ChatTranscriptStore.class,
-                  ServerTreeDockable.class,
-                  NotificationStore.class,
-                  TargetActivationBus.class,
-                  OutboundLineBus.class,
-                  IrcClientService.class,
-                  BackendUiProfileProvider.class,
-                  MessageActionCapabilityPolicy.class,
-                  ActiveInputRouter.class,
-                  IgnoreListService.class,
-                  IgnoreStatusService.class,
-                  IgnoreListDialog.class,
-                  MonitorListService.class,
-                  UserListStore.class,
-                  UserListDockable.class,
-                  NickContextMenuFactory.class,
-                  ServerProxyResolver.class,
-                  ChatHistoryService.class,
-                  ChannelMetadataPort.class,
-                  ChatLogViewerService.class,
-                  InterceptorStore.class,
-                  DccTransferStore.class,
-                  TerminalDockable.class,
-                  ApplicationDiagnosticsService.class,
-                  JfrRuntimeEventsService.class,
-                  SpringRuntimeEventsService.class,
-                  UiSettingsBus.class,
-                  SpellcheckSettingsBus.class,
-                  CommandHistoryStore.class,
-                  ExecutorService.class,
-                  ExecutorService.class);
-          return ctor.newInstance(
-              transcripts,
-              serverTree,
-              notificationStore,
-              activationBus,
-              outboundBus,
-              irc,
-              backendUiProfileProvider,
-              messageActionCapabilityPolicy,
-              activeInputRouter,
-              ignoreListService,
-              ignoreStatusService,
-              ignoreListDialog,
-              monitorListService,
-              userListStore,
-              usersDock,
-              nickContextMenuFactory,
-              proxyResolver,
-              chatHistoryService,
-              channelMetadata,
-              chatLogViewerService,
-              interceptorStore,
-              dccTransferStore,
-              terminalDockable,
-              applicationDiagnosticsService,
-              jfrRuntimeEventsService,
-              springRuntimeEventsService,
-              settingsBus,
-              spellcheckSettingsBus,
-              commandHistoryStore,
-              logViewerExecutor,
-              interceptorRefreshExecutor);
-        } catch (Exception e) {
-          throw new IllegalStateException("Unable to construct ChatDockable", e);
-        }
-      } catch (Exception e) {
-        throw new IllegalStateException("Unable to construct ChatDockable", e);
-      }
-    } catch (Exception e) {
-      throw new IllegalStateException("Unable to construct ChatDockable", e);
-    }
+    ChatRedactionAuditService redactionAuditService = new NoOpChatRedactionAuditService();
+    InstalledPluginsPort installedPluginsPort = Mockito.mock(InstalledPluginsPort.class);
+    SlashCommandPresentationCatalog slashCommandPresentationCatalog =
+        Mockito.mock(SlashCommandPresentationCatalog.class);
+    Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport =
+        Mockito.mock(Ircv3ReadMarkerFeatureSupport.class);
+    return new ChatDockable(
+        transcripts,
+        serverTree,
+        notificationStore,
+        activationBus,
+        outboundBus,
+        irc,
+        readMarkerFeatureSupport,
+        modeRoutingState,
+        serverIsupportState,
+        backendUiProfileProvider,
+        messageActionCapabilityPolicy,
+        activeInputRouter,
+        ignoreListService,
+        ignoreStatusService,
+        ignoreListDialog,
+        monitorListService,
+        userListStore,
+        usersDock,
+        nickContextMenuFactory,
+        proxyResolver,
+        chatHistoryService,
+        channelMetadata,
+        chatLogViewerService,
+        redactionAuditService,
+        interceptorStore,
+        dccTransferStore,
+        terminalDockable,
+        applicationDiagnosticsService,
+        jfrRuntimeEventsService,
+        springRuntimeEventsService,
+        installedPluginsPort,
+        slashCommandPresentationCatalog,
+        settingsBus,
+        spellcheckSettingsBus,
+        commandHistoryStore,
+        logViewerExecutor,
+        interceptorRefreshExecutor);
   }
 
   public static UiPort newLoggingUiPort(
       UiPort swingUiPort, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
     UiTranscriptPort loggingTranscriptUiPort =
-        new LoggingUiPortDecorator(swingUiPort, writer, factory, props);
+        new LoggingUiPortDecorator(
+            swingUiPort,
+            writer,
+            org.mockito.Mockito.mock(cafe.woden.ircclient.logging.ChatLogRepository.class),
+            new NoOpChatRedactionAuditService(),
+            factory,
+            props);
     try {
       Class<?> decoratorClass =
           Class.forName("cafe.woden.ircclient.logging.TranscriptDecoratingUiPort");

@@ -39,10 +39,14 @@ tasks.withType(Test).configureEach {
     //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
     //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
     //   ./gradlew integrationTest -Dmatrix.it.container.enabled=true ...
+    //   ./gradlew functionalTest -Dircv3.it.container.functional.enabled=true ...
     // Forward only the scoped test-control properties.
     System.getProperties().each { key, value ->
         String k = key == null ? '' : key.toString()
-        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.') && !k.startsWith('matrix.it.')) {
+        if (!k.startsWith('quassel.it.')
+                && !k.startsWith('irc.it.')
+                && !k.startsWith('ircv3.it.')
+                && !k.startsWith('matrix.it.')) {
             return
         }
         systemProperty k, value
@@ -69,9 +73,19 @@ springBoot {
     buildInfo()
 }
 
+boolean includeDevtoolsInBootRun = (findProperty('bootRunDevtools') ?: 'false').toString().toBoolean()
+
 // Ensure build-info exists for bootRun/IDE runs too.
 tasks.matching { it.name == 'bootRun' }.configureEach {
     dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+
+    if (!includeDevtoolsInBootRun) {
+        // Spring Boot devtools continuously snapshots the source tree during bootRun,
+        // which causes several MB/sec of short-lived allocation churn while IRCafe is idle.
+        classpath = classpath.filter { file ->
+            !file.name.contains('spring-boot-devtools')
+        }
+    }
 }
 tasks.matching { it.name == 'processResources' }.configureEach {
     dependsOn tasks.matching { it.name == 'bootBuildInfo' }

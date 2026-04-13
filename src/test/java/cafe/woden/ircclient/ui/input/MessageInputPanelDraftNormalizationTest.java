@@ -8,35 +8,35 @@ class MessageInputPanelDraftNormalizationTest {
 
   @Test
   void stripsReplyTagWhenReplyCapabilityIsDisabled() {
-    String before = "/quote @+draft/reply=abc123 PRIVMSG #ircafe :hello there";
+    String before = "/quote @+reply=abc123 PRIVMSG #ircafe :hello there";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, true);
     assertEquals("/quote PRIVMSG #ircafe :hello there", after);
   }
 
   @Test
   void keepsOtherTagsWhenRemovingReplyTag() {
-    String before = "/quote @label=req42;+draft/reply=abc123 PRIVMSG #ircafe :hello";
+    String before = "/quote @label=req42;+reply=abc123 PRIVMSG #ircafe :hello";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, true);
     assertEquals("/quote @label=req42 PRIVMSG #ircafe :hello", after);
   }
 
   @Test
   void clearsReactDraftWhenReactCapabilityIsDisabled() {
-    String before = "/quote @+draft/react=:+1:;+draft/reply=abc TAGMSG #ircafe";
+    String before = "/quote @+draft/react=:+1:;+reply=abc TAGMSG #ircafe";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, true, false);
     assertEquals("", after);
   }
 
   @Test
   void clearsReactDraftWhenReplyCapabilityIsDisabled() {
-    String before = "/quote @+draft/react=:+1:;+draft/reply=abc TAGMSG #ircafe";
+    String before = "/quote @+draft/react=:+1:;+reply=abc TAGMSG #ircafe";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, true);
     assertEquals("", after);
   }
 
   @Test
   void clearsUnreactDraftWhenReactCapabilityIsDisabled() {
-    String before = "/quote @+draft/unreact=:+1:;+draft/reply=abc TAGMSG #ircafe";
+    String before = "/quote @+draft/unreact=:+1:;+reply=abc TAGMSG #ircafe";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, true, false);
     assertEquals("", after);
   }

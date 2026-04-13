@@ -145,12 +145,23 @@ final class SwingUiViewStatePort implements UiViewStatePort {
 
   @Override
   public void recordHighlight(TargetRef target, String fromNick, String snippet) {
-    notificationStore.recordHighlight(target, fromNick, snippet);
+    recordHighlight(target, fromNick, snippet, "");
+  }
+
+  @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet, String messageId) {
+    notificationStore.recordHighlight(target, fromNick, snippet, messageId);
   }
 
   @Override
   public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
-    notificationStore.recordRuleMatch(target, fromNick, ruleLabel, snippet);
+    recordRuleMatch(target, fromNick, ruleLabel, snippet, "");
+  }
+
+  @Override
+  public void recordRuleMatch(
+      TargetRef target, String fromNick, String ruleLabel, String snippet, String messageId) {
+    notificationStore.recordRuleMatch(target, fromNick, ruleLabel, snippet, messageId);
   }
 
   @Override

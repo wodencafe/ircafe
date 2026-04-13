@@ -3,6 +3,7 @@ package cafe.woden.ircclient.logging;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,9 +23,12 @@ public class LoggingUiPortConfig {
   public UiTranscriptPort loggingTranscriptUiPort(
       @Qualifier("swingUiPort") UiTranscriptPort swingUiTranscriptPort,
       ChatLogWriter writer,
+      ChatLogRepository repo,
+      ChatRedactionAuditService chatRedactionAuditService,
       LogLineFactory factory,
       LogProperties props) {
-    return new LoggingUiPortDecorator(swingUiTranscriptPort, writer, factory, props);
+    return new LoggingUiPortDecorator(
+        swingUiTranscriptPort, writer, repo, chatRedactionAuditService, factory, props);
   }
 
   /** Primary {@link UiPort} when logging is enabled. */

@@ -9,8 +9,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Orchestrates built-in leaf visibility sync and selected-target fallback behavior. */
+@Component
 public final class ServerTreeUiLeafVisibilitySynchronizer {
 
   public interface Context {
@@ -145,57 +147,52 @@ public final class ServerTreeUiLeafVisibilitySynchronizer {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeUiLeafVisibilitySynchronizer(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  public void syncUiLeafVisibility() {
-    TargetRef selected = context.selectedTargetRef();
-    DefaultMutableTreeNode selectedNode = context.selectedTreeNode();
-    boolean selectedMonitorGroup = selectedNode != null && context.isMonitorGroupNode(selectedNode);
+  public void syncUiLeafVisibility(Context context) {
+    Context in = Objects.requireNonNull(context, "context");
+    TargetRef selected = in.selectedTargetRef();
+    DefaultMutableTreeNode selectedNode = in.selectedTreeNode();
+    boolean selectedMonitorGroup = selectedNode != null && in.isMonitorGroupNode(selectedNode);
     boolean selectedInterceptorsGroup =
-        selectedNode != null && context.isInterceptorsGroupNode(selectedNode);
+        selectedNode != null && in.isInterceptorsGroupNode(selectedNode);
     String selectedGroupServerId =
         (selectedMonitorGroup || selectedInterceptorsGroup)
-            ? normalize(context.owningServerIdForNode(selectedNode))
+            ? normalize(in.owningServerIdForNode(selectedNode))
             : "";
 
-    for (String serverId : context.serverIdsSnapshot()) {
-      context.syncServerUiLeafVisibility(serverId);
+    for (String serverId : in.serverIdsSnapshot()) {
+      in.syncServerUiLeafVisibility(serverId);
     }
 
     if (selected != null) {
       String sid = normalize(selected.serverId());
       if (sid.isEmpty()) return;
-      if (selected.isStatus() && !context.statusVisible(sid)) {
-        context.selectBestFallbackForServer(sid);
-      } else if (selected.isNotifications() && !context.notificationsVisible(sid)) {
-        context.selectBestFallbackForServer(sid);
-      } else if (selected.isLogViewer() && !context.logViewerVisible(sid)) {
-        context.selectBestFallbackForServer(sid);
-      } else if (selected.isDccTransfers() && !context.showDccTransfersNodes()) {
-        context.selectBestFallbackForServer(sid);
-      } else if (selected.isMonitorGroup() && !context.monitorVisible(sid)) {
-        context.selectBestFallbackForServer(sid);
+      if (selected.isStatus() && !in.statusVisible(sid)) {
+        in.selectBestFallbackForServer(sid);
+      } else if (selected.isNotifications() && !in.notificationsVisible(sid)) {
+        in.selectBestFallbackForServer(sid);
+      } else if (selected.isLogViewer() && !in.logViewerVisible(sid)) {
+        in.selectBestFallbackForServer(sid);
+      } else if (selected.isDccTransfers() && !in.showDccTransfersNodes()) {
+        in.selectBestFallbackForServer(sid);
+      } else if (selected.isMonitorGroup() && !in.monitorVisible(sid)) {
+        in.selectBestFallbackForServer(sid);
       } else if ((selected.isInterceptorsGroup() || selected.isInterceptor())
-          && !context.interceptorsVisible(sid)) {
-        context.selectBestFallbackForServer(sid);
+          && !in.interceptorsVisible(sid)) {
+        in.selectBestFallbackForServer(sid);
       }
       return;
     }
 
     if (selectedMonitorGroup && !selectedGroupServerId.isBlank()) {
-      if (!context.monitorVisible(selectedGroupServerId)) {
-        context.selectBestFallbackForServer(selectedGroupServerId);
+      if (!in.monitorVisible(selectedGroupServerId)) {
+        in.selectBestFallbackForServer(selectedGroupServerId);
       }
       return;
     }
 
     if (selectedInterceptorsGroup && !selectedGroupServerId.isBlank()) {
-      if (!context.interceptorsVisible(selectedGroupServerId)) {
-        context.selectBestFallbackForServer(selectedGroupServerId);
+      if (!in.interceptorsVisible(selectedGroupServerId)) {
+        in.selectBestFallbackForServer(selectedGroupServerId);
       }
     }
   }

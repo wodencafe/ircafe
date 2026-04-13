@@ -34,6 +34,7 @@ public final class ChatTargetViewRouter {
   public static final String CARD_APP_ASSERTJ = "app-assertj";
   public static final String CARD_APP_JHICCUP = "app-jhiccup";
   public static final String CARD_APP_INBOUND_DEDUP = "app-inbound-dedup";
+  public static final String CARD_APP_PLUGINS = "app-plugins";
   public static final String CARD_APP_JFR = "app-jfr";
   public static final String CARD_APP_SPRING = "app-spring";
   public static final String CARD_TERMINAL = "terminal";
@@ -55,6 +56,7 @@ public final class ChatTargetViewRouter {
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
   private final InboundDedupDiagnosticsPanel appInboundDedupPanel;
+  private final RuntimeEventsPanel appPluginsPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final Consumer<String> managedChannelRefresher;
@@ -74,6 +76,7 @@ public final class ChatTargetViewRouter {
       RuntimeEventsPanel appAssertjPanel,
       RuntimeEventsPanel appJhiccupPanel,
       InboundDedupDiagnosticsPanel appInboundDedupPanel,
+      RuntimeEventsPanel appPluginsPanel,
       JfrDiagnosticsPanel appJfrPanel,
       RuntimeEventsPanel appSpringPanel,
       Consumer<String> managedChannelRefresher,
@@ -91,6 +94,7 @@ public final class ChatTargetViewRouter {
         appAssertjPanel,
         appJhiccupPanel,
         appInboundDedupPanel,
+        appPluginsPanel,
         appJfrPanel,
         appSpringPanel,
         managedChannelRefresher,
@@ -111,6 +115,7 @@ public final class ChatTargetViewRouter {
       RuntimeEventsPanel appAssertjPanel,
       RuntimeEventsPanel appJhiccupPanel,
       InboundDedupDiagnosticsPanel appInboundDedupPanel,
+      RuntimeEventsPanel appPluginsPanel,
       JfrDiagnosticsPanel appJfrPanel,
       RuntimeEventsPanel appSpringPanel,
       Consumer<String> managedChannelRefresher,
@@ -130,6 +135,7 @@ public final class ChatTargetViewRouter {
     this.appJhiccupPanel = Objects.requireNonNull(appJhiccupPanel, "appJhiccupPanel");
     this.appInboundDedupPanel =
         Objects.requireNonNull(appInboundDedupPanel, "appInboundDedupPanel");
+    this.appPluginsPanel = Objects.requireNonNull(appPluginsPanel, "appPluginsPanel");
     this.appJfrPanel = Objects.requireNonNull(appJfrPanel, "appJfrPanel");
     this.appSpringPanel = Objects.requireNonNull(appSpringPanel, "appSpringPanel");
     this.managedChannelRefresher =
@@ -180,6 +186,10 @@ public final class ChatTargetViewRouter {
     }
     if (target.isApplicationInboundDedup()) {
       showApplicationInboundDedupCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationPlugins()) {
+      showApplicationPluginsCard();
       return TargetViewType.UI_ONLY;
     }
     if (target.isApplicationJfr()) {
@@ -289,6 +299,14 @@ public final class ChatTargetViewRouter {
     try {
       appInboundDedupPanel.refreshNow();
       showCard(CARD_APP_INBOUND_DEDUP);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationPluginsCard() {
+    try {
+      appPluginsPanel.refreshNow();
+      showCard(CARD_APP_PLUGINS);
     } catch (Exception ignored) {
     }
   }

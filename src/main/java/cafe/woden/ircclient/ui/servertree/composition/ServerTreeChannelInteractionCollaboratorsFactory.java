@@ -22,13 +22,13 @@ import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles channel-interaction collaborators for server tree construction. */
+@Component
 public final class ServerTreeChannelInteractionCollaboratorsFactory {
 
-  private ServerTreeChannelInteractionCollaboratorsFactory() {}
-
-  public static ServerTreeChannelInteractionCollaborators create(Inputs inputs) {
+  public ServerTreeChannelInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
 
     Timer typingActivityTimer =
@@ -93,7 +93,10 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
     ServerTreeChannelInteractionApi channelInteractionApi =
         new ServerTreeChannelInteractionApi(
             Objects.requireNonNull(in.channelQueryService(), "channelQueryService"),
+            Objects.requireNonNull(in.channelQueryServiceContext(), "channelQueryServiceContext"),
             Objects.requireNonNull(in.channelTargetOperations(), "channelTargetOperations"),
+            Objects.requireNonNull(
+                in.channelTargetOperationsContext(), "channelTargetOperationsContext"),
             channelDisconnectStateManager,
             unreadStateCoordinator,
             typingActivityManager);
@@ -129,5 +132,7 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
       Consumer<TargetRef> noteChannelActivity,
       Consumer<TargetRef> onChannelUnreadCountsChanged,
       ServerTreeChannelQueryService channelQueryService,
-      ServerTreeChannelTargetOperations channelTargetOperations) {}
+      ServerTreeChannelQueryService.Context channelQueryServiceContext,
+      ServerTreeChannelTargetOperations channelTargetOperations,
+      ServerTreeChannelTargetOperations.Context channelTargetOperationsContext) {}
 }

@@ -1,10 +1,13 @@
 package cafe.woden.ircclient.ui.interceptors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,7 +16,10 @@ import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -22,10 +28,17 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JMenuItem;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +46,125 @@ import org.junit.jupiter.api.io.TempDir;
 class InterceptorPanelFunctionalTest {
 
   @TempDir Path tempDir;
+
+  @Test
+  void channelFilterFieldsTrackAllAndNoneModes() throws Exception {
+    String serverId = "libera";
+    String interceptorId = "int-2";
+
+    InterceptorStore store = mock(InterceptorStore.class);
+    when(store.changes()).thenReturn(Flowable.never());
+
+    AtomicReference<InterceptorDefinition> current =
+        new AtomicReference<>(
+            definition(interceptorId, "Rule 1", InterceptorRuleMode.ALL, InterceptorRuleMode.NONE));
+    when(store.interceptor(serverId, interceptorId)).thenAnswer(inv -> current.get());
+    when(store.listHits(serverId, interceptorId, 2_000)).thenReturn(List.of());
+    when(store.saveInterceptor(eq(serverId), any()))
+        .thenAnswer(
+            inv -> {
+              InterceptorDefinition updated = inv.getArgument(1);
+              current.set(updated);
+              return true;
+            });
+
+    InterceptorPanel panel = onEdtCall(() -> new InterceptorPanel(store));
+    JComboBox<?> includeMode = readField(panel, "includeMode", JComboBox.class);
+    JTextField includes = readField(panel, "includes", JTextField.class);
+    JComboBox<?> excludeMode = readField(panel, "excludeMode", JComboBox.class);
+    JTextField excludes = readField(panel, "excludes", JTextField.class);
+
+    try {
+      onEdt(() -> panel.setInterceptorTarget(serverId, interceptorId));
+      waitFor(
+          () ->
+              onEdtBoolean(
+                  () ->
+                      InterceptorRuleMode.ALL.equals(includeMode.getSelectedItem())
+                          && !includes.isEnabled()
+                          && InterceptorRuleMode.NONE.equals(excludeMode.getSelectedItem())
+                          && !excludes.isEnabled()),
+          Duration.ofSeconds(3));
+
+      onEdt(
+          () -> {
+            includeMode.setSelectedItem(InterceptorRuleMode.GLOB);
+            excludeMode.setSelectedItem(InterceptorRuleMode.REGEX);
+          });
+      waitFor(
+          () ->
+              onEdtBoolean(
+                  () ->
+                      includes.isEnabled()
+                          && excludes.isEnabled()
+                          && InterceptorRuleMode.GLOB.equals(current.get().channelIncludeMode())
+                          && InterceptorRuleMode.REGEX.equals(current.get().channelExcludeMode())),
+          Duration.ofSeconds(2));
+    } finally {
+      onEdt(panel::close);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void localDefinitionSaveDoesNotReloadPanelFromStoreChangeFeed() throws Exception {
+    String serverId = "libera";
+    String interceptorId = "int-3";
+
+    InterceptorStore store = mock(InterceptorStore.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(store.changes()).thenReturn(changes);
+
+    AtomicReference<InterceptorDefinition> current =
+        new AtomicReference<>(
+            definition(interceptorId, "Rule 1", InterceptorRuleMode.ALL, InterceptorRuleMode.NONE));
+    AtomicInteger interceptorReads = new AtomicInteger();
+    AtomicInteger hitReads = new AtomicInteger();
+    when(store.interceptor(serverId, interceptorId))
+        .thenAnswer(
+            inv -> {
+              interceptorReads.incrementAndGet();
+              return current.get();
+            });
+    when(store.listHits(serverId, interceptorId, 2_000))
+        .thenAnswer(
+            inv -> {
+              hitReads.incrementAndGet();
+              return List.of();
+            });
+    when(store.saveInterceptor(eq(serverId), any()))
+        .thenAnswer(
+            inv -> {
+              InterceptorDefinition updated = inv.getArgument(1);
+              current.set(updated);
+              changes.onNext(new InterceptorStore.Change(serverId, interceptorId));
+              return true;
+            });
+
+    ImmediateExecutorService refreshExecutor = new ImmediateExecutorService();
+    InterceptorPanel panel = onEdtCall(() -> new InterceptorPanel(store, refreshExecutor));
+    JCheckBox actionStatusBarEnabled = readField(panel, "actionStatusBarEnabled", JCheckBox.class);
+
+    try {
+      onEdt(() -> panel.setInterceptorTarget(serverId, interceptorId));
+      waitFor(() -> interceptorReads.get() == 1 && hitReads.get() == 1, Duration.ofSeconds(3));
+
+      onEdt(actionStatusBarEnabled::doClick);
+      flushEdt();
+
+      assertFalse(current.get().actionStatusBarEnabled());
+      assertEquals(1, hitReads.get(), "local save should not trigger a reload of hits");
+      assertEquals(2, interceptorReads.get(), "expected initial load plus save lookup only");
+
+      changes.onNext(new InterceptorStore.Change(serverId, interceptorId));
+      waitFor(() -> interceptorReads.get() == 3 && hitReads.get() == 2, Duration.ofSeconds(2));
+    } finally {
+      onEdt(panel::close);
+      refreshExecutor.shutdownNow();
+      flushEdt();
+    }
+  }
 
   @Test
   void rulesLifecycleHitListAndCsvExportFlowWork() throws Exception {
@@ -48,8 +180,18 @@ class InterceptorPanelFunctionalTest {
     when(store.listHits(serverId, interceptorId, 2_000))
         .thenReturn(
             List.of(
-                hit(serverId, interceptorId, Instant.parse("2026-02-01T10:15:00Z"), "older line"),
-                hit(serverId, interceptorId, Instant.parse("2026-02-01T10:16:00Z"), "newer line")));
+                hit(
+                    serverId,
+                    interceptorId,
+                    Instant.parse("2026-02-01T10:15:00Z"),
+                    "older line",
+                    "msg-1"),
+                hit(
+                    serverId,
+                    interceptorId,
+                    Instant.parse("2026-02-01T10:16:00Z"),
+                    "newer line",
+                    "msg-2")));
     when(store.saveInterceptor(eq(serverId), any()))
         .thenAnswer(
             inv -> {
@@ -61,10 +203,22 @@ class InterceptorPanelFunctionalTest {
     InterceptorPanel panel = onEdtCall(() -> new InterceptorPanel(store));
     JTable rulesTable = readField(panel, "rulesTable", JTable.class);
     JTable hitsTable = readField(panel, "hitsTable", JTable.class);
+    JButton clearSelectedHits = readField(panel, "clearSelectedHits", JButton.class);
     JButton clearHits = readField(panel, "clearHits", JButton.class);
+    JMenuItem hitsPopupJumpToMessage = readField(panel, "hitsPopupJumpToMessage", JMenuItem.class);
+    JMenuItem hitsPopupClearSelected = readField(panel, "hitsPopupClearSelected", JMenuItem.class);
     Object rulesModel = readField(panel, "rulesModel", Object.class);
+    AtomicReference<TargetRef> jumpedTarget = new AtomicReference<>();
+    AtomicReference<String> jumpedMessageId = new AtomicReference<>();
 
     try {
+      onEdt(
+          () ->
+              panel.setOnJumpToMessage(
+                  (target, messageId) -> {
+                    jumpedTarget.set(target);
+                    jumpedMessageId.set(messageId);
+                  }));
       onEdt(() -> panel.setInterceptorTarget(serverId, interceptorId));
       waitFor(
           () -> onEdtBoolean(() -> rulesTable.getRowCount() == 1 && hitsTable.getRowCount() == 2),
@@ -122,15 +276,48 @@ class InterceptorPanelFunctionalTest {
           });
       waitFor(() -> current.get().rules().size() == 1, Duration.ofSeconds(2));
 
+      onEdt(() -> hitsTable.setRowSelectionInterval(0, 0));
+      onEdt(hitsPopupJumpToMessage::doClick);
+      assertEquals(new TargetRef(serverId, "#ircafe"), jumpedTarget.get());
+      assertEquals("msg-2", jumpedMessageId.get());
+
+      onEdt(clearSelectedHits::doClick);
+      verify(store, times(1))
+          .clearHits(
+              eq(serverId),
+              eq(interceptorId),
+              argThat(
+                  hits ->
+                      hits != null
+                          && hits.size() == 1
+                          && "newer line".equals(hits.getFirst().message())));
+
+      onEdt(hitsPopupClearSelected::doClick);
+      verify(store, times(2))
+          .clearHits(
+              eq(serverId),
+              eq(interceptorId),
+              argThat(
+                  hits ->
+                      hits != null
+                          && hits.size() == 1
+                          && "newer line".equals(hits.getFirst().message())));
+
       onEdt(clearHits::doClick);
       verify(store).clearHits(serverId, interceptorId);
 
       Path out = tempDir.resolve("interceptor-hits.csv");
-      onEdt(() -> writeHitsCsv(panel, out));
+      onEdt(() -> writeHitsCsv(panel, out, List.of(0, 1)));
       List<String> lines = Files.readAllLines(out);
       assertTrue(lines.size() >= 3, "csv should contain header plus rows");
       assertTrue(lines.getFirst().contains("Time"), "csv header should include Time");
       assertTrue(lines.stream().anyMatch(line -> line.contains("newer line")));
+
+      Path selectedOut = tempDir.resolve("interceptor-hits-selected.csv");
+      onEdt(() -> writeHitsCsv(panel, selectedOut, List.of(0)));
+      List<String> selectedLines = Files.readAllLines(selectedOut);
+      assertEquals(2, selectedLines.size(), "selected export should contain header plus one row");
+      assertTrue(selectedLines.getLast().contains("newer line"));
     } finally {
       onEdt(panel::close);
       flushEdt();
@@ -138,14 +325,22 @@ class InterceptorPanelFunctionalTest {
   }
 
   private static InterceptorDefinition definition(String id, String ruleLabel) {
+    return definition(id, ruleLabel, InterceptorRuleMode.GLOB, InterceptorRuleMode.GLOB);
+  }
+
+  private static InterceptorDefinition definition(
+      String id,
+      String ruleLabel,
+      InterceptorRuleMode includeMode,
+      InterceptorRuleMode excludeMode) {
     return new InterceptorDefinition(
         id,
         "Interceptor",
         true,
         "libera",
-        InterceptorRuleMode.GLOB,
+        includeMode,
         "",
-        InterceptorRuleMode.GLOB,
+        excludeMode,
         "",
         false,
         true,
@@ -164,14 +359,14 @@ class InterceptorPanelFunctionalTest {
                 "",
                 InterceptorRuleMode.LIKE,
                 "",
-                InterceptorRuleMode.LIKE,
+                InterceptorRuleMode.ALL,
                 "",
-                InterceptorRuleMode.GLOB,
+                InterceptorRuleMode.ALL,
                 "")));
   }
 
   private static InterceptorHit hit(
-      String serverId, String interceptorId, Instant at, String message) {
+      String serverId, String interceptorId, Instant at, String message, String messageId) {
     return new InterceptorHit(
         serverId,
         interceptorId,
@@ -182,7 +377,8 @@ class InterceptorPanelFunctionalTest {
         "alice!u@h",
         "message",
         "",
-        message);
+        message,
+        messageId);
   }
 
   private static void rulesModelAddRule(Object model, InterceptorRule rule) {
@@ -225,11 +421,11 @@ class InterceptorPanelFunctionalTest {
     }
   }
 
-  private static void writeHitsCsv(InterceptorPanel panel, Path path) {
+  private static void writeHitsCsv(InterceptorPanel panel, Path path, List<Integer> viewRows) {
     try {
-      Method m = InterceptorPanel.class.getDeclaredMethod("writeHitsCsv", Path.class);
+      Method m = InterceptorPanel.class.getDeclaredMethod("writeHitsCsv", Path.class, List.class);
       m.setAccessible(true);
-      m.invoke(panel, path);
+      m.invoke(panel, path, viewRows);
     } catch (InvocationTargetException ex) {
       Throwable cause = ex.getCause();
       if (cause instanceof RuntimeException runtimeException) {
@@ -315,5 +511,45 @@ class InterceptorPanelFunctionalTest {
   @FunctionalInterface
   private interface ThrowingBooleanSupplier {
     boolean getAsBoolean() throws Exception;
+  }
+
+  private static final class ImmediateExecutorService extends AbstractExecutorService {
+    private volatile boolean shutdown;
+
+    @Override
+    public void shutdown() {
+      shutdown = true;
+    }
+
+    @Override
+    public List<Runnable> shutdownNow() {
+      shutdown = true;
+      return List.of();
+    }
+
+    @Override
+    public boolean isShutdown() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean isTerminated() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean awaitTermination(long timeout, TimeUnit unit) {
+      return true;
+    }
+
+    @Override
+    public void execute(Runnable command) {
+      if (shutdown) {
+        throw new IllegalStateException("executor is shut down");
+      }
+      if (command != null) {
+        command.run();
+      }
+    }
   }
 }

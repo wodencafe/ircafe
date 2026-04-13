@@ -401,6 +401,15 @@ public class PircbotxIrcClientService
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    try {
+      return availabilitySupport.isMessageTagsAvailable(conn(serverId));
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
   public boolean isDraftReactAvailable(String serverId) {
     try {
       return availabilitySupport.isDraftReactAvailable(conn(serverId));
@@ -446,9 +455,9 @@ public class PircbotxIrcClientService
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
     try {
-      return availabilitySupport.isMessageEditAvailable(conn(serverId));
+      return availabilitySupport.isExperimentalMessageEditAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }

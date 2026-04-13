@@ -16,10 +16,10 @@ class ServerTreeBuiltInVisibilitySettingsTest {
   void setVisibilityForServerAppliesUpdatedState() {
     TestContext context = new TestContext();
     context.perServer.put("libera", ServerBuiltInNodesVisibility.defaults());
-    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings(context);
+    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings();
 
     settings.setVisibilityForServer(
-        "  libera  ", false, ServerBuiltInNodesVisibility::withNotifications);
+        context, "  libera  ", false, ServerBuiltInNodesVisibility::withNotifications);
 
     assertFalse(context.perServer.get("libera").notifications());
     assertEquals("libera", context.lastAppliedServerId);
@@ -32,9 +32,10 @@ class ServerTreeBuiltInVisibilitySettingsTest {
     TestContext context = new TestContext();
     context.perServer.put("libera", ServerBuiltInNodesVisibility.defaults());
     context.perServer.put("oftc", ServerBuiltInNodesVisibility.defaults().withMonitor(false));
-    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings(context);
+    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings();
 
     settings.setDefaultVisibility(
+        context,
         false,
         ServerBuiltInNodesVisibility::monitor,
         ServerBuiltInNodesVisibility::withMonitor,
@@ -53,11 +54,13 @@ class ServerTreeBuiltInVisibilitySettingsTest {
     TestContext context = new TestContext();
     context.defaultVisibility = context.defaultVisibility.withLogViewer(false);
     context.perServer.put("libera", context.defaultVisibility.withInterceptors(false));
-    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings(context);
+    ServerTreeBuiltInVisibilitySettings settings = new ServerTreeBuiltInVisibilitySettings();
 
-    assertFalse(settings.defaultVisibility(ServerBuiltInNodesVisibility::logViewer));
-    assertFalse(settings.serverVisibility("libera", ServerBuiltInNodesVisibility::interceptors));
-    assertTrue(settings.serverVisibility("unknown", ServerBuiltInNodesVisibility::interceptors));
+    assertFalse(settings.defaultVisibility(context, ServerBuiltInNodesVisibility::logViewer));
+    assertFalse(
+        settings.serverVisibility(context, "libera", ServerBuiltInNodesVisibility::interceptors));
+    assertTrue(
+        settings.serverVisibility(context, "unknown", ServerBuiltInNodesVisibility::interceptors));
   }
 
   private static final class TestContext implements ServerTreeBuiltInVisibilitySettings.Context {

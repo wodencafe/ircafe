@@ -4,8 +4,10 @@ import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** A log row projected for the log viewer UI. */
+@ValueObject
 public record ChatLogViewerRow(
     long id,
     String serverId,

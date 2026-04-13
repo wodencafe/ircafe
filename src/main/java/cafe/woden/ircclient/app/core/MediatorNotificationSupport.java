@@ -81,6 +81,17 @@ public class MediatorNotificationSupport {
       String fromHostmask,
       String text,
       InterceptorEventType eventType) {
+    recordInterceptorEvent(serverId, channel, fromNick, fromHostmask, text, eventType, "");
+  }
+
+  public void recordInterceptorEvent(
+      String serverId,
+      String channel,
+      String fromNick,
+      String fromHostmask,
+      String text,
+      InterceptorEventType eventType,
+      String messageId) {
     if (interceptorIngestPort == null) {
       return;
     }
@@ -95,7 +106,8 @@ public class MediatorNotificationSupport {
         from,
         Objects.toString(fromHostmask, "").trim(),
         Objects.toString(text, "").trim(),
-        eventType);
+        eventType,
+        Objects.toString(messageId, "").trim());
   }
 
   public String learnedHostmaskForNick(String serverId, String nick) {

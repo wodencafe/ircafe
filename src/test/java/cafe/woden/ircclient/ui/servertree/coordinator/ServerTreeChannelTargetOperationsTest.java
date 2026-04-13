@@ -24,24 +24,23 @@ class ServerTreeChannelTargetOperationsTest {
     AtomicBoolean mutedCallback = new AtomicBoolean(false);
 
     ServerTreeChannelTargetOperations operations =
-        new ServerTreeChannelTargetOperations(
-            new ServerTreeEdtExecutor(),
-            channelStateCoordinator,
-            requestEmitter,
-            (ref, muted) -> mutedCallback.set(muted));
+        new ServerTreeChannelTargetOperations(new ServerTreeEdtExecutor());
+    ServerTreeChannelTargetOperations.Context context =
+        ServerTreeChannelTargetOperations.context(
+            channelStateCoordinator, requestEmitter, (ref, muted) -> mutedCallback.set(muted));
 
     TargetRef channelRef = new TargetRef("libera", "#ircafe");
     when(channelStateCoordinator.isChannelAutoReattach(channelRef)).thenReturn(false);
     when(channelStateCoordinator.isChannelPinned(channelRef)).thenReturn(true);
     when(channelStateCoordinator.isChannelMuted(channelRef)).thenReturn(false);
 
-    assertFalse(operations.isChannelAutoReattach(channelRef));
-    assertTrue(operations.isChannelPinned(channelRef));
-    assertFalse(operations.isChannelMuted(channelRef));
+    assertFalse(operations.isChannelAutoReattach(context, channelRef));
+    assertTrue(operations.isChannelPinned(context, channelRef));
+    assertFalse(operations.isChannelMuted(context, channelRef));
 
-    operations.setChannelAutoReattach(channelRef, true);
-    operations.setChannelPinned(channelRef, false);
-    operations.setChannelMuted(channelRef, true);
+    operations.setChannelAutoReattach(context, channelRef, true);
+    operations.setChannelPinned(context, channelRef, false);
+    operations.setChannelMuted(context, channelRef, true);
     flushEdt();
 
     verify(channelStateCoordinator).setChannelAutoReattach(channelRef, true);
@@ -49,16 +48,16 @@ class ServerTreeChannelTargetOperationsTest {
     verify(channelStateCoordinator).setChannelMuted(channelRef, true);
     assertTrue(mutedCallback.get());
 
-    operations.requestJoinChannel(channelRef);
-    operations.requestDisconnectChannel(channelRef);
-    operations.requestCloseChannel(channelRef);
+    operations.requestJoinChannel(context, channelRef);
+    operations.requestDisconnectChannel(context, channelRef);
+    operations.requestCloseChannel(context, channelRef);
 
     verify(requestEmitter).emitJoinChannel(channelRef);
     verify(requestEmitter).emitDisconnectChannel(channelRef);
     verify(requestEmitter).emitCloseChannel(channelRef);
 
-    operations.setCanEditChannelModes((serverId, channel) -> true);
-    assertTrue(operations.canEditChannelModesForTarget(channelRef));
+    operations.setCanEditChannelModes(context, (serverId, channel) -> true);
+    assertTrue(operations.canEditChannelModesForTarget(context, channelRef));
   }
 
   @Test
@@ -68,24 +67,23 @@ class ServerTreeChannelTargetOperationsTest {
     ServerTreeRequestEmitter requestEmitter = mock(ServerTreeRequestEmitter.class);
 
     ServerTreeChannelTargetOperations operations =
-        new ServerTreeChannelTargetOperations(
-            new ServerTreeEdtExecutor(),
-            channelStateCoordinator,
-            requestEmitter,
-            (ref, muted) -> {});
+        new ServerTreeChannelTargetOperations(new ServerTreeEdtExecutor());
+    ServerTreeChannelTargetOperations.Context context =
+        ServerTreeChannelTargetOperations.context(
+            channelStateCoordinator, requestEmitter, (ref, muted) -> {});
 
     TargetRef statusRef = new TargetRef("libera", "status");
 
-    assertTrue(operations.isChannelAutoReattach(statusRef));
-    assertFalse(operations.isChannelPinned(statusRef));
-    assertFalse(operations.isChannelMuted(statusRef));
+    assertTrue(operations.isChannelAutoReattach(context, statusRef));
+    assertFalse(operations.isChannelPinned(context, statusRef));
+    assertFalse(operations.isChannelMuted(context, statusRef));
 
-    operations.setChannelAutoReattach(statusRef, true);
-    operations.setChannelPinned(statusRef, true);
-    operations.setChannelMuted(statusRef, true);
-    operations.requestJoinChannel(statusRef);
-    operations.requestDisconnectChannel(statusRef);
-    operations.requestCloseChannel(statusRef);
+    operations.setChannelAutoReattach(context, statusRef, true);
+    operations.setChannelPinned(context, statusRef, true);
+    operations.setChannelMuted(context, statusRef, true);
+    operations.requestJoinChannel(context, statusRef);
+    operations.requestDisconnectChannel(context, statusRef);
+    operations.requestCloseChannel(context, statusRef);
     flushEdt();
 
     verify(channelStateCoordinator, never()).setChannelAutoReattach(statusRef, true);
@@ -103,19 +101,19 @@ class ServerTreeChannelTargetOperationsTest {
     ServerTreeRequestEmitter requestEmitter = mock(ServerTreeRequestEmitter.class);
 
     ServerTreeChannelTargetOperations operations =
-        new ServerTreeChannelTargetOperations(
-            new ServerTreeEdtExecutor(),
-            channelStateCoordinator,
-            requestEmitter,
-            (ref, muted) -> {});
+        new ServerTreeChannelTargetOperations(new ServerTreeEdtExecutor());
+    ServerTreeChannelTargetOperations.Context context =
+        ServerTreeChannelTargetOperations.context(
+            channelStateCoordinator, requestEmitter, (ref, muted) -> {});
 
     TargetRef channelRef = new TargetRef("libera", "#ircafe");
     operations.setCanEditChannelModes(
+        context,
         (serverId, channel) -> {
           throw new RuntimeException("boom");
         });
 
-    assertFalse(operations.canEditChannelModesForTarget(channelRef));
+    assertFalse(operations.canEditChannelModesForTarget(context, channelRef));
   }
 
   private static void flushEdt() throws Exception {

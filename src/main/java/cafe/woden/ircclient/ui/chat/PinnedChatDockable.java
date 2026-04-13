@@ -1,9 +1,10 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
@@ -14,6 +15,7 @@ import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.ChatRedactedMessageRevealSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
@@ -58,6 +60,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final TargetRef target;
   private final ChatTranscriptStore transcripts;
   private final ChatHistoryService chatHistoryService;
+  private final ChatRedactionAuditService redactionAuditService;
   private final String persistentId;
 
   private boolean followTail = true;
@@ -67,8 +70,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
+  private final Function<String, String> currentNickLookup;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -96,9 +100,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
       IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      ChatRedactionAuditService redactionAuditService,
       Function<String, BackendUiProfile> backendUiProfileProvider,
+      Function<String, String> currentNickLookup,
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       BiConsumer<TargetRef, String> onDraftChanged,
@@ -107,12 +113,16 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.target = target;
     this.transcripts = transcripts;
     this.chatHistoryService = chatHistoryService;
+    this.redactionAuditService =
+        Objects.requireNonNull(redactionAuditService, "redactionAuditService");
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.readMarkerFeatureSupport =
+        Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    this.currentNickLookup = Objects.requireNonNullElse(currentNickLookup, serverId -> "");
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -171,6 +181,21 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
             ? BackendUiProfile.ircOnly(target.serverId())
             : backendUiProfileProvider.apply(target.serverId());
     this.inputPanel.setBackendUiProfile(initialProfile);
+    this.inputPanel.setQuickReactionCommandResolver(
+        (ircTarget, messageId, reactionToken) -> {
+          String expectedTarget = Objects.toString(ircTarget, "").trim();
+          if (!expectedTarget.isEmpty() && !Objects.equals(this.target.target(), expectedTarget)) {
+            return "";
+          }
+          return MessageReactionToggleSupport.resolveCommand(
+              this.target,
+              messageId,
+              reactionToken,
+              false,
+              transcripts,
+              this.messageActionCapabilityPolicy,
+              this.currentNickLookup);
+        });
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.
@@ -478,6 +503,18 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   @Override
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return transcripts != null;
+  }
+
+  @Override
+  protected void onRevealRedactedMessageRequested(String messageId) {
+    if (target == null || target.isUiOnly()) return;
+    ChatRedactedMessageRevealSupport.reveal(
+        this, target, messageId, transcripts, redactionAuditService);
+  }
+
+  @Override
   protected boolean isOwnMessageForContextActions(String messageId) {
     return transcripts != null && transcripts.isOwnMessage(target, messageId);
   }
@@ -755,7 +792,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void maybeSendReadMarker() {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerFeatureSupport.isAvailable(target.serverId())) return;
 
     long now = System.currentTimeMillis();
     if ((now - lastReadMarkerSentAtMs) < READ_MARKER_SEND_COOLDOWN_MS) return;
@@ -763,8 +800,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     transcripts.updateReadMarker(target, now);
     var unused =
-        readMarkerPort
-            .sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+        readMarkerFeatureSupport
+            .send(target.serverId(), target.target(), Instant.ofEpochMilli(now))
             .subscribe(() -> {}, err -> {});
   }
 }

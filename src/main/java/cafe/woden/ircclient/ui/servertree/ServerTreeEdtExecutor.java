@@ -5,8 +5,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.SwingUtilities;
+import org.springframework.stereotype.Component;
 
 /** Small helper for marshaling reads/writes onto the Swing EDT. */
+@Component
 public final class ServerTreeEdtExecutor {
 
   public <T> T read(Supplier<T> supplier, T fallback, Consumer<Exception> onFailure) {

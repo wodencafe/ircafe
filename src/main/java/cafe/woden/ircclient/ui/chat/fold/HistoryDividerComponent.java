@@ -10,8 +10,7 @@ import javax.swing.JPanel;
 import javax.swing.UIManager;
 
 /**
- * A purely-visual divider inserted into the transcript to separate loaded history from live
- * messages.
+ * A purely-visual divider inserted into the transcript.
  *
  * <p>This is rendered as an embedded Swing component inside the chat transcript document.
  */

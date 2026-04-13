@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -75,6 +77,11 @@ class ChatDockableWiringSmokeTest {
       flushEdt();
 
       assertEquals("Ignores", onEdtCall(fixture.chat::getTabText));
+
+      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.applicationPlugins()));
+      flushEdt();
+
+      assertEquals("Plugins", onEdtCall(fixture.chat::getTabText));
 
       onEdt(() -> fixture.chat.setActiveTarget(channelTarget));
       flushEdt();
@@ -242,7 +249,7 @@ class ChatDockableWiringSmokeTest {
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
     SlashCommandPresentationCatalog slashCommandPresentationCatalog =
-        new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
+        new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
 
     AtomicReference<ChatDockable> holder = new AtomicReference<>();
     onEdt(
@@ -255,6 +262,7 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    mock(Ircv3ReadMarkerFeatureSupport.class),
                     modeRoutingState,
                     serverIsupportState,
                     backendUiProfileProvider,
@@ -271,9 +279,11 @@ class ChatDockableWiringSmokeTest {
                     chatHistoryService,
                     channelMetadataStore,
                     chatLogViewerService,
+                    new NoOpChatRedactionAuditService(),
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
+                    null,
                     null,
                     null,
                     null,

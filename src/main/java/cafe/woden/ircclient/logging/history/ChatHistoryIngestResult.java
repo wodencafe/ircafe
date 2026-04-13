@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.logging.history;
 
+import org.jmolecules.ddd.annotation.ValueObject;
+
 /** Result from persisting a collected remote history batch into the local chat log DB. */
+@ValueObject
 public record ChatHistoryIngestResult(
     boolean enabled,
     int total,

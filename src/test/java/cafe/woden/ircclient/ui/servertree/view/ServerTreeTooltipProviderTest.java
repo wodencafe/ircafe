@@ -44,7 +44,8 @@ class ServerTreeTooltipProviderTest {
                 (backendId, originId, networkKey) -> false,
                 () -> false,
                 nodeData -> false,
-                (serverId, networkToken) -> ""));
+                (serverId, networkToken) -> ""),
+            new ServerTreeTooltipTextPolicy());
 
     MouseEvent event =
         new MouseEvent(

@@ -163,15 +163,11 @@ public final class Ircv3MultilineAccumulator {
   }
 
   private static boolean isConcatTag(String rawKey) {
-    String key = normalizeTagKey(rawKey);
-    return "multiline-concat".equals(key) || "draft/multiline-concat".equals(key);
+    return Ircv3MultilineSupport.isMultilineConcatTag(rawKey);
   }
 
   private static String normalizeTagKey(String rawKey) {
-    String key = Objects.toString(rawKey, "").trim();
-    if (key.startsWith("@")) key = key.substring(1).trim();
-    if (key.startsWith("+")) key = key.substring(1).trim();
-    return key.toLowerCase(Locale.ROOT);
+    return Ircv3MultilineSupport.normalizeTagKey(rawKey);
   }
 
   private static String normalizeToken(String raw) {

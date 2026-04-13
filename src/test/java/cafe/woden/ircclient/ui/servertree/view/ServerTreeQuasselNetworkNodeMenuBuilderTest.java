@@ -26,25 +26,25 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
     List<String> addRequests = new ArrayList<>();
     List<String> setupRequests = new ArrayList<>();
     List<String> managerRequests = new ArrayList<>();
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                openedRefs::add,
-                (sid, token) -> connectRequests.add(sid + ":" + token),
-                (sid, token) -> disconnectRequests.add(sid + ":" + token),
-                (sid, token) -> removeRequests.add(sid + ":" + token),
-                addRequests::add,
-                (sid, token, label) -> {
-                  removeConfirmRequests.add(sid + ":" + token + ":" + label);
-                  return true;
-                },
-                setupRequests::add,
-                managerRequests::add,
-                sid -> true));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            openedRefs::add,
+            (sid, token) -> connectRequests.add(sid + ":" + token),
+            (sid, token) -> disconnectRequests.add(sid + ":" + token),
+            (sid, token) -> removeRequests.add(sid + ":" + token),
+            addRequests::add,
+            (sid, token, label) -> {
+              removeConfirmRequests.add(sid + ":" + token + ":" + label);
+              return true;
+            },
+            setupRequests::add,
+            managerRequests::add,
+            sid -> true);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera");
 
-    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu menu = builder.buildNetworkNodeMenu(context, nodeData);
 
     assertNotNull(menu);
     assertEquals(7, menu.getComponentCount());
@@ -69,22 +69,22 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
   @Test
   void networkMenuDisablesConnectWhenAlreadyConnectedAndSupportsRemoveConfirmation() {
     List<String> removeRequests = new ArrayList<>();
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> removeRequests.add(sid + ":" + token),
-                sid -> {},
-                (sid, token, label) -> false,
-                sid -> {},
-                sid -> {},
-                sid -> false));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> removeRequests.add(sid + ":" + token),
+            sid -> {},
+            (sid, token, label) -> false,
+            sid -> {},
+            sid -> {},
+            sid -> false);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", true, true);
 
-    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu menu = builder.buildNetworkNodeMenu(context, nodeData);
 
     assertNotNull(menu);
     JMenuItem connect = (JMenuItem) menu.getComponent(1);
@@ -100,22 +100,22 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
 
   @Test
   void networkMenuDisablesConnectAndDisconnectWhenNetworkDisabled() {
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                sid -> {},
-                (sid, token, label) -> true,
-                sid -> {},
-                sid -> {},
-                sid -> false));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            sid -> {},
+            (sid, token, label) -> true,
+            sid -> {},
+            sid -> {},
+            sid -> false);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", false, false);
 
-    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu menu = builder.buildNetworkNodeMenu(context, nodeData);
 
     assertNotNull(menu);
     assertFalse(((JMenuItem) menu.getComponent(1)).isEnabled());
@@ -127,22 +127,22 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
     List<String> addRequests = new ArrayList<>();
     List<String> setupRequests = new ArrayList<>();
     List<String> managerRequests = new ArrayList<>();
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                addRequests::add,
-                (sid, token, label) -> true,
-                setupRequests::add,
-                managerRequests::add,
-                sid -> true));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            addRequests::add,
+            (sid, token, label) -> true,
+            setupRequests::add,
+            managerRequests::add,
+            sid -> true);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.emptyState("quassel", "No Quassel networks configured");
 
-    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu menu = builder.buildNetworkNodeMenu(context, nodeData);
 
     assertNotNull(menu);
     assertEquals(4, menu.getComponentCount());
@@ -158,55 +158,54 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
 
   @Test
   void returnsNullForInvalidServer() {
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                sid -> {},
-                (sid, token, label) -> true,
-                sid -> {},
-                sid -> {},
-                sid -> false));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            sid -> {},
+            (sid, token, label) -> true,
+            sid -> {},
+            sid -> {},
+            sid -> false);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network(" ", "libera", "Libera");
 
-    assertNull(builder.buildNetworkNodeMenu(nodeData));
+    assertNull(builder.buildNetworkNodeMenu(context, nodeData));
   }
 
   @Test
   void omitsSetupActionWhenSetupNotPending() {
-    ServerTreeQuasselNetworkNodeMenuBuilder builder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                sid -> {},
-                (sid, token, label) -> true,
-                sid -> {},
-                sid -> {},
-                sid -> false));
-    ServerTreeQuasselNetworkNodeMenuBuilder pendingBuilder =
-        new ServerTreeQuasselNetworkNodeMenuBuilder(
-            ServerTreeQuasselNetworkNodeMenuBuilder.context(
-                ref -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                (sid, token) -> {},
-                sid -> {},
-                (sid, token, label) -> true,
-                sid -> {},
-                sid -> {},
-                sid -> true));
+    ServerTreeQuasselNetworkNodeMenuBuilder builder = new ServerTreeQuasselNetworkNodeMenuBuilder();
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context context =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            sid -> {},
+            (sid, token, label) -> true,
+            sid -> {},
+            sid -> {},
+            sid -> false);
+    ServerTreeQuasselNetworkNodeMenuBuilder.Context pendingContext =
+        ServerTreeQuasselNetworkNodeMenuBuilder.context(
+            ref -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            (sid, token) -> {},
+            sid -> {},
+            (sid, token, label) -> true,
+            sid -> {},
+            sid -> {},
+            sid -> true);
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera");
 
-    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
-    JPopupMenu pendingMenu = pendingBuilder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu menu = builder.buildNetworkNodeMenu(context, nodeData);
+    JPopupMenu pendingMenu = builder.buildNetworkNodeMenu(pendingContext, nodeData);
 
     assertNotNull(menu);
     assertNotNull(pendingMenu);

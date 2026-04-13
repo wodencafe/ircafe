@@ -59,18 +59,21 @@ class ServerTreeTargetRemovalStateCoordinatorTest {
         .put("libera", new ArrayList<>(List.of("#ircafe", "##politics")));
 
     AtomicReference<String> emittedServerId = new AtomicReference<>();
+    ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore =
+        new ServerTreePrivateMessageOnlineStateStore();
     ServerTreeTargetRemovalStateCoordinator coordinator =
-        new ServerTreeTargetRemovalStateCoordinator(
-            new ServerTreePrivateMessageOnlineStateStore(),
+        new ServerTreeTargetRemovalStateCoordinator();
+    ServerTreeTargetRemovalStateCoordinator.Context context =
+        ServerTreeTargetRemovalStateCoordinator.context(
+            privateMessageOnlineStateStore,
             runtimeConfig,
             channelStateStore,
-            ServerTreeTargetRemovalStateCoordinator.context(
-                ref -> false,
-                () -> true,
-                channel -> channel == null ? "" : channel.trim().toLowerCase(Locale.ROOT),
-                emittedServerId::set));
+            ref -> false,
+            () -> true,
+            channel -> channel == null ? "" : channel.trim().toLowerCase(Locale.ROOT),
+            emittedServerId::set);
 
-    coordinator.cleanupForRemovedTarget(new TargetRef("libera", "##politics"));
+    coordinator.cleanupForRemovedTarget(context, new TargetRef("libera", "##politics"));
 
     assertEquals(List.of("#ircafe"), runtimeConfig.readJoinedChannels("libera"));
     String persisted = Files.readString(cfg);

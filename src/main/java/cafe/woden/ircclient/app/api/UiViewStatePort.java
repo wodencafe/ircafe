@@ -5,9 +5,11 @@ import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import java.util.List;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Non-transcript UI state, navigation, and server metadata updates. */
+@SecondaryPort
 @ApplicationLayer
 public interface UiViewStatePort {
 
@@ -45,7 +47,17 @@ public interface UiViewStatePort {
     recordHighlight(target, fromNick);
   }
 
+  default void recordHighlight(
+      TargetRef target, String fromNick, String snippet, String messageId) {
+    recordHighlight(target, fromNick, snippet);
+  }
+
   void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet);
+
+  default void recordRuleMatch(
+      TargetRef target, String fromNick, String ruleLabel, String snippet, String messageId) {
+    recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
 
   void clearUnread(TargetRef target);
 

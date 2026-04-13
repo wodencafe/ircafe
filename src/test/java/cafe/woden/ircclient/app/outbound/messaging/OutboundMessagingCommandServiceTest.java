@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3MultilineFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -31,9 +32,10 @@ class OutboundMessagingCommandServiceTest {
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
+  private final Ircv3MultilineFeatureSupport multilineFeatureSupport =
+      new Ircv3MultilineFeatureSupport(backendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc));
   private final OutboundMultilineMessageSupport outboundMultilineMessageSupport =
-      new OutboundMultilineMessageSupport(
-          backendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc), ui);
+      new OutboundMultilineMessageSupport(multilineFeatureSupport, ui);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final OutboundMessagingCommandService service =

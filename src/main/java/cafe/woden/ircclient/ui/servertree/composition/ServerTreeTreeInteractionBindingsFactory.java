@@ -12,13 +12,18 @@ import javax.swing.JTree;
 import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Factory that assembles tree interaction bindings used by the server tree UI. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeTreeInteractionBindingsFactory {
 
-  private ServerTreeTreeInteractionBindingsFactory() {}
+  @NonNull private final ServerTreeNodeActionsFactory nodeActionsFactory;
 
-  public static TreeNodeActions<TargetRef> create(Inputs inputs) {
+  public TreeNodeActions<TargetRef> create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
 
@@ -31,32 +36,31 @@ public final class ServerTreeTreeInteractionBindingsFactory {
                     in.refreshTreeLayoutAfterUiChange(), "refreshTreeLayoutAfterUiChange")));
 
     TreeNodeActions<TargetRef> nodeActions =
-        Objects.requireNonNull(in.nodeActionsFactory(), "nodeActionsFactory")
-            .create(
-                new ServerTreeNodeActionsFactory.Inputs(
-                    tree,
-                    Objects.requireNonNull(in.model(), "model"),
-                    Objects.requireNonNull(in.isServerNode(), "isServerNode"),
-                    Objects.requireNonNull(in.isChannelListLeafNode(), "isChannelListLeafNode"),
-                    Objects.requireNonNull(in.isChannelPinned(), "isChannelPinned"),
-                    Objects.requireNonNull(in.targetRefForNode(), "targetRefForNode"),
-                    Objects.requireNonNull(in.nodeLabelForNode(), "nodeLabelForNode"),
-                    Objects.requireNonNull(
-                        in.backendIdForNetworksGroupNode(), "backendIdForNetworksGroupNode"),
-                    Objects.requireNonNull(in.isChannelDisconnected(), "isChannelDisconnected"),
-                    Objects.requireNonNull(in.emitDisconnectChannel(), "emitDisconnectChannel"),
-                    Objects.requireNonNull(in.emitCloseTarget(), "emitCloseTarget"),
-                    Objects.requireNonNull(
-                        in.isRootSiblingReorderableNode(), "isRootSiblingReorderableNode"),
-                    Objects.requireNonNull(in.isMovableBuiltInNode(), "isMovableBuiltInNode"),
-                    Objects.requireNonNull(in.owningServerIdForNode(), "owningServerIdForNode"),
-                    Objects.requireNonNull(
-                        in.persistOrderAndResortAfterManualMove(),
-                        "persistOrderAndResortAfterManualMove"),
-                    Objects.requireNonNull(
-                        in.persistRootSiblingOrderFromTree(), "persistRootSiblingOrderFromTree"),
-                    Objects.requireNonNull(
-                        in.persistBuiltInLayoutFromTree(), "persistBuiltInLayoutFromTree")));
+        nodeActionsFactory.create(
+            new ServerTreeNodeActionsFactory.Inputs(
+                tree,
+                Objects.requireNonNull(in.model(), "model"),
+                Objects.requireNonNull(in.isServerNode(), "isServerNode"),
+                Objects.requireNonNull(in.isChannelListLeafNode(), "isChannelListLeafNode"),
+                Objects.requireNonNull(in.isChannelPinned(), "isChannelPinned"),
+                Objects.requireNonNull(in.targetRefForNode(), "targetRefForNode"),
+                Objects.requireNonNull(in.nodeLabelForNode(), "nodeLabelForNode"),
+                Objects.requireNonNull(
+                    in.backendIdForNetworksGroupNode(), "backendIdForNetworksGroupNode"),
+                Objects.requireNonNull(in.isChannelDisconnected(), "isChannelDisconnected"),
+                Objects.requireNonNull(in.emitDisconnectChannel(), "emitDisconnectChannel"),
+                Objects.requireNonNull(in.emitCloseTarget(), "emitCloseTarget"),
+                Objects.requireNonNull(
+                    in.isRootSiblingReorderableNode(), "isRootSiblingReorderableNode"),
+                Objects.requireNonNull(in.isMovableBuiltInNode(), "isMovableBuiltInNode"),
+                Objects.requireNonNull(in.owningServerIdForNode(), "owningServerIdForNode"),
+                Objects.requireNonNull(
+                    in.persistOrderAndResortAfterManualMove(),
+                    "persistOrderAndResortAfterManualMove"),
+                Objects.requireNonNull(
+                    in.persistRootSiblingOrderFromTree(), "persistRootSiblingOrderFromTree"),
+                Objects.requireNonNull(
+                    in.persistBuiltInLayoutFromTree(), "persistBuiltInLayoutFromTree")));
     ServerTreeKeyBindingsInstaller.install(
         tree,
         nodeActions::moveUpAction,
@@ -68,7 +72,6 @@ public final class ServerTreeTreeInteractionBindingsFactory {
   }
 
   public record Inputs(
-      ServerTreeNodeActionsFactory nodeActionsFactory,
       JTree tree,
       DefaultTreeModel model,
       Predicate<DefaultMutableTreeNode> isServerNode,

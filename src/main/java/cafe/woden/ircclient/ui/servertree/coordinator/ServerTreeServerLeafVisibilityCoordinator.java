@@ -13,31 +13,52 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.springframework.stereotype.Component;
 
 /** Applies per-server built-in leaf/group visibility and reapplies persisted layout/order. */
+@Component
 public final class ServerTreeServerLeafVisibilityCoordinator {
 
-  private final String channelListLabel;
-  private final String weechatFiltersLabel;
-  private final String ignoresLabel;
-  private final String dccTransfersLabel;
-  private final String notificationsLabel;
-  private final String logViewerLabel;
+  public interface Context {
+    String channelListLabel();
 
-  private final ServerTreeNodeVisibilityMutator nodeVisibilityMutator;
-  private final Function<String, String> normalizeServerId;
-  private final Function<String, ServerNodes> serverNodesForServer;
-  private final Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility;
-  private final Function<String, ServerTreeBuiltInLayout> builtInLayout;
-  private final Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder;
-  private final BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree;
-  private final BiConsumer<ServerNodes, ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree;
-  private final Function<String, String> statusLeafLabelForServer;
-  private final Predicate<String> isQuasselServer;
-  private final BooleanSupplier showDccTransfersNodes;
-  private final Function<TargetRef, DefaultMutableTreeNode> leafForTarget;
+    String weechatFiltersLabel();
 
-  public ServerTreeServerLeafVisibilityCoordinator(
+    String ignoresLabel();
+
+    String dccTransfersLabel();
+
+    String notificationsLabel();
+
+    String logViewerLabel();
+
+    ServerTreeNodeVisibilityMutator nodeVisibilityMutator();
+
+    String normalizeServerId(String serverId);
+
+    ServerNodes serverNodesForServer(String serverId);
+
+    ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId);
+
+    ServerTreeBuiltInLayout builtInLayout(String serverId);
+
+    ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
+
+    void applyBuiltInLayoutToTree(ServerNodes serverNodes, ServerTreeBuiltInLayout builtInLayout);
+
+    void applyRootSiblingOrderToTree(
+        ServerNodes serverNodes, ServerTreeRootSiblingOrder rootSiblingOrder);
+
+    String statusLeafLabelForServer(String serverId);
+
+    boolean isQuasselServer(String serverId);
+
+    boolean showDccTransfersNodes();
+
+    DefaultMutableTreeNode leafForTarget(TargetRef ref);
+  }
+
+  public static Context context(
       String channelListLabel,
       String weechatFiltersLabel,
       String ignoresLabel,
@@ -56,126 +77,233 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
       Predicate<String> isQuasselServer,
       BooleanSupplier showDccTransfersNodes,
       Function<TargetRef, DefaultMutableTreeNode> leafForTarget) {
-    this.channelListLabel = Objects.requireNonNull(channelListLabel, "channelListLabel");
-    this.weechatFiltersLabel = Objects.requireNonNull(weechatFiltersLabel, "weechatFiltersLabel");
-    this.ignoresLabel = Objects.requireNonNull(ignoresLabel, "ignoresLabel");
-    this.dccTransfersLabel = Objects.requireNonNull(dccTransfersLabel, "dccTransfersLabel");
-    this.notificationsLabel = Objects.requireNonNull(notificationsLabel, "notificationsLabel");
-    this.logViewerLabel = Objects.requireNonNull(logViewerLabel, "logViewerLabel");
-    this.nodeVisibilityMutator =
-        Objects.requireNonNull(nodeVisibilityMutator, "nodeVisibilityMutator");
-    this.normalizeServerId = Objects.requireNonNull(normalizeServerId, "normalizeServerId");
-    this.serverNodesForServer =
-        Objects.requireNonNull(serverNodesForServer, "serverNodesForServer");
-    this.builtInNodesVisibility =
-        Objects.requireNonNull(builtInNodesVisibility, "builtInNodesVisibility");
-    this.builtInLayout = Objects.requireNonNull(builtInLayout, "builtInLayout");
-    this.rootSiblingOrder = Objects.requireNonNull(rootSiblingOrder, "rootSiblingOrder");
-    this.applyBuiltInLayoutToTree =
-        Objects.requireNonNull(applyBuiltInLayoutToTree, "applyBuiltInLayoutToTree");
-    this.applyRootSiblingOrderToTree =
-        Objects.requireNonNull(applyRootSiblingOrderToTree, "applyRootSiblingOrderToTree");
-    this.statusLeafLabelForServer =
-        Objects.requireNonNull(statusLeafLabelForServer, "statusLeafLabelForServer");
-    this.isQuasselServer = Objects.requireNonNull(isQuasselServer, "isQuasselServer");
-    this.showDccTransfersNodes =
-        Objects.requireNonNull(showDccTransfersNodes, "showDccTransfersNodes");
-    this.leafForTarget = Objects.requireNonNull(leafForTarget, "leafForTarget");
+    Objects.requireNonNull(channelListLabel, "channelListLabel");
+    Objects.requireNonNull(weechatFiltersLabel, "weechatFiltersLabel");
+    Objects.requireNonNull(ignoresLabel, "ignoresLabel");
+    Objects.requireNonNull(dccTransfersLabel, "dccTransfersLabel");
+    Objects.requireNonNull(notificationsLabel, "notificationsLabel");
+    Objects.requireNonNull(logViewerLabel, "logViewerLabel");
+    Objects.requireNonNull(nodeVisibilityMutator, "nodeVisibilityMutator");
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(serverNodesForServer, "serverNodesForServer");
+    Objects.requireNonNull(builtInNodesVisibility, "builtInNodesVisibility");
+    Objects.requireNonNull(builtInLayout, "builtInLayout");
+    Objects.requireNonNull(rootSiblingOrder, "rootSiblingOrder");
+    Objects.requireNonNull(applyBuiltInLayoutToTree, "applyBuiltInLayoutToTree");
+    Objects.requireNonNull(applyRootSiblingOrderToTree, "applyRootSiblingOrderToTree");
+    Objects.requireNonNull(statusLeafLabelForServer, "statusLeafLabelForServer");
+    Objects.requireNonNull(isQuasselServer, "isQuasselServer");
+    Objects.requireNonNull(showDccTransfersNodes, "showDccTransfersNodes");
+    Objects.requireNonNull(leafForTarget, "leafForTarget");
+    return new Context() {
+      @Override
+      public String channelListLabel() {
+        return channelListLabel;
+      }
+
+      @Override
+      public String weechatFiltersLabel() {
+        return weechatFiltersLabel;
+      }
+
+      @Override
+      public String ignoresLabel() {
+        return ignoresLabel;
+      }
+
+      @Override
+      public String dccTransfersLabel() {
+        return dccTransfersLabel;
+      }
+
+      @Override
+      public String notificationsLabel() {
+        return notificationsLabel;
+      }
+
+      @Override
+      public String logViewerLabel() {
+        return logViewerLabel;
+      }
+
+      @Override
+      public ServerTreeNodeVisibilityMutator nodeVisibilityMutator() {
+        return nodeVisibilityMutator;
+      }
+
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public ServerNodes serverNodesForServer(String serverId) {
+        return serverNodesForServer.apply(serverId);
+      }
+
+      @Override
+      public ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
+        return builtInNodesVisibility.apply(serverId);
+      }
+
+      @Override
+      public ServerTreeBuiltInLayout builtInLayout(String serverId) {
+        return builtInLayout.apply(serverId);
+      }
+
+      @Override
+      public ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+        return rootSiblingOrder.apply(serverId);
+      }
+
+      @Override
+      public void applyBuiltInLayoutToTree(
+          ServerNodes serverNodes, ServerTreeBuiltInLayout builtInLayout) {
+        applyBuiltInLayoutToTree.accept(serverNodes, builtInLayout);
+      }
+
+      @Override
+      public void applyRootSiblingOrderToTree(
+          ServerNodes serverNodes, ServerTreeRootSiblingOrder rootSiblingOrder) {
+        applyRootSiblingOrderToTree.accept(serverNodes, rootSiblingOrder);
+      }
+
+      @Override
+      public String statusLeafLabelForServer(String serverId) {
+        return statusLeafLabelForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean isQuasselServer(String serverId) {
+        return isQuasselServer.test(serverId);
+      }
+
+      @Override
+      public boolean showDccTransfersNodes() {
+        return showDccTransfersNodes.getAsBoolean();
+      }
+
+      @Override
+      public DefaultMutableTreeNode leafForTarget(TargetRef ref) {
+        return leafForTarget.apply(ref);
+      }
+    };
   }
 
-  public void syncUiLeafVisibilityForServer(String serverId) {
-    String sid = normalize(serverId);
+  public void syncUiLeafVisibilityForServer(Context context, String serverId) {
+    Context in = Objects.requireNonNull(context, "context");
+    String sid = normalize(in, serverId);
     if (sid.isEmpty()) return;
 
-    ServerNodes serverNodes = serverNodesForServer.apply(sid);
+    ServerNodes serverNodes = in.serverNodesForServer(sid);
     if (serverNodes == null || serverNodes.serverNode == null) return;
 
-    ServerBuiltInNodesVisibility visibility = builtInNodesVisibility.apply(sid);
-    boolean quasselServer = isQuasselServer.test(sid);
+    ServerBuiltInNodesVisibility visibility = in.builtInNodesVisibility(sid);
+    boolean quasselServer = in.isQuasselServer(sid);
     ensureMovableBuiltInLeafVisible(
+        in,
         serverNodes,
         serverNodes.statusRef,
-        statusLeafLabelForServer.apply(sid),
+        in.statusLeafLabelForServer(sid),
         visibility.server());
     ensureMovableBuiltInLeafVisible(
-        serverNodes, serverNodes.notificationsRef, notificationsLabel, visibility.notifications());
+        in,
+        serverNodes,
+        serverNodes.notificationsRef,
+        in.notificationsLabel(),
+        visibility.notifications());
     ensureMovableBuiltInLeafVisible(
-        serverNodes, serverNodes.logViewerRef, logViewerLabel, visibility.logViewer());
+        in, serverNodes, serverNodes.logViewerRef, in.logViewerLabel(), visibility.logViewer());
     if (quasselServer) {
-      suppressRootChannelListForQuassel(serverNodes);
-      ensurePrivateMessagesGroupVisible(serverNodes, false);
+      suppressRootChannelListForQuassel(in, serverNodes);
+      ensurePrivateMessagesGroupVisible(in, serverNodes, false);
     } else {
-      ensureUiLeafVisible(serverNodes, serverNodes.channelListRef, channelListLabel, true);
+      ensureUiLeafVisible(in, serverNodes, serverNodes.channelListRef, in.channelListLabel(), true);
     }
     ensureMovableBuiltInLeafVisible(
-        serverNodes, serverNodes.weechatFiltersRef, weechatFiltersLabel, true);
-    ensureMovableBuiltInLeafVisible(serverNodes, serverNodes.ignoresRef, ignoresLabel, true);
+        in, serverNodes, serverNodes.weechatFiltersRef, in.weechatFiltersLabel(), true);
+    ensureMovableBuiltInLeafVisible(
+        in, serverNodes, serverNodes.ignoresRef, in.ignoresLabel(), true);
     ensureUiLeafVisible(
+        in,
         serverNodes,
         serverNodes.dccTransfersRef,
-        dccTransfersLabel,
-        showDccTransfersNodes.getAsBoolean());
-    ensureMonitorGroupVisible(serverNodes, !quasselServer && visibility.monitor());
-    ensureInterceptorsGroupVisible(serverNodes, !quasselServer && visibility.interceptors());
-    applyBuiltInLayoutToTree.accept(serverNodes, builtInLayout.apply(sid));
+        in.dccTransfersLabel(),
+        in.showDccTransfersNodes());
+    ensureMonitorGroupVisible(in, serverNodes, !quasselServer && visibility.monitor());
+    ensureInterceptorsGroupVisible(in, serverNodes, !quasselServer && visibility.interceptors());
+    in.applyBuiltInLayoutToTree(serverNodes, in.builtInLayout(sid));
     if (quasselServer) {
-      ensureMonitorGroupVisible(serverNodes, false);
-      ensureInterceptorsGroupVisible(serverNodes, false);
-      ensurePrivateMessagesGroupVisible(serverNodes, false);
+      ensureMonitorGroupVisible(in, serverNodes, false);
+      ensureInterceptorsGroupVisible(in, serverNodes, false);
+      ensurePrivateMessagesGroupVisible(in, serverNodes, false);
     }
-    applyRootSiblingOrderToTree.accept(serverNodes, rootSiblingOrder.apply(sid));
+    in.applyRootSiblingOrderToTree(serverNodes, in.rootSiblingOrder(sid));
   }
 
-  private void suppressRootChannelListForQuassel(ServerNodes serverNodes) {
+  private void suppressRootChannelListForQuassel(Context context, ServerNodes serverNodes) {
     if (serverNodes == null
         || serverNodes.serverNode == null
         || serverNodes.channelListRef == null) {
       return;
     }
-    DefaultMutableTreeNode channelListNode = leafForTarget.apply(serverNodes.channelListRef);
+    DefaultMutableTreeNode channelListNode = context.leafForTarget(serverNodes.channelListRef);
     if (channelListNode == null || channelListNode.getParent() != serverNodes.serverNode) return;
-    ensureUiLeafVisible(serverNodes, serverNodes.channelListRef, channelListLabel, false);
+    ensureUiLeafVisible(
+        context, serverNodes, serverNodes.channelListRef, context.channelListLabel(), false);
   }
 
   private boolean ensureUiLeafVisible(
-      ServerNodes serverNodes, TargetRef ref, String label, boolean visible) {
+      Context context, ServerNodes serverNodes, TargetRef ref, String label, boolean visible) {
     if (serverNodes == null || serverNodes.serverNode == null || ref == null) return false;
-    return nodeVisibilityMutator.ensureLeafVisible(
-        serverNodes.serverNode,
-        ref,
-        label,
-        visible,
-        true,
-        ServerTreeServerLeafInsertPolicy.fixedServerLeafInsertIndexFor(
-            serverNodes, ref, leafForTarget));
+    return context
+        .nodeVisibilityMutator()
+        .ensureLeafVisible(
+            serverNodes.serverNode,
+            ref,
+            label,
+            visible,
+            true,
+            ServerTreeServerLeafInsertPolicy.fixedServerLeafInsertIndexFor(
+                serverNodes, ref, context::leafForTarget));
   }
 
   private boolean ensureMovableBuiltInLeafVisible(
-      ServerNodes serverNodes, TargetRef ref, String label, boolean visible) {
+      Context context, ServerNodes serverNodes, TargetRef ref, String label, boolean visible) {
     if (serverNodes == null || serverNodes.serverNode == null || ref == null) return false;
-    return nodeVisibilityMutator.ensureLeafVisible(
-        serverNodes.serverNode, ref, label, visible, false, 0);
+    return context
+        .nodeVisibilityMutator()
+        .ensureLeafVisible(serverNodes.serverNode, ref, label, visible, false, 0);
   }
 
-  private boolean ensureInterceptorsGroupVisible(ServerNodes serverNodes, boolean visible) {
+  private boolean ensureInterceptorsGroupVisible(
+      Context context, ServerNodes serverNodes, boolean visible) {
     if (serverNodes == null) return false;
-    return nodeVisibilityMutator.ensureGroupVisible(
-        serverNodes.serverNode, serverNodes.otherNode, serverNodes.interceptorsNode, visible);
+    return context
+        .nodeVisibilityMutator()
+        .ensureGroupVisible(
+            serverNodes.serverNode, serverNodes.otherNode, serverNodes.interceptorsNode, visible);
   }
 
-  private boolean ensureMonitorGroupVisible(ServerNodes serverNodes, boolean visible) {
+  private boolean ensureMonitorGroupVisible(
+      Context context, ServerNodes serverNodes, boolean visible) {
     if (serverNodes == null) return false;
-    return nodeVisibilityMutator.ensureGroupVisible(
-        serverNodes.serverNode, serverNodes.otherNode, serverNodes.monitorNode, visible);
+    return context
+        .nodeVisibilityMutator()
+        .ensureGroupVisible(
+            serverNodes.serverNode, serverNodes.otherNode, serverNodes.monitorNode, visible);
   }
 
-  private boolean ensurePrivateMessagesGroupVisible(ServerNodes serverNodes, boolean visible) {
+  private boolean ensurePrivateMessagesGroupVisible(
+      Context context, ServerNodes serverNodes, boolean visible) {
     if (serverNodes == null) return false;
-    return nodeVisibilityMutator.ensureGroupVisible(
-        serverNodes.serverNode, serverNodes.otherNode, serverNodes.pmNode, visible);
+    return context
+        .nodeVisibilityMutator()
+        .ensureGroupVisible(
+            serverNodes.serverNode, serverNodes.otherNode, serverNodes.pmNode, visible);
   }
 
-  private String normalize(String serverId) {
-    return Objects.toString(normalizeServerId.apply(serverId), "").trim();
+  private String normalize(Context context, String serverId) {
+    return Objects.toString(context.normalizeServerId(serverId), "").trim();
   }
 }

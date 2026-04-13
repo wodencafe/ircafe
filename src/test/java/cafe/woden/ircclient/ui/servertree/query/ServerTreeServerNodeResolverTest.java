@@ -27,19 +27,20 @@ class ServerTreeServerNodeResolverTest {
     DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode("Channel List");
     leaves.put(nodes.channelListRef, channelListLeaf);
 
-    ServerTreeServerNodeResolver resolver =
-        new ServerTreeServerNodeResolver(
+    ServerTreeServerNodeResolver resolver = new ServerTreeServerNodeResolver();
+    ServerTreeServerNodeResolver.Context context =
+        ServerTreeServerNodeResolver.context(
             servers, leaves, serverId -> Objects.toString(serverId, "").trim());
 
-    assertSame(nodes, resolver.serverNodesForServer(" libera "));
-    assertTrue(resolver.hasServer("libera"));
-    assertFalse(resolver.hasServer(" "));
-    assertSame(nodes.serverNode, resolver.serverNodeForServer("libera"));
-    assertSame(nodes.pmNode, resolver.privateMessagesNodeForServer("libera"));
-    assertSame(nodes.monitorNode, resolver.monitorNodeForServer("libera"));
-    assertSame(nodes.interceptorsNode, resolver.interceptorsNodeForServer("libera"));
-    assertSame(channelListLeaf, resolver.channelListNodeForServer("libera"));
-    assertNull(resolver.channelListNodeForServer("missing"));
+    assertSame(nodes, resolver.serverNodesForServer(context, " libera "));
+    assertTrue(resolver.hasServer(context, "libera"));
+    assertFalse(resolver.hasServer(context, " "));
+    assertSame(nodes.serverNode, resolver.serverNodeForServer(context, "libera"));
+    assertSame(nodes.pmNode, resolver.privateMessagesNodeForServer(context, "libera"));
+    assertSame(nodes.monitorNode, resolver.monitorNodeForServer(context, "libera"));
+    assertSame(nodes.interceptorsNode, resolver.interceptorsNodeForServer(context, "libera"));
+    assertSame(channelListLeaf, resolver.channelListNodeForServer(context, "libera"));
+    assertNull(resolver.channelListNodeForServer(context, "missing"));
   }
 
   @Test
@@ -48,27 +49,31 @@ class ServerTreeServerNodeResolverTest {
     servers.put("oftc", serverNodes("oftc"));
     servers.put("libera", serverNodes("libera"));
 
-    ServerTreeServerNodeResolver resolver =
-        new ServerTreeServerNodeResolver(
+    ServerTreeServerNodeResolver resolver = new ServerTreeServerNodeResolver();
+    ServerTreeServerNodeResolver.Context context =
+        ServerTreeServerNodeResolver.context(
             servers, new HashMap<>(), serverId -> Objects.toString(serverId, "").trim());
 
-    assertEquals("libera", resolver.firstServerIdOrEmpty(() -> new TargetRef("libera", "status")));
-    assertEquals("oftc", resolver.firstServerIdOrEmpty(() -> new TargetRef("missing", "status")));
-    assertEquals("oftc", resolver.firstServerIdOrEmpty(null));
+    assertEquals(
+        "libera", resolver.firstServerIdOrEmpty(context, () -> new TargetRef("libera", "status")));
+    assertEquals(
+        "oftc", resolver.firstServerIdOrEmpty(context, () -> new TargetRef("missing", "status")));
+    assertEquals("oftc", resolver.firstServerIdOrEmpty(context, null));
   }
 
   @Test
   void firstServerStatusRefOrNullReflectsCurrentServers() {
     Map<String, ServerNodes> servers = new LinkedHashMap<>();
-    ServerTreeServerNodeResolver resolver =
-        new ServerTreeServerNodeResolver(
+    ServerTreeServerNodeResolver resolver = new ServerTreeServerNodeResolver();
+    ServerTreeServerNodeResolver.Context context =
+        ServerTreeServerNodeResolver.context(
             servers, new HashMap<>(), serverId -> Objects.toString(serverId, "").trim());
 
-    assertNull(resolver.firstServerStatusRefOrNull());
+    assertNull(resolver.firstServerStatusRefOrNull(context));
 
     ServerNodes libera = serverNodes("libera");
     servers.put("libera", libera);
-    assertSame(libera.statusRef, resolver.firstServerStatusRefOrNull());
+    assertSame(libera.statusRef, resolver.firstServerStatusRefOrNull(context));
   }
 
   private static ServerNodes serverNodes(String serverId) {

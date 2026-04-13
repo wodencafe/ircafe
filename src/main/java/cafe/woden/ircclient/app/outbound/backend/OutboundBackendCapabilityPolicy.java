@@ -7,54 +7,28 @@ import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Backend capability facade used by outbound command services. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class OutboundBackendCapabilityPolicy {
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry;
 
-  @NonNull private final IrcNegotiatedFeaturePort irc;
+  @Qualifier("ircNegotiatedFeaturePort")
+  @NonNull
+  private final IrcNegotiatedFeaturePort irc;
 
-  @NonNull private final IrcBackendAvailabilityPort backendAvailability;
+  @Qualifier("ircClientService")
+  @NonNull
+  private final IrcBackendAvailabilityPort backendAvailability;
 
   @NonNull private final AvailableBackendIdsPort backendMetadata;
-
-  @Autowired
-  public OutboundBackendCapabilityPolicy(
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
-      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
-      AvailableBackendIdsPort backendMetadata) {
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-    this.outboundBackendFeatureRegistry =
-        Objects.requireNonNull(outboundBackendFeatureRegistry, "outboundBackendFeatureRegistry");
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
-    this.backendMetadata =
-        Objects.requireNonNullElseGet(
-            backendMetadata, BackendAvailabilityReasonFormatter::builtInsBackendMetadata);
-  }
-
-  @Deprecated(forRemoval = false)
-  public OutboundBackendCapabilityPolicy(
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
-      IrcNegotiatedFeaturePort irc,
-      IrcBackendAvailabilityPort backendAvailability) {
-    this(
-        commandTargetPolicy,
-        outboundBackendFeatureRegistry,
-        irc,
-        backendAvailability,
-        BackendAvailabilityReasonFormatter.builtInsBackendMetadata());
-  }
 
   public String backendIdForServer(String serverId) {
     return commandTargetPolicy.backendIdForServer(serverId);
@@ -116,6 +90,14 @@ public final class OutboundBackendCapabilityPolicy {
         .supportsMultiline(irc, sid);
   }
 
+  public boolean supportsMessageTags(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    return outboundBackendFeatureRegistry
+        .adapterFor(backendIdForServer(sid))
+        .supportsMessageTags(irc, sid);
+  }
+
   public boolean supportsDraftReply(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -140,12 +122,12 @@ public final class OutboundBackendCapabilityPolicy {
         .supportsDraftUnreact(irc, sid);
   }
 
-  public boolean supportsMessageEdit(String serverId) {
+  public boolean supportsExperimentalMessageEdit(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
     return outboundBackendFeatureRegistry
         .adapterFor(backendIdForServer(sid))
-        .supportsMessageEdit(irc, sid);
+        .supportsExperimentalMessageEdit(irc, sid);
   }
 
   public boolean supportsMessageRedaction(String serverId) {
@@ -162,7 +144,7 @@ public final class OutboundBackendCapabilityPolicy {
     try {
       return BackendAvailabilityReasonFormatter.decorate(
           backendIdForServer(sid),
-          Objects.toString(backendAvailability.backendAvailabilityReason(sid), "").trim(),
+          backendAvailability.backendAvailabilityReason(sid),
           backendMetadata);
     } catch (Exception ignored) {
       return "";

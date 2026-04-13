@@ -20,7 +20,9 @@ class ServerTreeApplicationNodesTest {
 
     nodes.initialize();
 
-    assertEquals(7, applicationRoot.getChildCount());
+    assertEquals(8, applicationRoot.getChildCount());
+    assertNotNull(leaves.get(TargetRef.applicationPlugins()));
+    assertEquals("Plugins", nodes.labelFor(TargetRef.applicationPlugins()));
     assertNotNull(leaves.get(TargetRef.applicationJfr()));
     assertEquals("JFR", nodes.labelFor(TargetRef.applicationJfr()));
   }

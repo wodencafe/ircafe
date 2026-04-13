@@ -14,6 +14,7 @@ public final class ServerTreeApplicationNodes {
   private static final String ASSERTJ_SWING_LABEL = "AssertJ Swing";
   private static final String JHICCUP_LABEL = "jHiccup";
   private static final String INBOUND_DEDUP_LABEL = "Inbound Dedup";
+  private static final String PLUGINS_LABEL = "Plugins";
   private static final String JFR_LABEL = "JFR";
   private static final String SPRING_LABEL = "Spring";
   private static final String TERMINAL_LABEL = "Terminal";
@@ -31,6 +32,7 @@ public final class ServerTreeApplicationNodes {
     builtInLabelsByRef.put(TargetRef.applicationAssertjSwing(), ASSERTJ_SWING_LABEL);
     builtInLabelsByRef.put(TargetRef.applicationJhiccup(), JHICCUP_LABEL);
     builtInLabelsByRef.put(TargetRef.applicationInboundDedup(), INBOUND_DEDUP_LABEL);
+    builtInLabelsByRef.put(TargetRef.applicationPlugins(), PLUGINS_LABEL);
     builtInLabelsByRef.put(jfrRef, JFR_LABEL);
     builtInLabelsByRef.put(TargetRef.applicationSpring(), SPRING_LABEL);
     builtInLabelsByRef.put(TargetRef.applicationTerminal(), TERMINAL_LABEL);

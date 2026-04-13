@@ -8,12 +8,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentMap;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.stereotype.Component;
 
 /** Shared inbound DCC offer and control-message handling support. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class DccInboundOfferSupport {
@@ -21,8 +22,7 @@ final class DccInboundOfferSupport {
   private static final String DCC_TAG = "(dcc)";
 
   @NonNull private final DccCommandSupport dccCommandSupport;
-  @NonNull private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers;
-  @NonNull private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers;
+  @NonNull private final DccRuntimeRegistry dccRuntimeRegistry;
 
   boolean handleInboundDccOffer(
       Instant at, String serverId, String fromNick, String dccArgument, boolean spoiler) {
@@ -157,9 +157,10 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    pendingChatOffers.put(
-        DccCommandSupport.peerKey(sid, fromNick),
-        new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
+    pendingChatOffers()
+        .put(
+            DccCommandSupport.peerKey(sid, fromNick),
+            new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
     dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
@@ -202,9 +203,10 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    pendingSendOffers.put(
-        DccCommandSupport.peerKey(sid, fromNick),
-        new PendingSendOffer(sid, fromNick, fileName, host, port, size, atOrNow(at)));
+    pendingSendOffers()
+        .put(
+            DccCommandSupport.peerKey(sid, fromNick),
+            new PendingSendOffer(sid, fromNick, fileName, host, port, size, atOrNow(at)));
     dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
@@ -241,6 +243,14 @@ final class DccInboundOfferSupport {
       dccCommandSupport.appendStatusAt(pm, atOrNow(at), DCC_TAG, text);
     }
     dccCommandSupport.markUnreadIfInactive(pm);
+  }
+
+  private java.util.concurrent.ConcurrentMap<String, PendingChatOffer> pendingChatOffers() {
+    return dccRuntimeRegistry.pendingChatOffers();
+  }
+
+  private java.util.concurrent.ConcurrentMap<String, PendingSendOffer> pendingSendOffers() {
+    return dccRuntimeRegistry.pendingSendOffers();
   }
 
   private static List<String> splitDccTokens(String raw) {

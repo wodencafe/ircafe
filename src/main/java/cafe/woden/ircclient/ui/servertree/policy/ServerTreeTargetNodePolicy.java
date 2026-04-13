@@ -4,37 +4,23 @@ import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /** Encapsulates target-type policy and leaf-label resolution for server tree nodes. */
+@Component
+@RequiredArgsConstructor
 public final class ServerTreeTargetNodePolicy {
 
-  private final InterceptorStore interceptorStore;
-  private final String notificationsLabel;
-  private final String interceptorLabel;
-  private final String logViewerLabel;
-  private final String channelListLabel;
-  private final String weechatFiltersLabel;
-  private final String ignoresLabel;
-  private final String dccTransfersLabel;
+  private static final String NOTIFICATIONS_LABEL = "Notifications";
+  private static final String INTERCEPTOR_LABEL = "Interceptor";
+  private static final String LOG_VIEWER_LABEL = "Log Viewer";
+  private static final String CHANNEL_LIST_LABEL = "Channel List";
+  private static final String WEECHAT_FILTERS_LABEL = "Filters";
+  private static final String IGNORES_LABEL = "Ignores";
+  private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
 
-  public ServerTreeTargetNodePolicy(
-      InterceptorStore interceptorStore,
-      String notificationsLabel,
-      String interceptorLabel,
-      String logViewerLabel,
-      String channelListLabel,
-      String weechatFiltersLabel,
-      String ignoresLabel,
-      String dccTransfersLabel) {
-    this.interceptorStore = interceptorStore;
-    this.notificationsLabel = Objects.toString(notificationsLabel, "Notifications");
-    this.interceptorLabel = Objects.toString(interceptorLabel, "Interceptor");
-    this.logViewerLabel = Objects.toString(logViewerLabel, "Log Viewer");
-    this.channelListLabel = Objects.toString(channelListLabel, "Channel List");
-    this.weechatFiltersLabel = Objects.toString(weechatFiltersLabel, "Filters");
-    this.ignoresLabel = Objects.toString(ignoresLabel, "Ignores");
-    this.dccTransfersLabel = Objects.toString(dccTransfersLabel, "DCC Transfers");
-  }
+  private final InterceptorStore interceptorStore;
 
   public boolean isPrivateMessageTarget(TargetRef ref) {
     if (ref == null) return false;
@@ -43,7 +29,7 @@ public final class ServerTreeTargetNodePolicy {
 
   public String leafLabel(TargetRef ref) {
     if (ref == null) return "";
-    if (ref.isNotifications()) return notificationsLabel;
+    if (ref.isNotifications()) return NOTIFICATIONS_LABEL;
     if (ref.isInterceptor()) {
       String scopeServerId = InterceptorScope.scopedServerIdForTarget(ref);
       String name =
@@ -51,13 +37,13 @@ public final class ServerTreeTargetNodePolicy {
               ? interceptorStore.interceptorName(scopeServerId, ref.interceptorId())
               : "";
       String normalized = Objects.toString(name, "").trim();
-      return normalized.isEmpty() ? interceptorLabel : normalized;
+      return normalized.isEmpty() ? INTERCEPTOR_LABEL : normalized;
     }
-    if (ref.isLogViewer()) return logViewerLabel;
-    if (ref.isChannelList()) return channelListLabel;
-    if (ref.isWeechatFilters()) return weechatFiltersLabel;
-    if (ref.isIgnores()) return ignoresLabel;
-    if (ref.isDccTransfers()) return dccTransfersLabel;
+    if (ref.isLogViewer()) return LOG_VIEWER_LABEL;
+    if (ref.isChannelList()) return CHANNEL_LIST_LABEL;
+    if (ref.isWeechatFilters()) return WEECHAT_FILTERS_LABEL;
+    if (ref.isIgnores()) return IGNORES_LABEL;
+    if (ref.isDccTransfers()) return DCC_TRANSFERS_LABEL;
     return simplifyMatrixAddress(ref.baseTarget());
   }
 

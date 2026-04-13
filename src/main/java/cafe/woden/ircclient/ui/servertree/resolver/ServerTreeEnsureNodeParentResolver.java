@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Resolves a parent node for ensure-node operations based on target and current layout. */
+@org.springframework.stereotype.Component
 public final class ServerTreeEnsureNodeParentResolver {
 
   public record ParentNodes(

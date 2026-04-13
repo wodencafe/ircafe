@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.logging.viewer;
 
 import java.util.List;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** Search result payload for the log viewer. */
+@ValueObject
 public record ChatLogViewerResult(
     List<ChatLogViewerRow> rows, int scannedRows, boolean truncated, boolean scanCapped) {
   public ChatLogViewerResult {

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -21,10 +22,12 @@ class LoggingUiPortConfigTest {
           .withUserConfiguration(LoggingUiPortConfig.class)
           .withBean(SwingUiPort.class, () -> Mockito.mock(SwingUiPort.class))
           .withBean(ChatLogWriter.class, () -> line -> {})
+          .withBean(ChatLogRepository.class, () -> Mockito.mock(ChatLogRepository.class))
+          .withBean(ChatRedactionAuditService.class, NoOpChatRedactionAuditService::new)
           .withBean(LogLineFactory.class, LogLineFactory::new)
           .withBean(
               LogProperties.class,
-              () -> new LogProperties(true, true, true, true, true, 0, 50_000, 250, null));
+              () -> new LogProperties(true, true, false, true, true, true, 0, 50_000, 250, null));
 
   @Test
   void loggingUiPortBeanCreatedWhenLoggingEnabled() {

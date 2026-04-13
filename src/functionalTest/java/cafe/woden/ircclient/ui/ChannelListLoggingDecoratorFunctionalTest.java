@@ -118,7 +118,8 @@ class ChannelListLoggingDecoratorFunctionalTest {
         new RuntimeConfigStore(tempDir.resolve("ircafe.yml").toString(), props);
     ServerRegistry serverRegistry = new ServerRegistry(props, runtimeConfig);
     ServerCatalog serverCatalog = new ServerCatalog(serverRegistry, new EphemeralServerRegistry());
-    LogProperties logProps = new LogProperties(true, true, true, true, true, 0, null, null, null);
+    LogProperties logProps =
+        new LogProperties(true, true, false, true, true, true, 0, null, null, null);
 
     NotificationStore notificationStore = new NotificationStore();
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
@@ -127,7 +128,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
     ServerTreeDockable serverTree =
         onEdtCall(
             () ->
-                new ServerTreeDockable(
+                FunctionalTestWiringSupport.newServerTreeDockable(
                     serverCatalog,
                     runtimeConfig,
                     logProps,

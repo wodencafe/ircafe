@@ -15,7 +15,6 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellRenderer;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeDetachedWarningClickHandler;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -32,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -894,7 +894,7 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   private static ServerTreeDockable newDockable() {
-    return new ServerTreeDockable(
+    return ServerTreeDockableTestSupport.newDockable(
         null,
         null,
         null,
@@ -924,9 +924,9 @@ class ServerTreeDockableDetachedChannelTest {
 
     Field field = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     field.setAccessible(true);
-    ServerTreeContextMenuBuilder contextMenuBuilder =
-        (ServerTreeContextMenuBuilder) field.get(dockable);
-    return contextMenuBuilder.build(path);
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) field.get(dockable);
+    return contextMenuBuilder.apply(path);
   }
 
   private static JMenuItem findMenuItem(JPopupMenu menu, String text) {

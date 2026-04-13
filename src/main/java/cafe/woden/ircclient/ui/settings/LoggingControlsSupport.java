@@ -23,6 +23,8 @@ final class LoggingControlsSupport {
     boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
     boolean logSoftIgnoredCurrent =
         logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
+    boolean redactionAuditEnabledCurrent =
+        logProps != null && Boolean.TRUE.equals(logProps.redactionAuditEnabled());
     boolean logPrivateMessagesCurrent =
         logProps == null || Boolean.TRUE.equals(logProps.logPrivateMessages());
     boolean savePrivateMessageListCurrent =
@@ -41,6 +43,15 @@ final class LoggingControlsSupport {
         "If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n"
             + "and will re-load as spoiler-covered lines in history.");
     loggingSoftIgnore.setEnabled(loggingEnabled.isSelected());
+
+    JCheckBox redactionAuditEnabled =
+        new JCheckBox("Store original text for redacted messages in audit log");
+    redactionAuditEnabled.setSelected(redactionAuditEnabledCurrent);
+    redactionAuditEnabled.setToolTipText(
+        "If enabled, IRCafe stores the original pre-redaction text in a separate audit table,\n"
+            + "while the normal chat log keeps only the [message redacted] placeholder.\n"
+            + "Use this only if you explicitly want local audit retention of redacted content.");
+    redactionAuditEnabled.setEnabled(loggingEnabled.isSelected());
 
     JCheckBox loggingPrivateMessages = new JCheckBox("Save private-message history");
     loggingPrivateMessages.setSelected(logPrivateMessagesCurrent);
@@ -140,6 +151,7 @@ final class LoggingControlsSupport {
         () -> {
           boolean enabled = loggingEnabled.isSelected();
           loggingSoftIgnore.setEnabled(enabled);
+          redactionAuditEnabled.setEnabled(enabled);
           loggingPrivateMessages.setEnabled(enabled);
           writerQueueMax.setEnabled(enabled);
           writerBatchSize.setEnabled(enabled);
@@ -165,6 +177,7 @@ final class LoggingControlsSupport {
     return new LoggingControls(
         loggingEnabled,
         loggingSoftIgnore,
+        redactionAuditEnabled,
         loggingPrivateMessages,
         savePrivateMessageList,
         managePmList,

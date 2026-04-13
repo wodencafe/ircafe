@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.BackendMetadataPort;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
@@ -11,8 +13,12 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
+import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import jakarta.annotation.PreDestroy;
+import java.net.URLClassLoader;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,6 +63,7 @@ public class BackendRoutingIrcClientService
   private final BackendMetadataPort backendMetadata;
   private final Map<String, IrcBackendClientService> backendsById;
   private final List<IrcBackendClientService> backends;
+  private final List<URLClassLoader> pluginClassLoaders;
   private final Map<String, String> activeBackendByServer = new ConcurrentHashMap<>();
   private final Flowable<ServerIrcEvent> mergedEvents;
   private final Flowable<QuasselCoreNetworkSnapshotEvent> mergedQuasselNetworkEvents;
@@ -64,19 +71,63 @@ public class BackendRoutingIrcClientService
   @Autowired
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog,
+      InstalledPluginServices installedPluginServices,
       ObjectProvider<BackendMetadataPort> backendMetadataProvider,
       List<IrcBackendClientService> backendServices) {
-    this(serverCatalog, backendMetadataProvider.getIfAvailable(), backendServices);
+    this(
+        serverCatalog,
+        backendMetadataProvider.getIfAvailable(),
+        loadInstalledBackendServices(
+            List.copyOf(Objects.requireNonNullElse(backendServices, List.of())),
+            installedPluginServices));
+  }
+
+  public BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog,
+      RuntimeConfigPathPort runtimeConfigPathPort,
+      ObjectProvider<BackendMetadataPort> backendMetadataProvider,
+      List<IrcBackendClientService> backendServices) {
+    this(
+        serverCatalog,
+        backendMetadataProvider.getIfAvailable(),
+        loadInstalledBackendServices(
+            List.copyOf(Objects.requireNonNullElse(backendServices, List.of())),
+            PluginServiceLoaderSupport.resolvePluginDirectory(
+                runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath,
+                log),
+            PluginServiceLoaderSupport.defaultApplicationClassLoader(
+                BackendRoutingIrcClientService.class)));
   }
 
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog,
       BackendMetadataPort backendMetadata,
       List<IrcBackendClientService> backendServices) {
+    this(serverCatalog, backendMetadata, backendServices, List.of());
+  }
+
+  private BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog,
+      BackendMetadataPort backendMetadata,
+      LoadedBackendServices loadedBackendServices) {
+    this(
+        serverCatalog,
+        backendMetadata,
+        Objects.requireNonNull(loadedBackendServices, "loadedBackendServices").services(),
+        loadedBackendServices.pluginClassLoaders());
+  }
+
+  private BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog,
+      BackendMetadataPort backendMetadata,
+      List<IrcBackendClientService> backendServices,
+      List<URLClassLoader> pluginClassLoaders) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.backendMetadata =
         Objects.requireNonNullElseGet(backendMetadata, BackendMetadataPort::builtInsOnly);
     Objects.requireNonNull(backendServices, "backendServices");
+    this.pluginClassLoaders =
+        List.copyOf(Objects.requireNonNull(pluginClassLoaders, "pluginClassLoaders"));
 
     LinkedHashMap<String, IrcBackendClientService> map = new LinkedHashMap<>();
     for (IrcBackendClientService backendService : backendServices) {
@@ -122,6 +173,42 @@ public class BackendRoutingIrcClientService
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog, List<IrcBackendClientService> backendServices) {
     this(serverCatalog, BackendMetadataPort.builtInsOnly(), backendServices);
+  }
+
+  static BackendRoutingIrcClientService installed(
+      ServerCatalog serverCatalog,
+      BackendMetadataPort backendMetadata,
+      Path pluginDirectory,
+      ClassLoader applicationClassLoader,
+      List<IrcBackendClientService> builtInBackendServices) {
+    return new BackendRoutingIrcClientService(
+        serverCatalog,
+        backendMetadata,
+        loadInstalledBackendServices(
+            List.copyOf(Objects.requireNonNullElse(builtInBackendServices, List.of())),
+            pluginDirectory,
+            applicationClassLoader));
+  }
+
+  static BackendRoutingIrcClientService installed(
+      ServerCatalog serverCatalog,
+      BackendMetadataPort backendMetadata,
+      RuntimeConfigPathPort runtimeConfigPathPort,
+      ClassLoader applicationClassLoader,
+      List<IrcBackendClientService> builtInBackendServices) {
+    return installed(
+        serverCatalog,
+        backendMetadata,
+        PluginServiceLoaderSupport.resolvePluginDirectory(
+            runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log),
+        applicationClassLoader,
+        builtInBackendServices);
+  }
+
+  @PreDestroy
+  void closePluginClassLoaders() {
+    PluginServiceLoaderSupport.closePluginClassLoaders(
+        pluginClassLoaders, log, "[ircafe] failed to close backend transport plugin classloader");
   }
 
   @Override
@@ -378,6 +465,11 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    return routeActiveOrConfigured(serverId).isMessageTagsAvailable(serverId);
+  }
+
+  @Override
   public boolean isDraftReplyAvailable(String serverId) {
     return routeActiveOrConfigured(serverId).isDraftReplyAvailable(serverId);
   }
@@ -408,8 +500,8 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
-    return routeActiveOrConfigured(serverId).isMessageEditAvailable(serverId);
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
+    return routeActiveOrConfigured(serverId).isExperimentalMessageEditAvailable(serverId);
   }
 
   @Override
@@ -639,4 +731,32 @@ public class BackendRoutingIrcClientService
     IrcProperties.Server.Backend backend = backendService.backend();
     return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
   }
+
+  private static LoadedBackendServices loadInstalledBackendServices(
+      List<IrcBackendClientService> builtInBackendServices,
+      Path pluginDirectory,
+      ClassLoader applicationClassLoader) {
+    PluginServiceLoaderSupport.LoadedServices<IrcBackendClientService> loadedServices =
+        PluginServiceLoaderSupport.loadInstalledServices(
+            IrcBackendClientService.class,
+            builtInBackendServices,
+            pluginDirectory,
+            applicationClassLoader,
+            log);
+    return new LoadedBackendServices(
+        loadedServices.services(), loadedServices.pluginClassLoaders());
+  }
+
+  private static LoadedBackendServices loadInstalledBackendServices(
+      List<IrcBackendClientService> builtInBackendServices,
+      InstalledPluginServices installedPluginServices) {
+    InstalledPluginServices pluginServices =
+        Objects.requireNonNull(installedPluginServices, "installedPluginServices");
+    return new LoadedBackendServices(
+        pluginServices.loadInstalledServices(IrcBackendClientService.class, builtInBackendServices),
+        List.of());
+  }
+
+  private record LoadedBackendServices(
+      List<IrcBackendClientService> services, List<URLClassLoader> pluginClassLoaders) {}
 }

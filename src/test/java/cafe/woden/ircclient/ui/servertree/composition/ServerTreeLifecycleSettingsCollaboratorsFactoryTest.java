@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
+import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
@@ -31,52 +32,58 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
     JTree tree = new JTree(model);
 
     ServerTreeLifecycleSettingsCollaborators collaborators =
-        ServerTreeLifecycleSettingsCollaboratorsFactory.create(
-            new ServerTreeLifecycleSettingsCollaboratorsFactory.Inputs(
-                new ServerTreeServerNodeBuilder(),
-                "Channel List",
-                "Filters",
-                "Ignores",
-                "DCC Transfers",
-                "Log Viewer",
-                "Monitor",
-                "Interceptors",
-                serverId -> serverId == null ? "" : serverId.trim(),
-                new HashMap<>(),
-                new ServerTreeRuntimeState(16, __ -> {}),
-                mock(ServerTreeChannelStateCoordinator.class),
-                mock(ServerTreeServerParentResolver.class),
-                __ -> ServerBuiltInNodesVisibility.defaults(),
-                () -> true,
-                mock(ServerTreeStatusLabelManager.class),
-                null,
-                null,
-                new HashMap<>(),
-                __ -> ServerTreeBuiltInLayout.defaults(),
-                __ -> ServerTreeRootSiblingOrder.defaults(),
-                (__1, __2) -> {},
-                (__1, __2) -> {},
-                model,
-                root,
-                tree,
-                mock(ServerTreeNodeBadgeUpdater.class),
-                mock(cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions.class),
-                mock(ServerTreeServerStateCleaner.class),
-                mock(ServerTreeNetworkGroupManager.class),
-                mock(UiSettingsBus.class),
-                null,
-                null,
-                () -> true,
-                __ -> {},
-                () -> {},
-                __ -> {},
-                __ -> {},
-                __ -> {},
-                (Color __) -> {},
-                (Color __) -> {},
-                () -> {},
-                () -> {},
-                100));
+        new ServerTreeLifecycleSettingsCollaboratorsFactory(new ServerTreeServerNodeBuilder())
+            .create(
+                new ServerTreeLifecycleSettingsCollaboratorsFactory.Inputs(
+                    "Channel List",
+                    "Filters",
+                    "Ignores",
+                    "DCC Transfers",
+                    "Log Viewer",
+                    "Monitor",
+                    "Interceptors",
+                    serverId -> serverId == null ? "" : serverId.trim(),
+                    new HashMap<>(),
+                    new ServerTreeRuntimeState(16, __ -> {}),
+                    mock(ServerTreeChannelStateCoordinator.class),
+                    mock(ServerTreeServerParentResolver.class),
+                    mock(ServerTreeServerParentResolver.Context.class),
+                    __ -> ServerBuiltInNodesVisibility.defaults(),
+                    () -> true,
+                    mock(ServerTreeStatusLabelManager.class),
+                    mock(ServerTreeStatusLabelManager.Context.class),
+                    null,
+                    null,
+                    new HashMap<>(),
+                    __ -> ServerTreeBuiltInLayout.defaults(),
+                    __ -> ServerTreeRootSiblingOrder.defaults(),
+                    (__1, __2) -> {},
+                    (__1, __2) -> {},
+                    model,
+                    root,
+                    tree,
+                    mock(ServerTreeNodeBadgeUpdater.class),
+                    mock(ServerTreeNodeBadgeUpdater.Context.class),
+                    mock(ServerTreeInterceptorActions.class),
+                    mock(ServerTreeInterceptorActions.Context.class),
+                    mock(ServerTreeServerStateCleaner.class),
+                    mock(ServerTreeServerStateCleaner.Context.class),
+                    mock(ServerTreeNetworkGroupManager.class),
+                    mock(ServerTreeNetworkGroupManager.Context.class),
+                    mock(UiSettingsBus.class),
+                    null,
+                    null,
+                    () -> true,
+                    __ -> {},
+                    () -> {},
+                    __ -> {},
+                    __ -> {},
+                    __ -> {},
+                    (Color __) -> {},
+                    (Color __) -> {},
+                    () -> {},
+                    () -> {},
+                    100));
 
     assertNotNull(collaborators.serverRootLifecycleManager());
     assertNotNull(collaborators.serverLifecycleFacade());

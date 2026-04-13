@@ -10,13 +10,19 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** Shared target resolution and execution flow for outbound /part commands. */
+@Component
 @ApplicationLayer
 @RequiredArgsConstructor
 final class PartCommandSupport {
 
-  @NonNull private final IrcTargetMembershipPort targetMembership;
+  @Qualifier("ircTargetMembershipPort")
+  @NonNull
+  private final IrcTargetMembershipPort targetMembership;
+
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;

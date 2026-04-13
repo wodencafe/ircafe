@@ -45,7 +45,7 @@ class PircbotxIrcv3InputParserTest {
         ImmutableMap.of());
 
     assertTrue(conn.capabilitySnapshot().echoMessageCapAcked());
-    assertTrue(conn.capabilitySnapshot().typingCapAcked());
+    assertFalse(conn.capabilitySnapshot().typingAvailable());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -154,12 +154,13 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void capAckTracksDraftTypingAlias() throws Exception {
+  void capAckForDraftTypingEmitsEventWithoutChangingTrackedState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxIrcv3InputParser parser =
         new PircbotxIrcv3InputParser(
             dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+    PircbotxConnectionState.CapabilitySnapshot before = conn.capabilitySnapshot();
 
     parser.processCommand(
         "*",
@@ -169,7 +170,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/typing"),
         ImmutableMap.of());
 
-    assertTrue(conn.capabilitySnapshot().typingCapAcked());
+    assertEquals(before, conn.capabilitySnapshot());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -497,12 +498,13 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void capAckUpdatesDraftUnreactAndChannelContextState() throws Exception {
+  void capAckForTagOnlyNamesLeavesTrackedStateUnchanged() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxIrcv3InputParser parser =
         new PircbotxIrcv3InputParser(
             dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+    PircbotxConnectionState.CapabilitySnapshot before = conn.capabilitySnapshot();
 
     parser.processCommand(
         "*",
@@ -512,8 +514,27 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/unreact draft/channel-context"),
         ImmutableMap.of());
 
-    assertTrue(conn.capabilitySnapshot().draftUnreactCapAcked());
-    assertTrue(conn.capabilitySnapshot().draftChannelContextCapAcked());
+    assertEquals(before, conn.capabilitySnapshot());
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.Ircv3CapabilityChanged.class::isInstance)
+            .map(IrcEvent.Ircv3CapabilityChanged.class::cast)
+            .anyMatch(
+                cap ->
+                    "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/unreact".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.Ircv3CapabilityChanged.class::isInstance)
+            .map(IrcEvent.Ircv3CapabilityChanged.class::cast)
+            .anyMatch(
+                cap ->
+                    "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/channel-context".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
   }
 
   @Test
@@ -641,11 +662,11 @@ class PircbotxIrcv3InputParserTest {
         "#ircafe",
         source("bob"),
         "TAGMSG",
-        "@typing=active;+draft/reply=abc123;+draft/react=:+1;+draft/delete=abc123;+msgid=xyz :bob!u@h TAGMSG #ircafe",
+        "@typing=active;+reply=abc123;+draft/react=:+1;+draft/delete=abc123;+msgid=xyz :bob!u@h TAGMSG #ircafe",
         List.of("#ircafe"),
         ImmutableMap.of(
             "typing", "active",
-            "draft/reply", "abc123",
+            "reply", "abc123",
             "draft/react", ":+1",
             "draft/delete", "abc123",
             "msgid", "xyz"));
@@ -844,6 +865,25 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
+  void duplicateNamesReplyForExistingUserHostmaskDoesNotThrow() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircBotX bot = dummyBot();
+    bot.getUserChannelDao().createChannel("#ircafe");
+    bot.getUserChannelDao().createUser(hostmask("alice", "~u", "example.test"));
+    PircbotxIrcv3InputParser parser =
+        new PircbotxIrcv3InputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    assertDoesNotThrow(
+        () ->
+            parser.processServerResponse(
+                353,
+                ":server 353 me = #ircafe :@alice!~u@example.test",
+                List.of("me", "=", "#ircafe", ":@alice!~u@example.test")));
+    assertTrue(out.isEmpty());
+  }
+
+  @Test
   void pongWithServerTimeTagUpdatesPassiveLagSample() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
@@ -938,6 +978,14 @@ class PircbotxIrcv3InputParserTest {
   private static UserHostmask source(String nick) {
     UserHostmask s = mock(UserHostmask.class);
     when(s.getNick()).thenReturn(nick);
+    return s;
+  }
+
+  private static UserHostmask hostmask(String nick, String login, String hostname) {
+    UserHostmask s = mock(UserHostmask.class);
+    when(s.getNick()).thenReturn(nick);
+    when(s.getLogin()).thenReturn(login);
+    when(s.getHostname()).thenReturn(hostname);
     return s;
   }
 

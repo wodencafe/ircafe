@@ -9,7 +9,7 @@ import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/** Spring adapter exposing typing capability/send behavior via a narrow port. */
+/** Spring adapter exposing typing readiness/send behavior via a narrow port. */
 @Component("ircTypingPort")
 @SecondaryAdapter
 @InfrastructureLayer

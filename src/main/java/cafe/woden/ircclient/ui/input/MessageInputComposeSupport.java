@@ -22,6 +22,8 @@ public final class MessageInputComposeSupport {
   private final JTextComponent input;
   private final JButton sendButton;
   private final MessageInputUiHooks hooks;
+  private ReactionCommandResolver quickReactionCommandResolver =
+      MessageInputComposeSupport::defaultQuickReactionCommand;
 
   private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
   private final JLabel composeBannerLabel = new JLabel();
@@ -33,6 +35,11 @@ public final class MessageInputComposeSupport {
   private String replyComposeMessageId = "";
   private String replyComposePreview = "";
   private Runnable replyComposeJumpAction = null;
+
+  @FunctionalInterface
+  public interface ReactionCommandResolver {
+    String commandFor(String ircTarget, String messageId, String reactionToken);
+  }
 
   public MessageInputComposeSupport(
       JComponent layoutTarget,
@@ -51,6 +58,11 @@ public final class MessageInputComposeSupport {
 
   public JComponent banner() {
     return composeBanner;
+  }
+
+  public void setQuickReactionCommandResolver(ReactionCommandResolver resolver) {
+    quickReactionCommandResolver =
+        resolver != null ? resolver : MessageInputComposeSupport::defaultQuickReactionCommand;
   }
 
   public boolean hasReplyCompose() {
@@ -134,7 +146,7 @@ public final class MessageInputComposeSupport {
     JPopupMenu menu = new JPopupMenu();
     for (String reaction : QUICK_REACTION_TOKENS) {
       JMenuItem item = new JMenuItem(reaction);
-      item.addActionListener(e -> emitQuickReaction(msgId, reaction));
+      item.addActionListener(e -> emitQuickReaction(target, msgId, reaction));
       menu.add(item);
     }
     menu.addSeparator();
@@ -149,7 +161,7 @@ public final class MessageInputComposeSupport {
                   JOptionPane.PLAIN_MESSAGE);
           String token = normalizeReactionToken(entered);
           if (token.isEmpty()) return;
-          emitQuickReaction(msgId, token);
+          emitQuickReaction(target, msgId, token);
         });
     menu.add(custom);
 
@@ -161,10 +173,11 @@ public final class MessageInputComposeSupport {
     }
   }
 
-  private void emitQuickReaction(String msgId, String reaction) {
+  void emitQuickReaction(String ircTarget, String msgId, String reaction) {
+    String target = normalizeComposeTarget(ircTarget);
     String m = normalizeComposeMessageId(msgId);
     String r = normalizeReactionToken(reaction);
-    if (m.isEmpty() || r.isEmpty()) return;
+    if (target.isEmpty() || m.isEmpty() || r.isEmpty()) return;
 
     try {
       hooks.flushTypingDone();
@@ -173,10 +186,20 @@ public final class MessageInputComposeSupport {
     }
 
     try {
-      hooks.sendOutbound("/react " + m + " " + r);
+      String line = quickReactionCommandResolver.commandFor(target, m, r);
+      if (line == null || line.isBlank()) return;
+      hooks.sendOutbound(line.trim());
     } catch (Exception ex) {
       log.warn("[MessageInputComposeSupport] hooks.sendOutbound failed", ex);
     }
+  }
+
+  private static String defaultQuickReactionCommand(
+      String ircTarget, String messageId, String reactionToken) {
+    String msgId = normalizeComposeMessageId(messageId);
+    String reaction = normalizeReactionToken(reactionToken);
+    if (msgId.isEmpty() || reaction.isEmpty()) return "";
+    return "/react " + msgId + " " + reaction;
   }
 
   private void configureComposeBanner() {

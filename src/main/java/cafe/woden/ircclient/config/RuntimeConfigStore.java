@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
@@ -59,6 +60,7 @@ import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
@@ -123,6 +125,8 @@ public class RuntimeConfigStore
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
+  private Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolver =
+      new Ircv3CapabilityNameResolverPort() {};
   private int mutationBatchDepth = 0;
   private Map<String, Object> mutationBatchDoc = null;
   private boolean mutationBatchDirty = false;
@@ -158,6 +162,14 @@ public class RuntimeConfigStore
     this.yaml = new Yaml(opts);
 
     ensureFileExistsWithServers();
+  }
+
+  @Autowired(required = false)
+  void setIrcv3CapabilityNameResolver(Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolver) {
+    this.ircv3CapabilityNameResolver =
+        ircv3CapabilityNameResolver == null
+            ? new Ircv3CapabilityNameResolverPort() {}
+            : ircv3CapabilityNameResolver;
   }
 
   /**
@@ -3845,6 +3857,22 @@ public class RuntimeConfigStore
     }
   }
 
+  public synchronized void rememberChatLoggingRedactionAuditEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("redactionAuditEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging redaction-audit setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberChatLoggingLogPrivateMessages(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -7114,11 +7142,8 @@ public class RuntimeConfigStore
     }
   }
 
-  private static String normalizeCapabilityKey(String capability) {
-    String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
-    if (c.isEmpty()) return null;
-    if ("draft/read-marker".equals(c)) return "read-marker";
-    return c;
+  private String normalizeCapabilityKey(String capability) {
+    return ircv3CapabilityNameResolver.normalizePreferenceKey(capability);
   }
 
   private static String normalizeHostKey(String host) {

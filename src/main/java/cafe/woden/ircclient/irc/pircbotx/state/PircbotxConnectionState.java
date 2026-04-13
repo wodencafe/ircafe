@@ -98,10 +98,6 @@ public final class PircbotxConnectionState {
   final AtomicLong multilineOfferedMaxLines = new AtomicLong(0L);
   final AtomicLong draftMultilineOfferedMaxBytes = new AtomicLong(0L);
   final AtomicLong draftMultilineOfferedMaxLines = new AtomicLong(0L);
-  final AtomicBoolean draftChannelContextCapAcked = new AtomicBoolean(false);
-  final AtomicBoolean draftReplyCapAcked = new AtomicBoolean(false);
-  final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
-  final AtomicBoolean draftUnreactCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageRedactionCapAcked = new AtomicBoolean(false);
   final AtomicBoolean messageTagsCapAcked = new AtomicBoolean(false);
@@ -117,7 +113,6 @@ public final class PircbotxConnectionState {
 
   final AtomicBoolean typingClientTagPolicyKnown = new AtomicBoolean(false);
 
-  final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean messageTagsFallbackReqSent = new AtomicBoolean(false);
   final AtomicBoolean batchFallbackReqSent = new AtomicBoolean(false);
   final AtomicBoolean chatHistoryFallbackReqSent = new AtomicBoolean(false);
@@ -180,16 +175,11 @@ public final class PircbotxConnectionState {
       long multilineMaxLines,
       long draftMultilineMaxBytes,
       long draftMultilineMaxLines,
-      boolean draftChannelContextCapAcked,
-      boolean draftReplyCapAcked,
-      boolean draftReactCapAcked,
-      boolean draftUnreactCapAcked,
       boolean draftMessageEditCapAcked,
       boolean draftMessageRedactionCapAcked,
       boolean messageTagsCapAcked,
       boolean typingClientTagAllowed,
       boolean typingClientTagPolicyKnown,
-      boolean typingCapAcked,
       boolean readMarkerCapAcked,
       boolean monitorCapAcked,
       boolean extendedMonitorCapAcked,
@@ -198,10 +188,6 @@ public final class PircbotxConnectionState {
       boolean standardRepliesCapAcked,
       boolean monitorSupported,
       long monitorMaxTargets) {
-
-    public boolean draftUnreactAvailable() {
-      return draftUnreactCapAcked || draftReactCapAcked;
-    }
 
     public boolean multilineAvailable() {
       return multilineCapAcked || draftMultilineCapAcked;
@@ -228,11 +214,11 @@ public final class PircbotxConnectionState {
     }
 
     public boolean typingAllowedByPolicy() {
-      return typingClientTagPolicyKnown && typingClientTagAllowed;
+      return !typingClientTagPolicyKnown || typingClientTagAllowed;
     }
 
     public boolean typingAvailable() {
-      return messageTagsCapAcked && (typingCapAcked || typingAllowedByPolicy());
+      return messageTagsCapAcked && typingAllowedByPolicy();
     }
 
     public boolean chatHistoryAvailable() {
@@ -578,16 +564,11 @@ public final class PircbotxConnectionState {
         multilineMaxLines.get(),
         draftMultilineMaxBytes.get(),
         draftMultilineMaxLines.get(),
-        draftChannelContextCapAcked.get(),
-        draftReplyCapAcked.get(),
-        draftReactCapAcked.get(),
-        draftUnreactCapAcked.get(),
         draftMessageEditCapAcked.get(),
         draftMessageRedactionCapAcked.get(),
         messageTagsCapAcked.get(),
         typingClientTagAllowed.get(),
         typingClientTagPolicyKnown.get(),
-        typingCapAcked.get(),
         readMarkerCapAcked.get(),
         monitorCapAcked.get(),
         extendedMonitorCapAcked.get(),
@@ -672,16 +653,8 @@ public final class PircbotxConnectionState {
     draftMultilineMaxLines.set(Math.max(0L, maxLines));
   }
 
-  public void setDraftReactCapAcked(boolean acked) {
-    draftReactCapAcked.set(acked);
-  }
-
   public void setMessageTagsCapAcked(boolean acked) {
     messageTagsCapAcked.set(acked);
-  }
-
-  public void setTypingCapAcked(boolean acked) {
-    typingCapAcked.set(acked);
   }
 
   public void setReadMarkerCapAcked(boolean acked) {
@@ -757,16 +730,11 @@ public final class PircbotxConnectionState {
       case "draft/multiline" ->
           updateTrackedCapabilityWithLimitReset(
               draftMultilineCapAcked, draftMultilineMaxBytes, draftMultilineMaxLines, enabled);
-      case "draft/reply" -> updateTrackedCapability(draftReplyCapAcked, enabled);
-      case "draft/channel-context" -> updateTrackedCapability(draftChannelContextCapAcked, enabled);
-      case "draft/react" -> updateTrackedCapability(draftReactCapAcked, enabled);
-      case "draft/unreact" -> updateTrackedCapability(draftUnreactCapAcked, enabled);
       case "draft/message-edit", "message-edit" ->
           updateTrackedCapability(draftMessageEditCapAcked, enabled);
       case "draft/message-redaction", "message-redaction" ->
           updateTrackedCapability(draftMessageRedactionCapAcked, enabled);
       case "message-tags" -> updateTrackedCapability(messageTagsCapAcked, enabled);
-      case "typing", "draft/typing" -> updateTrackedCapability(typingCapAcked, enabled);
       case "draft/read-marker", "read-marker" ->
           updateTrackedCapability(readMarkerCapAcked, enabled);
       case "monitor" -> updateTrackedCapability(monitorCapAcked, enabled);
@@ -850,16 +818,11 @@ public final class PircbotxConnectionState {
     multilineOfferedMaxLines.set(0L);
     draftMultilineOfferedMaxBytes.set(0L);
     draftMultilineOfferedMaxLines.set(0L);
-    draftChannelContextCapAcked.set(false);
-    draftReplyCapAcked.set(false);
-    draftReactCapAcked.set(false);
-    draftUnreactCapAcked.set(false);
     draftMessageEditCapAcked.set(false);
     draftMessageRedactionCapAcked.set(false);
     messageTagsCapAcked.set(false);
     typingClientTagAllowed.set(true);
     typingClientTagPolicyKnown.set(false);
-    typingCapAcked.set(false);
     messageTagsFallbackReqSent.set(false);
     batchFallbackReqSent.set(false);
     chatHistoryFallbackReqSent.set(false);

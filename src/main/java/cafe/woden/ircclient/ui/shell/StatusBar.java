@@ -39,6 +39,7 @@ public class StatusBar extends JPanel {
   private static final int HISTORY_FLASH_TOGGLES = 6;
   private static final int HISTORY_FLASH_TICK_MS = 180;
   private static final int UPDATE_NOTIFIER_TOOLTIP_AUTO_HIDE_MS = 12_000;
+  private static final double NOTICE_MIN_CONTRAST = 4.5;
   private static final DateTimeFormatter NOTICE_HISTORY_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
   private static final String SERVER_DISCONNECTED_TEXT = "(disconnected)";
@@ -150,7 +151,7 @@ public class StatusBar extends JPanel {
         });
     center.add(noticeLabel, BorderLayout.CENTER);
     center.add(historyButton, BorderLayout.EAST);
-    noticeBaseForeground = noticeLabel.getForeground();
+    noticeBaseForeground = resolveNoticeForeground();
     lagLabel.setToolTipText("Current measured server lag for the active server.");
     lagLabel.setVisible(false);
     lagBaseForeground = lagLabel.getForeground();
@@ -189,8 +190,8 @@ public class StatusBar extends JPanel {
     add(right, BorderLayout.EAST);
 
     addPropertyChangeListener(
-        "UI", e -> SwingUtilities.invokeLater(this::applyUiFontsFromDefaults));
-    applyUiFontsFromDefaults();
+        "UI", e -> SwingUtilities.invokeLater(this::applyUiDefaultsFromTheme));
+    applyUiDefaultsFromTheme();
   }
 
   public void setUpdateNotifierActions(
@@ -349,14 +350,12 @@ public class StatusBar extends JPanel {
   }
 
   private void refreshNoticeLabel() {
-    if (noticeBaseForeground == null) {
-      noticeBaseForeground = noticeLabel.getForeground();
-    }
+    noticeBaseForeground = resolveNoticeForeground();
     if (activeNotice == null) {
       noticeLabel.setText("");
       noticeLabel.setToolTipText(null);
       noticeLabel.setVisible(false);
-      noticeLabel.setForeground(noticeBaseForeground);
+      applyNoticeForegroundWithAlpha(255);
       noticeLabel.setCursor(Cursor.getDefaultCursor());
       return;
     }
@@ -374,7 +373,7 @@ public class StatusBar extends JPanel {
     tooltip = tooltip + "  (right-click for history)";
     noticeLabel.setToolTipText(tooltip);
     noticeLabel.setVisible(true);
-    noticeLabel.setForeground(noticeBaseForeground);
+    applyNoticeForegroundWithAlpha(255);
     noticeLabel.setCursor(
         activeNotice.onClick() != null
             ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -391,21 +390,15 @@ public class StatusBar extends JPanel {
       refreshNoticeLabel();
       return;
     }
-    if (noticeBaseForeground == null) {
-      noticeBaseForeground = noticeLabel.getForeground();
-    }
+    noticeBaseForeground = resolveNoticeForeground();
     noticeFadeStartedAtMs = System.currentTimeMillis();
     noticeFadeTimer.restart();
   }
 
   private void stopNoticeFade() {
     noticeFadeTimer.stop();
-    if (noticeBaseForeground == null) {
-      noticeBaseForeground = noticeLabel.getForeground();
-    }
-    if (noticeBaseForeground != null) {
-      noticeLabel.setForeground(noticeBaseForeground);
-    }
+    noticeBaseForeground = resolveNoticeForeground();
+    applyNoticeForegroundWithAlpha(255);
   }
 
   private void onNoticeFadeTick() {
@@ -426,7 +419,7 @@ public class StatusBar extends JPanel {
       return;
     }
 
-    Color base = noticeBaseForeground != null ? noticeBaseForeground : noticeLabel.getForeground();
+    Color base = noticeBaseForeground != null ? noticeBaseForeground : resolveNoticeForeground();
     int alpha = Math.max(0, Math.min(255, Math.round((1f - progress) * 255f)));
     noticeLabel.setForeground(new Color(base.getRed(), base.getGreen(), base.getBlue(), alpha));
   }
@@ -679,6 +672,20 @@ public class StatusBar extends JPanel {
     }
   }
 
+  private void applyUiDefaultsFromTheme() {
+    applyUiFontsFromDefaults();
+    refreshThemeAwareColors();
+  }
+
+  private void refreshThemeAwareColors() {
+    noticeBaseForeground = resolveNoticeForeground();
+    applyNoticeForegroundWithAlpha(currentNoticeAlpha());
+    lagBaseForeground = statusTextForeground();
+    if (lagBaseForeground != null && lagLabel.isVisible()) {
+      lagLabel.setForeground(lagBaseForeground);
+    }
+  }
+
   private void applyUiFontsFromDefaults() {
     Font base = UIManager.getFont("Label.font");
     Font defaultFont = UIManager.getFont("defaultFont");
@@ -719,6 +726,18 @@ public class StatusBar extends JPanel {
     if (updateNotifierCheckNowItem != null) updateNotifierCheckNowItem.setFont(buttonFont);
     if (updateNotifierVisitUpdatesItem != null) updateNotifierVisitUpdatesItem.setFont(buttonFont);
     if (updateNotifierDisableItem != null) updateNotifierDisableItem.setFont(buttonFont);
+  }
+
+  private int currentNoticeAlpha() {
+    Color current = noticeLabel.getForeground();
+    return current != null ? current.getAlpha() : 255;
+  }
+
+  private void applyNoticeForegroundWithAlpha(int alpha) {
+    Color base = noticeBaseForeground != null ? noticeBaseForeground : resolveNoticeForeground();
+    if (base == null) return;
+    noticeLabel.setForeground(
+        new Color(base.getRed(), base.getGreen(), base.getBlue(), clampAlpha(alpha)));
   }
 
   private void setUpdateNotifierActionsOnEdt(
@@ -922,6 +941,111 @@ public class StatusBar extends JPanel {
     Color serverForeground = serverLabel.getForeground();
     if (serverForeground != null) return serverForeground;
     return lagLabel.getForeground();
+  }
+
+  private Color resolveNoticeForeground() {
+    Color bg = statusBarBackground();
+    boolean darkUi = isDarkUi(bg);
+    Color fallback = darkUi ? new Color(0xDE, 0xE8, 0xF8) : new Color(0x15, 0x4A, 0x8A);
+    Color candidate =
+        firstNonNull(
+            UIManager.getColor("Component.linkColor"),
+            UIManager.getColor("@accentColor"),
+            UIManager.getColor("Component.accentColor"),
+            statusTextForeground(),
+            UIManager.getColor("Label.foreground"));
+    return ensureReadableTextColor(candidate, bg, darkUi, NOTICE_MIN_CONTRAST, fallback);
+  }
+
+  private Color statusBarBackground() {
+    Color bg = getBackground();
+    if (bg == null) bg = UIManager.getColor("Panel.background");
+    if (bg == null) bg = noticeLabel.getBackground();
+    return bg != null ? new Color(bg.getRed(), bg.getGreen(), bg.getBlue()) : Color.WHITE;
+  }
+
+  private static Color ensureReadableTextColor(
+      Color candidate, Color bg, boolean darkUi, double minContrast, Color fallback) {
+    if (bg == null) return candidate != null ? candidate : fallback;
+
+    Color base = candidate != null ? candidate : fallback;
+    if (base == null) base = darkUi ? Color.WHITE : Color.BLACK;
+
+    if (isReadableDirection(base, bg, darkUi) && contrastRatio(base, bg) >= minContrast) {
+      return base;
+    }
+
+    Color target = darkUi ? Color.WHITE : Color.BLACK;
+    for (int i = 1; i <= 24; i++) {
+      double weight = i / 24.0;
+      Color adjusted = mix(target, base, weight);
+      if (isReadableDirection(adjusted, bg, darkUi) && contrastRatio(adjusted, bg) >= minContrast) {
+        return adjusted;
+      }
+    }
+
+    return target;
+  }
+
+  private static boolean isReadableDirection(Color fg, Color bg, boolean darkUi) {
+    if (fg == null || bg == null) return true;
+    double fgLum = relativeLuminance(fg);
+    double bgLum = relativeLuminance(bg);
+    return darkUi ? fgLum > bgLum : fgLum < bgLum;
+  }
+
+  private static boolean isDarkUi(Color bg) {
+    if (bg == null) return false;
+    return relativeLuminance(bg) < 0.45;
+  }
+
+  private static Color mix(Color a, Color b, double t) {
+    if (a == null) return b;
+    if (b == null) return a;
+
+    double ratio = Math.max(0.0, Math.min(1.0, t));
+    int r = (int) Math.round(a.getRed() + (b.getRed() - a.getRed()) * ratio);
+    int g = (int) Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * ratio);
+    int bl = (int) Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * ratio);
+    return new Color(r, g, bl);
+  }
+
+  private static double contrastRatio(Color fg, Color bg) {
+    if (fg == null || bg == null) return 0.0;
+
+    double l1 = relativeLuminance(fg);
+    double l2 = relativeLuminance(bg);
+    if (l1 < l2) {
+      double t = l1;
+      l1 = l2;
+      l2 = t;
+    }
+    return (l1 + 0.05) / (l2 + 0.05);
+  }
+
+  private static double relativeLuminance(Color c) {
+    double r = srgbToLinear(c.getRed());
+    double g = srgbToLinear(c.getGreen());
+    double b = srgbToLinear(c.getBlue());
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  }
+
+  private static double srgbToLinear(int channel) {
+    double v = channel / 255.0;
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  @SafeVarargs
+  private static <T> T firstNonNull(T... values) {
+    if (values == null) return null;
+    for (T value : values) {
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  private static int clampAlpha(int alpha) {
+    return Math.max(0, Math.min(255, alpha));
   }
 
   private static ServerLabelDisplay serverLabelDisplay(String serverText) {

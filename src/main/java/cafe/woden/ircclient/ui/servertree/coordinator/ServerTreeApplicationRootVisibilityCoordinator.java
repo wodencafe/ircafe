@@ -9,8 +9,10 @@ import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Orchestrates showing/hiding the application root while preserving selection and expansion. */
+@Component
 public final class ServerTreeApplicationRootVisibilityCoordinator {
 
   public interface Context {
@@ -136,42 +138,37 @@ public final class ServerTreeApplicationRootVisibilityCoordinator {
     };
   }
 
-  private final Context context;
-
-  public ServerTreeApplicationRootVisibilityCoordinator(Context context) {
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  public void syncApplicationRootVisibility() {
-    Set<TreePath> expandedBefore = context.snapshotExpandedTreePaths();
+  public void syncApplicationRootVisibility(Context context) {
+    Context in = Objects.requireNonNull(context, "context");
+    Set<TreePath> expandedBefore = in.snapshotExpandedTreePaths();
     boolean structureChanged = false;
 
-    if (context.showApplicationRoot()) {
-      if (!context.isApplicationRootAttached()) {
-        context.attachApplicationRoot(Math.min(1, context.rootChildCount()));
-        context.rootStructureChanged();
+    if (in.showApplicationRoot()) {
+      if (!in.isApplicationRootAttached()) {
+        in.attachApplicationRoot(Math.min(1, in.rootChildCount()));
+        in.rootStructureChanged();
         structureChanged = true;
       }
-      if (structureChanged) context.restoreExpandedTreePaths(expandedBefore);
-      context.expandApplicationRootPath();
+      if (structureChanged) in.restoreExpandedTreePaths(expandedBefore);
+      in.expandApplicationRootPath();
       return;
     }
 
-    TargetRef selected = context.selectedTargetRef();
+    TargetRef selected = in.selectedTargetRef();
     if (selected != null && selected.isApplicationUi()) {
-      TargetRef first = context.firstServerStatusRef();
+      TargetRef first = in.firstServerStatusRef();
       if (first != null) {
-        context.selectTarget(first);
+        in.selectTarget(first);
       } else {
-        context.selectDefaultPath();
+        in.selectDefaultPath();
       }
     }
 
-    if (context.isApplicationRootAttached()) {
-      context.detachApplicationRoot();
-      context.rootStructureChanged();
+    if (in.isApplicationRootAttached()) {
+      in.detachApplicationRoot();
+      in.rootStructureChanged();
       structureChanged = true;
     }
-    if (structureChanged) context.restoreExpandedTreePaths(expandedBefore);
+    if (structureChanged) in.restoreExpandedTreePaths(expandedBefore);
   }
 }

@@ -18,8 +18,10 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.springframework.stereotype.Component;
 
 /** Synchronizes the server tree structure with the latest server catalog snapshot. */
+@Component
 public final class ServerTreeServerCatalogSynchronizer {
 
   public interface Context {
@@ -62,12 +64,24 @@ public final class ServerTreeServerCatalogSynchronizer {
     void selectStartupDefaultForServer(String serverId);
 
     void selectDefaultPath();
+
+    Map<String, String> serverDisplayNames();
+
+    Set<String> ephemeralServerIds();
+
+    Map<String, Set<String>> bouncerControlServerIdsByBackendId();
+
+    Map<String, Map<String, String>> originByServerIdByBackendId();
   }
 
   public static Context context(
       JTree tree,
       Map<String, ServerNodes> servers,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
+      Map<String, String> serverDisplayNames,
+      Set<String> ephemeralServerIds,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<String, Map<String, String>> originByServerIdByBackendId,
       DefaultTreeModel model,
       DefaultMutableTreeNode root,
       BooleanSupplier startupSelectionCompleted,
@@ -86,6 +100,11 @@ public final class ServerTreeServerCatalogSynchronizer {
     Objects.requireNonNull(tree, "tree");
     Objects.requireNonNull(servers, "servers");
     Objects.requireNonNull(leaves, "leaves");
+    Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
+    Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
+    Objects.requireNonNull(
+        bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
+    Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId");
     Objects.requireNonNull(model, "model");
     Objects.requireNonNull(root, "root");
     Objects.requireNonNull(startupSelectionCompleted, "startupSelectionCompleted");
@@ -205,36 +224,41 @@ public final class ServerTreeServerCatalogSynchronizer {
       public void selectDefaultPath() {
         tree.setSelectionPath(defaultSelectionPath.get());
       }
+
+      @Override
+      public Map<String, String> serverDisplayNames() {
+        return serverDisplayNames;
+      }
+
+      @Override
+      public Set<String> ephemeralServerIds() {
+        return ephemeralServerIds;
+      }
+
+      @Override
+      public Map<String, Set<String>> bouncerControlServerIdsByBackendId() {
+        return bouncerControlServerIdsByBackendId;
+      }
+
+      @Override
+      public Map<String, Map<String, String>> originByServerIdByBackendId() {
+        return originByServerIdByBackendId;
+      }
     };
   }
 
-  private final Map<String, String> serverDisplayNames;
-  private final Set<String> ephemeralServerIds;
-  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId;
-  private final Map<String, Map<String, String>> originByServerIdByBackendId;
-  private final Context context;
+  public void syncServers(Context context, List<ServerEntry> latest) {
+    Context in = Objects.requireNonNull(context, "context");
+    Map<String, String> serverDisplayNames = in.serverDisplayNames();
+    Set<String> ephemeralServerIds = in.ephemeralServerIds();
+    Map<String, Set<String>> bouncerControlServerIdsByBackendId =
+        in.bouncerControlServerIdsByBackendId();
+    Map<String, Map<String, String>> originByServerIdByBackendId = in.originByServerIdByBackendId();
 
-  public ServerTreeServerCatalogSynchronizer(
-      Map<String, String> serverDisplayNames,
-      Set<String> ephemeralServerIds,
-      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
-      Map<String, Map<String, String>> originByServerIdByBackendId,
-      Context context) {
-    this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
-    this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.bouncerControlServerIdsByBackendId =
-        Objects.requireNonNull(
-            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
-    this.originByServerIdByBackendId =
-        Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId");
-    this.context = Objects.requireNonNull(context, "context");
-  }
-
-  public void syncServers(List<ServerEntry> latest) {
-    if (context.treeHasSelectionPath()) {
-      context.markStartupSelectionCompleted();
+    if (in.treeHasSelectionPath()) {
+      in.markStartupSelectionCompleted();
     }
-    TargetRef selectedRefBeforeReload = context.selectedTargetRef();
+    TargetRef selectedRefBeforeReload = in.selectedTargetRef();
 
     Set<String> newIds = new HashSet<>();
     Map<String, String> nextDisplay = new HashMap<>();
@@ -289,19 +313,19 @@ public final class ServerTreeServerCatalogSynchronizer {
 
     for (String id : newIds) {
       if (ServerTreeBouncerBackends.isBouncerServerId(id)) continue;
-      if (!context.hasServer(id)) {
-        context.addServerRoot(id);
+      if (!in.hasServer(id)) {
+        in.addServerRoot(id);
       }
     }
     for (String id : newIds) {
-      if (!context.hasServer(id)) {
-        context.addServerRoot(id);
+      if (!in.hasServer(id)) {
+        in.addServerRoot(id);
       }
     }
 
-    for (String existing : List.copyOf(context.currentServerIds())) {
+    for (String existing : List.copyOf(in.currentServerIds())) {
       if (!newIds.contains(existing)) {
-        context.removeServerRoot(existing);
+        in.removeServerRoot(existing);
         serverDisplayNames.remove(existing);
         ephemeralServerIds.remove(existing);
         for (Set<String> controlServerIds : bouncerControlServerIdsByBackendId.values()) {
@@ -312,7 +336,7 @@ public final class ServerTreeServerCatalogSynchronizer {
       }
     }
 
-    context.updateBouncerControlLabels(nextBouncerControlByBackendId);
+    in.updateBouncerControlLabels(nextBouncerControlByBackendId);
 
     for (String id : newIds) {
       String next = nextDisplay.getOrDefault(id, id);
@@ -327,35 +351,35 @@ public final class ServerTreeServerCatalogSynchronizer {
       }
 
       if (!Objects.equals(prev, next) || eph != prevEph) {
-        context.nodeChangedForServer(id);
+        in.nodeChangedForServer(id);
       }
     }
 
-    Set<TreePath> expandedBeforeReload = context.snapshotExpandedTreePaths();
-    context.reloadTreeModel();
-    context.restoreExpandedTreePaths(expandedBeforeReload);
+    Set<TreePath> expandedBeforeReload = in.snapshotExpandedTreePaths();
+    in.reloadTreeModel();
+    in.restoreExpandedTreePaths(expandedBeforeReload);
 
-    context.runLater(
+    in.runLater(
         () -> {
-          if (context.hasValidTreeSelection()) {
+          if (in.hasValidTreeSelection()) {
             return;
           }
 
-          if (selectedRefBeforeReload != null && context.hasLeaf(selectedRefBeforeReload)) {
-            context.selectTarget(selectedRefBeforeReload);
+          if (selectedRefBeforeReload != null && in.hasLeaf(selectedRefBeforeReload)) {
+            in.selectTarget(selectedRefBeforeReload);
             return;
           }
 
-          String firstServerId = normalize(context.firstServerId());
+          String firstServerId = normalize(in.firstServerId());
           if (!firstServerId.isBlank()) {
-            if (!context.startupSelectionCompleted() || selectedRefBeforeReload == null) {
-              context.selectStartupDefaultForServer(firstServerId);
-              context.markStartupSelectionCompleted();
+            if (!in.startupSelectionCompleted() || selectedRefBeforeReload == null) {
+              in.selectStartupDefaultForServer(firstServerId);
+              in.markStartupSelectionCompleted();
             } else {
-              context.selectTarget(new TargetRef(firstServerId, "status"));
+              in.selectTarget(new TargetRef(firstServerId, "status"));
             }
           } else {
-            context.selectDefaultPath();
+            in.selectDefaultPath();
           }
         });
   }

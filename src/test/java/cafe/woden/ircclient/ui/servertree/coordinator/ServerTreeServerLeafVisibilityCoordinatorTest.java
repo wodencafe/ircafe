@@ -35,18 +35,12 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
 
     ServerTreeBuiltInLayout layout = ServerTreeBuiltInLayout.defaults();
     ServerTreeRootSiblingOrder order = ServerTreeRootSiblingOrder.defaults();
-
     ServerTreeServerLeafVisibilityCoordinator coordinator =
-        new ServerTreeServerLeafVisibilityCoordinator(
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers",
-            "Notifications",
-            "Log Viewer",
-            fixture.nodeVisibilityMutator,
-            value -> value == null ? "" : value.trim(),
-            sid -> fixture.serverNodesById.get(sid),
+        new ServerTreeServerLeafVisibilityCoordinator();
+
+    coordinator.syncUiLeafVisibilityForServer(
+        context(
+            fixture,
             sid -> new ServerBuiltInNodesVisibility(true, true, true, false, false),
             sid -> layout,
             sid -> order,
@@ -58,12 +52,9 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
               orderApplyCount.incrementAndGet();
               appliedOrder.set(next);
             },
-            sid -> "Server",
             sid -> false,
-            () -> false,
-            fixture.leaves::get);
-
-    coordinator.syncUiLeafVisibilityForServer(serverId);
+            () -> false),
+        serverId);
 
     DefaultMutableTreeNode channelListLeaf = fixture.leaves.get(TargetRef.channelList(serverId));
     assertNotNull(channelListLeaf);
@@ -92,27 +83,19 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
     fixture.leaves.put(dccRef, dccLeaf);
 
     ServerTreeServerLeafVisibilityCoordinator coordinator =
-        new ServerTreeServerLeafVisibilityCoordinator(
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers",
-            "Notifications",
-            "Log Viewer",
-            fixture.nodeVisibilityMutator,
-            value -> value == null ? "" : value.trim(),
-            sid -> fixture.serverNodesById.get(sid),
+        new ServerTreeServerLeafVisibilityCoordinator();
+
+    coordinator.syncUiLeafVisibilityForServer(
+        context(
+            fixture,
             sid -> new ServerBuiltInNodesVisibility(true, true, true, false, false),
             sid -> ServerTreeBuiltInLayout.defaults(),
             sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {},
             (sn, next) -> {},
-            sid -> "Server",
             sid -> false,
-            () -> false,
-            fixture.leaves::get);
-
-    coordinator.syncUiLeafVisibilityForServer(serverId);
+            () -> false),
+        serverId);
 
     assertFalse(fixture.leaves.containsKey(dccRef));
     assertNull(dccLeaf.getParent());
@@ -133,21 +116,15 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
     fixture.nodes.otherNode.add(fixture.nodes.interceptorsNode);
 
     ServerTreeServerLeafVisibilityCoordinator coordinator =
-        new ServerTreeServerLeafVisibilityCoordinator(
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers",
-            "Notifications",
-            "Log Viewer",
-            fixture.nodeVisibilityMutator,
-            value -> value == null ? "" : value.trim(),
-            sid -> fixture.serverNodesById.get(sid),
+        new ServerTreeServerLeafVisibilityCoordinator();
+
+    coordinator.syncUiLeafVisibilityForServer(
+        context(
+            fixture,
             sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
             sid -> ServerTreeBuiltInLayout.defaults(),
             sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {
-              // Simulate persisted layout reattaching groups under root "Other".
               if (fixture.nodes.monitorNode.getParent() != fixture.nodes.otherNode) {
                 fixture.nodes.otherNode.add(fixture.nodes.monitorNode);
               }
@@ -156,12 +133,9 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
               }
             },
             (sn, next) -> {},
-            sid -> "Server",
             sid -> "quassel".equals(sid),
-            () -> true,
-            fixture.leaves::get);
-
-    coordinator.syncUiLeafVisibilityForServer(serverId);
+            () -> true),
+        serverId);
 
     assertFalse(fixture.leaves.containsKey(TargetRef.channelList(serverId)));
     assertNull(channelListLeaf.getParent());
@@ -185,30 +159,53 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
     fixture.leaves.put(TargetRef.channelList(serverId), networkChannelListLeaf);
 
     ServerTreeServerLeafVisibilityCoordinator coordinator =
-        new ServerTreeServerLeafVisibilityCoordinator(
-            "Channel List",
-            "Filters",
-            "Ignores",
-            "DCC Transfers",
-            "Notifications",
-            "Log Viewer",
-            fixture.nodeVisibilityMutator,
-            value -> value == null ? "" : value.trim(),
-            sid -> fixture.serverNodesById.get(sid),
+        new ServerTreeServerLeafVisibilityCoordinator();
+
+    coordinator.syncUiLeafVisibilityForServer(
+        context(
+            fixture,
             sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
             sid -> ServerTreeBuiltInLayout.defaults(),
             sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {},
             (sn, next) -> {},
-            sid -> "Server",
             sid -> "quassel".equals(sid),
-            () -> true,
-            fixture.leaves::get);
-
-    coordinator.syncUiLeafVisibilityForServer(serverId);
+            () -> true),
+        serverId);
 
     assertEquals(networkChannelListLeaf, fixture.leaves.get(TargetRef.channelList(serverId)));
     assertEquals(networkNode, networkChannelListLeaf.getParent());
+  }
+
+  private static ServerTreeServerLeafVisibilityCoordinator.Context context(
+      Fixture fixture,
+      java.util.function.Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
+      java.util.function.Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      java.util.function.Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
+      java.util.function.BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
+      java.util.function.BiConsumer<ServerNodes, ServerTreeRootSiblingOrder>
+          applyRootSiblingOrderToTree,
+      java.util.function.Predicate<String> isQuasselServer,
+      java.util.function.BooleanSupplier showDccTransfersNodes) {
+    return ServerTreeServerLeafVisibilityCoordinator.context(
+        "Channel List",
+        "Filters",
+        "Ignores",
+        "DCC Transfers",
+        "Notifications",
+        "Log Viewer",
+        fixture.nodeVisibilityMutator,
+        value -> value == null ? "" : value.trim(),
+        sid -> fixture.serverNodesById.get(sid),
+        builtInNodesVisibility,
+        builtInLayout,
+        rootSiblingOrder,
+        applyBuiltInLayoutToTree,
+        applyRootSiblingOrderToTree,
+        sid -> "Server",
+        isQuasselServer,
+        showDccTransfersNodes,
+        fixture.leaves::get);
   }
 
   private static final class Fixture {

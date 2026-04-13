@@ -6,11 +6,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
@@ -21,6 +23,7 @@ import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
@@ -32,6 +35,7 @@ import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -163,10 +167,10 @@ class ChannelHistoryPreservationFunctionalTest {
     ServerTreeDockable serverTree =
         onEdtCall(
             () ->
-                new ServerTreeDockable(
+                FunctionalTestWiringSupport.newServerTreeDockable(
                     serverCatalog,
                     runtimeConfig,
-                    new LogProperties(true, true, true, true, true, 0, null, null, null),
+                    new LogProperties(true, true, false, true, true, true, 0, null, null, null),
                     null,
                     null,
                     new ConnectButton(),
@@ -228,11 +232,15 @@ class ChannelHistoryPreservationFunctionalTest {
     DbChatHistoryService historyService =
         new DbChatHistoryService(
             repo,
-            new LogProperties(true, true, true, true, true, 0, null, null, null),
+            new LogProperties(true, true, false, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
             irc,
             bouncerPlayback,
             ingestBus,
+            new Ircv3ChatHistoryFeatureSupport(
+                mock(OutboundBackendCapabilityPolicy.class),
+                mock(IrcNegotiatedFeaturePort.class),
+                bouncerPlayback),
             historyExec);
 
     TargetChatHistoryPort historyPort =

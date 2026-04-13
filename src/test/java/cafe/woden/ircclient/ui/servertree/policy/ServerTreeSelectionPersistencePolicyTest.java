@@ -17,9 +17,9 @@ class ServerTreeSelectionPersistencePolicyTest {
     context.lastBroadcast = new TargetRef("libera", "#last");
     context.selectedTarget = new TargetRef("libera", "#selected");
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
 
-    assertEquals(context.lastBroadcast, policy.selectedTargetForPersistence());
+    assertEquals(context.lastBroadcast, policy.selectedTargetForPersistence(context));
   }
 
   @Test
@@ -27,9 +27,9 @@ class ServerTreeSelectionPersistencePolicyTest {
     StubContext context = new StubContext();
     context.selectedTarget = new TargetRef("libera", "#selected");
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
 
-    assertEquals(context.selectedTarget, policy.selectedTargetForPersistence());
+    assertEquals(context.selectedTarget, policy.selectedTargetForPersistence(context));
   }
 
   @Test
@@ -40,9 +40,9 @@ class ServerTreeSelectionPersistencePolicyTest {
     context.monitorNodes.add(monitorNode);
     context.serverIdByNode.put(monitorNode, "libera");
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
 
-    assertEquals(TargetRef.monitorGroup("libera"), policy.selectedTargetForPersistence());
+    assertEquals(TargetRef.monitorGroup("libera"), policy.selectedTargetForPersistence(context));
   }
 
   @Test
@@ -53,22 +53,23 @@ class ServerTreeSelectionPersistencePolicyTest {
     context.interceptorsNodes.add(interceptorsNode);
     context.serverIdByNode.put(interceptorsNode, "libera");
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
 
-    assertEquals(TargetRef.interceptorsGroup("libera"), policy.selectedTargetForPersistence());
+    assertEquals(
+        TargetRef.interceptorsGroup("libera"), policy.selectedTargetForPersistence(context));
   }
 
   @Test
   void returnsNullWhenNoSelectableState() {
     StubContext context = new StubContext();
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
-    assertNull(policy.selectedTargetForPersistence());
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
+    assertNull(policy.selectedTargetForPersistence(context));
 
     DefaultMutableTreeNode unknownNode = new DefaultMutableTreeNode("unknown");
     context.selectedNode = unknownNode;
     context.serverIdByNode.put(unknownNode, " ");
-    assertNull(policy.selectedTargetForPersistence());
+    assertNull(policy.selectedTargetForPersistence(context));
   }
 
   @Test
@@ -79,9 +80,10 @@ class ServerTreeSelectionPersistencePolicyTest {
     context.serverIdByNode.put(networkNode, "quassel");
     context.syntheticByNode.put(networkNode, TargetRef.channelList("quassel", "libera"));
 
-    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy();
 
-    assertEquals(TargetRef.channelList("quassel", "libera"), policy.selectedTargetForPersistence());
+    assertEquals(
+        TargetRef.channelList("quassel", "libera"), policy.selectedTargetForPersistence(context));
   }
 
   private static final class StubContext implements ServerTreeSelectionPersistencePolicy.Context {

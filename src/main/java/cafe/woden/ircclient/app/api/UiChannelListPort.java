@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.app.api;
 
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Channel-list, ban-list, and channel mode snapshot UI updates. */
+@SecondaryPort
 @ApplicationLayer
 public interface UiChannelListPort {
 

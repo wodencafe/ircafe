@@ -26,30 +26,33 @@ class ServerTreeChannelInteractionCollaboratorsFactoryTest {
     AtomicInteger typingTickCount = new AtomicInteger();
 
     ServerTreeChannelInteractionCollaborators collaborators =
-        ServerTreeChannelInteractionCollaboratorsFactory.create(
-            new ServerTreeChannelInteractionCollaboratorsFactory.Inputs(
-                tree,
-                model,
-                new HashMap<>(),
-                new HashSet<>(),
-                100,
-                8000,
-                900,
-                typingTickCount::incrementAndGet,
-                () -> true,
-                () -> true,
-                __ -> {},
-                __ -> {},
-                __ -> null,
-                __ -> {},
-                __ -> null,
-                __ -> null,
-                __ -> null,
-                __ -> false,
-                __ -> {},
-                __ -> {},
-                mock(ServerTreeChannelQueryService.class),
-                mock(ServerTreeChannelTargetOperations.class)));
+        new ServerTreeChannelInteractionCollaboratorsFactory()
+            .create(
+                new ServerTreeChannelInteractionCollaboratorsFactory.Inputs(
+                    tree,
+                    model,
+                    new HashMap<>(),
+                    new HashSet<>(),
+                    100,
+                    8000,
+                    900,
+                    typingTickCount::incrementAndGet,
+                    () -> true,
+                    () -> true,
+                    __ -> {},
+                    __ -> {},
+                    __ -> null,
+                    __ -> {},
+                    __ -> null,
+                    __ -> null,
+                    __ -> null,
+                    __ -> false,
+                    __ -> {},
+                    __ -> {},
+                    mock(ServerTreeChannelQueryService.class),
+                    mock(ServerTreeChannelQueryService.Context.class),
+                    mock(ServerTreeChannelTargetOperations.class),
+                    mock(ServerTreeChannelTargetOperations.Context.class)));
 
     assertNotNull(collaborators.typingActivityTimer());
     assertNotNull(collaborators.typingActivityManager());

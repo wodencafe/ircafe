@@ -3,13 +3,12 @@ package cafe.woden.ircclient.ui.shell;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.net.HttpLite;
 import cafe.woden.ircclient.net.NetProxyContext;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.util.AppVersion;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.awt.Desktop;
 import java.net.URI;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -38,19 +37,6 @@ public class UpdateNotifierService {
       URI.create("https://api.github.com/repos/wodencafe/ircafe/releases/latest");
   private static final long INITIAL_CHECK_DELAY_SECONDS = 7L;
   private static final long CHECK_INTERVAL_HOURS = 6L;
-  private static final long PLATFORM_OPEN_EXIT_CHECK_TIMEOUT_MS = 450L;
-  private static final List<String> KNOWN_LINUX_BROWSERS =
-      List.of(
-          "librewolf",
-          "zen-browser",
-          "firefox",
-          "google-chrome",
-          "chromium",
-          "chromium-browser",
-          "brave-browser",
-          "microsoft-edge",
-          "opera",
-          "vivaldi");
 
   private static final Pattern TAG_NAME_PATTERN =
       Pattern.compile("\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
@@ -62,6 +48,7 @@ public class UpdateNotifierService {
   private final UiShellRuntimeConfigPort runtimeConfig;
   private final StatusBar statusBar;
   private final ScheduledExecutorService scheduler;
+  private final ExternalBrowserLauncher externalBrowserLauncher;
 
   private final AtomicBoolean enabled = new AtomicBoolean(true);
   private final AtomicBoolean checkInProgress = new AtomicBoolean(false);
@@ -70,9 +57,14 @@ public class UpdateNotifierService {
 
   private volatile String lastAlertedTag;
 
-  public UpdateNotifierService(UiShellRuntimeConfigPort runtimeConfig, StatusBar statusBar) {
+  public UpdateNotifierService(
+      UiShellRuntimeConfigPort runtimeConfig,
+      StatusBar statusBar,
+      ExternalBrowserLauncher externalBrowserLauncher) {
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.statusBar = Objects.requireNonNull(statusBar, "statusBar");
+    this.externalBrowserLauncher =
+        Objects.requireNonNull(externalBrowserLauncher, "externalBrowserLauncher");
     this.scheduler = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-update-notifier");
   }
 
@@ -315,82 +307,12 @@ public class UpdateNotifierService {
   protected void openReleasesPageOnWorker() {
     String url = RELEASES_URL;
     try {
-      if (isLinux() && tryPlatformOpen(url)) return;
-      if (tryDesktopBrowse(url)) return;
-      if (!isLinux() && tryPlatformOpen(url)) return;
+      if (externalBrowserLauncher.open(url)) return;
       throw new UnsupportedOperationException("No browser launch strategy succeeded");
     } catch (Exception e) {
       log.warn("Could not open releases page in browser: {}", url, e);
       statusBar.enqueueNotification("Could not open browser for updates.", null);
     }
-  }
-
-  protected boolean tryDesktopBrowse(String url) {
-    try {
-      if (!Desktop.isDesktopSupported()) return false;
-      Desktop desktop = Desktop.getDesktop();
-      if (desktop == null) return false;
-      if (!desktop.isSupported(Desktop.Action.BROWSE)) return false;
-      desktop.browse(URI.create(url));
-      return true;
-    } catch (Exception e) {
-      log.debug("Desktop browse failed for {}", url, e);
-      return false;
-    }
-  }
-
-  protected boolean tryPlatformOpen(String url) {
-    String os = currentOsLowerCase();
-    if (os.contains("linux")) {
-      return tryKnownLinuxBrowser(url)
-          || tryStart("xdg-open", url)
-          || tryStart("gio", "open", url)
-          || tryStart("sensible-browser", url)
-          || tryStart("x-www-browser", url)
-          || tryStart("gnome-open", url)
-          || tryStart("kde-open", url);
-    }
-    if (os.contains("mac") || os.contains("darwin")) {
-      return tryStart("open", url);
-    }
-    if (os.contains("win")) {
-      return tryStart("rundll32", "url.dll,FileProtocolHandler", url)
-          || tryStart("cmd", "/c", "start", "", url);
-    }
-    return false;
-  }
-
-  protected boolean tryKnownLinuxBrowser(String url) {
-    for (String browser : KNOWN_LINUX_BROWSERS) {
-      if (tryStart(browser, url)) return true;
-    }
-    return false;
-  }
-
-  protected boolean tryStart(String... cmd) {
-    if (cmd == null || cmd.length == 0) return false;
-    try {
-      Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-      if (process == null) return false;
-      try {
-        if (process.waitFor(PLATFORM_OPEN_EXIT_CHECK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-          return process.exitValue() == 0;
-        }
-      } catch (InterruptedException interrupted) {
-        Thread.currentThread().interrupt();
-      }
-      return true;
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  protected String currentOsLowerCase() {
-    return Objects.toString(System.getProperty("os.name", ""), "").toLowerCase(Locale.ROOT);
-  }
-
-  protected boolean isLinux() {
-    return currentOsLowerCase().contains("linux");
   }
 
   private static void cancelTask(AtomicReference<ScheduledFuture<?>> ref) {

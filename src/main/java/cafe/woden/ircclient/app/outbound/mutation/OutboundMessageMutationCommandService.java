@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.mutation;
 
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
 public final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
   @NonNull private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport;
   @NonNull private final UiPort ui;
   @NonNull private final TargetCoordinator targetCoordinator;
@@ -29,11 +31,9 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
 
   @Override
   public void appendGeneralHelp(TargetRef out) {
-    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
+    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires message-tags)");
+    ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires message-tags)");
+    ui.appendStatus(out, "(help)", "/unreact <msgid> <reaction-token> (requires message-tags)");
     appendEditHelp(out);
     appendRedactHelp(out);
   }
@@ -69,12 +69,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(reply)",
           featureUnavailableMessage(
-              at.serverId(), "draft/reply is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 
@@ -102,13 +102,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
-        || !backendCapabilityPolicy.supportsDraftReact(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(react)",
           featureUnavailableMessage(
-              at.serverId(), "draft/react is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 
@@ -136,13 +135,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
-        || !backendCapabilityPolicy.supportsDraftUnreact(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(unreact)",
           featureUnavailableMessage(
-              at.serverId(), "draft/unreact is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 
@@ -169,12 +167,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsMessageEdit(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsExperimentalMessageEdit(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(edit)",
           featureUnavailableMessage(
-              at.serverId(), "draft/message-edit is not negotiated on this server."));
+              at.serverId(), "Experimental draft/message-edit is not negotiated on this server."));
       return;
     }
 
@@ -212,12 +210,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsMessageRedaction(at.serverId())) {
+    if (!messageRedactionFeatureSupport.isAvailable(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
           featureUnavailableMessage(
-              at.serverId(), "message-redaction is not negotiated on this server."));
+              at.serverId(), messageRedactionFeatureSupport.negotiationUnavailableMessage()));
       return;
     }
 
@@ -236,21 +234,21 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
   private void appendEditHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = backendCapabilityPolicy.supportsMessageEdit(serverId);
+    boolean available = backendCapabilityPolicy.supportsExperimentalMessageEdit(serverId);
     ui.appendStatus(
         target,
         "(help)",
-        "/edit <msgid> <message>"
+        "/edit <msgid> <message> (experimental draft/message-edit)"
             + (available
                 ? ""
                 : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
-                    serverId, false, "requires negotiated draft/message-edit or message-edit")));
+                    serverId, false, "requires negotiated experimental draft/message-edit")));
   }
 
   private void appendRedactHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = backendCapabilityPolicy.supportsMessageRedaction(serverId);
+    boolean available = messageRedactionFeatureSupport.isAvailable(serverId);
     ui.appendStatus(
         target,
         "(help)",
@@ -258,9 +256,7 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
             + (available
                 ? ""
                 : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
-                    serverId,
-                    false,
-                    "requires negotiated draft/message-redaction or message-redaction")));
+                    serverId, false, messageRedactionFeatureSupport.requirementHint())));
   }
 
   private String featureUnavailableMessage(String serverId, String fallback) {

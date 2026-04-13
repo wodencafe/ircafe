@@ -65,6 +65,23 @@ tasks.register('functionalTest', Test) {
     shouldRunAfter(tasks.named('test'))
 }
 
+tasks.register('ircv3Showcase', JavaExec) {
+    group = 'application'
+    description = 'Launches the full IRCafe window against a real Ergo-backed IRCv3 showcase scene.'
+    dependsOn(tasks.named('functionalTestClasses'))
+    classpath = sourceSets.functionalTest.runtimeClasspath
+    mainClass = 'cafe.woden.ircclient.irc.pircbotx.client.Ircv3ErgoShowcaseManualLauncher'
+    standardInput = System.in
+
+    System.getProperties().each { key, value ->
+        String k = key == null ? '' : key.toString()
+        if (!k.startsWith('ircv3.showcase.')) {
+            return
+        }
+        systemProperty k, value
+    }
+}
+
 tasks.register('pitestIgnoreCompatibility', JavaExec) {
     group = 'verification'
     description = 'Runs PIT mutation checks for ignore normalization and irssi parsing paths.'
