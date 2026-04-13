@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import com.formdev.flatlaf.FlatClientProperties;
@@ -16,11 +17,16 @@ final class LoggingControlsSupport {
   private LoggingControlsSupport() {}
 
   static LoggingControls buildControls(
+      RuntimeConfigStore runtimeConfig,
       LogProperties logProps,
       java.util.List<AutoCloseable> closeables,
       ServerDialogs serverDialogs,
       Window owner) {
-    boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
+    boolean loggingEnabledDefault = logProps != null && Boolean.TRUE.equals(logProps.enabled());
+    boolean loggingEnabledCurrent =
+        runtimeConfig != null
+            ? runtimeConfig.readChatLoggingEnabled(loggingEnabledDefault)
+            : loggingEnabledDefault;
     boolean logSoftIgnoredCurrent =
         logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
     boolean redactionAuditEnabledCurrent =

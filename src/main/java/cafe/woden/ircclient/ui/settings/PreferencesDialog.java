@@ -1045,7 +1045,8 @@ public class PreferencesDialog {
             runtimeConfig == null
                 || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
     LoggingControls logging =
-        LoggingControlsSupport.buildControls(logProps, closeables, serverDialogs, dialog);
+        LoggingControlsSupport.buildControls(
+            runtimeConfig, logProps, closeables, serverDialogs, dialog);
 
     OutgoingColorControls outgoing = OutgoingColorControlsSupport.buildControls(dialog, current);
     JCheckBox outgoingDeliveryIndicators =

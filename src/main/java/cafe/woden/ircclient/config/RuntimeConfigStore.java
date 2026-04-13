@@ -3825,6 +3825,21 @@ public class RuntimeConfigStore
 
   // --- Chat logging / history persistence (ircafe.logging.*) ---
 
+  public synchronized boolean readChatLoggingEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "logging", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read logging.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
   public synchronized void rememberChatLoggingEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
