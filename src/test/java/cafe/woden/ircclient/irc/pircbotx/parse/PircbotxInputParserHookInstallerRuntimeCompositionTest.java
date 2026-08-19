@@ -62,7 +62,7 @@ class PircbotxInputParserHookInstallerRuntimeCompositionTest {
     }
     assertEquals(1, PircbotxIrcv3InputParser.class.getDeclaredConstructors().length);
     assertEquals(
-        17, PircbotxIrcv3InputParser.class.getDeclaredConstructors()[0].getParameterCount());
+        18, PircbotxIrcv3InputParser.class.getDeclaredConstructors()[0].getParameterCount());
   }
 
   @Test
@@ -115,6 +115,9 @@ class PircbotxInputParserHookInstallerRuntimeCompositionTest {
     assertSame(
         field(installer, "echoMessageRuntimeSupport", Ircv3EchoMessageRuntimeSupport.class),
         field(parser, "echoMessageRuntimeSupport", Ircv3EchoMessageRuntimeSupport.class));
+    assertSame(
+        field(installer, "labeledResponseRuntimeSupport", Ircv3LabeledResponseRuntimeSupport.class),
+        field(parser, "labeledResponseRuntimeSupport", Ircv3LabeledResponseRuntimeSupport.class));
 
     PircbotxAccountTagSupport accountTagSupport =
         field(parser, "accountTagSupport", PircbotxAccountTagSupport.class);

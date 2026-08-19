@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app.outbound.channel;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,6 +22,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.time.Instant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +41,7 @@ class OutboundTopicKickCommandServiceTest {
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       TestIrcv3RuntimeSupport.rawLineCorrelation(
-          backendCapabilityPolicy, labeledResponseRoutingState);
+          backendCapabilityPolicy, labeledResponseRoutingState, () -> 1L);
   private final OutboundRawCommandSupport rawCommandSupport =
       new OutboundRawCommandSupport(rawLineCorrelationService);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
@@ -94,6 +97,27 @@ class OutboundTopicKickCommandServiceTest {
 
     verify(ui).ensureTargetExists(channel);
     verify(irc).sendRaw("libera", "KICK #ircafe bob :reason");
+  }
+
+  @Test
+  void kickUsesPreparedLabeledRawLineAndRemembersCorrelation() {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "@label=ircafe-libera-1 KICK #ircafe bob :reason"))
+        .thenReturn(Completable.complete());
+
+    service.handleKick(disposables, "", "bob", "reason");
+
+    verify(labeledResponseRoutingState)
+        .remember(
+            eq("libera"),
+            eq("ircafe-libera-1"),
+            eq(channel),
+            eq("KICK #ircafe bob :reason"),
+            any(Instant.class));
+    verify(irc).sendRaw("libera", "@label=ircafe-libera-1 KICK #ircafe bob :reason");
   }
 
   @Test

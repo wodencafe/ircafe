@@ -47,6 +47,7 @@ public class PircbotxInputParserHookInstaller {
   @NonNull private final Ircv3StandardReplyRuntimeSupport standardReplyRuntimeSupport;
   @NonNull private final Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport;
   @NonNull private final Ircv3EchoMessageRuntimeSupport echoMessageRuntimeSupport;
+  @NonNull private final Ircv3LabeledResponseRuntimeSupport labeledResponseRuntimeSupport;
 
   @Autowired
   public PircbotxInputParserHookInstaller(
@@ -92,6 +93,7 @@ public class PircbotxInputParserHookInstaller {
     this.standardReplyRuntimeSupport = requiredRuntime.standardReply();
     this.serverTimeRuntimeSupport = requiredRuntime.serverTime();
     this.echoMessageRuntimeSupport = requiredRuntime.echoMessage();
+    this.labeledResponseRuntimeSupport = requiredRuntime.labeledResponse();
   }
 
   public void installIrcv3Hook(
@@ -135,7 +137,8 @@ public class PircbotxInputParserHookInstaller {
         multilineCapStateSupport,
         standardReplyRuntimeSupport,
         serverTimeRuntimeSupport,
-        echoMessageRuntimeSupport);
+        echoMessageRuntimeSupport,
+        labeledResponseRuntimeSupport);
   }
 
   boolean swapInputParser(PircBotX bot, InputParser replacement) throws Exception {
@@ -203,7 +206,8 @@ public class PircbotxInputParserHookInstaller {
             new Ircv3MultilineCapabilityRuntimeSupport(inboundCommands)),
         new Ircv3StandardReplyRuntimeSupport(inboundCommands, messageId),
         Objects.requireNonNull(serverTimeRuntimeSupport, "serverTimeRuntimeSupport"),
-        new Ircv3EchoMessageRuntimeSupport(inboundTags));
+        new Ircv3EchoMessageRuntimeSupport(inboundTags),
+        new Ircv3LabeledResponseRuntimeSupport(inboundTags));
   }
 
   private record RuntimeComposition(
@@ -218,7 +222,8 @@ public class PircbotxInputParserHookInstaller {
       PircbotxMultilineCapStateSupport multiline,
       Ircv3StandardReplyRuntimeSupport standardReply,
       Ircv3ServerTimeRuntimeSupport serverTime,
-      Ircv3EchoMessageRuntimeSupport echoMessage) {
+      Ircv3EchoMessageRuntimeSupport echoMessage,
+      Ircv3LabeledResponseRuntimeSupport labeledResponse) {
 
     private RuntimeComposition {
       Objects.requireNonNull(inboundCommands, "inboundCommands");
@@ -233,6 +238,7 @@ public class PircbotxInputParserHookInstaller {
       Objects.requireNonNull(standardReply, "standardReply");
       Objects.requireNonNull(serverTime, "serverTime");
       Objects.requireNonNull(echoMessage, "echoMessage");
+      Objects.requireNonNull(labeledResponse, "labeledResponse");
     }
   }
 }

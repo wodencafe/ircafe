@@ -127,6 +127,27 @@ class OutboundModeCommandServiceTest {
   }
 
   @Test
+  void banUsesPreparedLabeledRawLineAndRemembersCorrelation() {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "@label=ircafe-libera-1 MODE #ircafe +b trouble!*@*"))
+        .thenReturn(Completable.complete());
+
+    service.handleBan(disposables, "", List.of("trouble"));
+
+    verify(labeledResponseRoutingState)
+        .remember(
+            eq("libera"),
+            eq("ircafe-libera-1"),
+            eq(channel),
+            eq("MODE #ircafe +b trouble!*@*"),
+            any(Instant.class));
+    verify(irc).sendRaw("libera", "@label=ircafe-libera-1 MODE #ircafe +b trouble!*@*");
+  }
+
+  @Test
   void modeWhenDisconnectedShowsConnectionStatusAndDoesNotSend() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);

@@ -53,6 +53,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private final Ircv3TypingRuntimeSupport typingRuntimeSupport;
   private final Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport;
   private final Ircv3EchoMessageRuntimeSupport echoMessageRuntimeSupport;
+  private final Ircv3LabeledResponseRuntimeSupport labeledResponseRuntimeSupport;
 
   PircbotxIrcv3InputParser(
       PircBotX bot,
@@ -71,7 +72,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
       PircbotxMultilineCapStateSupport multilineCapStateSupport,
       Ircv3StandardReplyRuntimeSupport standardReplyRuntimeSupport,
       Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport,
-      Ircv3EchoMessageRuntimeSupport echoMessageRuntimeSupport) {
+      Ircv3EchoMessageRuntimeSupport echoMessageRuntimeSupport,
+      Ircv3LabeledResponseRuntimeSupport labeledResponseRuntimeSupport) {
     super(bot);
     this.serverId = serverId;
     this.sink = Objects.requireNonNull(sink, "sink");
@@ -91,6 +93,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
         Objects.requireNonNull(serverTimeRuntimeSupport, "serverTimeRuntimeSupport");
     this.echoMessageRuntimeSupport =
         Objects.requireNonNull(echoMessageRuntimeSupport, "echoMessageRuntimeSupport");
+    this.labeledResponseRuntimeSupport =
+        Objects.requireNonNull(labeledResponseRuntimeSupport, "labeledResponseRuntimeSupport");
     PircbotxCapabilityStateSupport capabilityStateSupport =
         new PircbotxCapabilityStateSupport(this.serverId, this.conn);
     this.capabilityNegotiationSupport =
@@ -142,6 +146,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     // Capture self-query target hints *before* default dispatch so onPrivateMessage/onAction can
     // resolve the destination even when PircBotX doesn't expose recipient accessors.
     captureSelfPrivateMessageTargetHint(now, sourceNick, target, command, line, parsedLine, tags);
+    emitLabeledResponseObservation(now, command, tags);
 
     // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
     super.processCommand(target, source, command, line, parsedLine, tags);
@@ -203,6 +208,23 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
 
     presenceSignalSupport.observe(now, nick, command, line, parsedLine);
+  }
+
+  private void emitLabeledResponseObservation(
+      Instant at, String command, ImmutableMap<String, String> tags) {
+    labeledResponseRuntimeSupport
+        .fromTags(command, tags)
+        .ifPresent(
+            observed ->
+                sink.accept(
+                    new ServerIrcEvent(
+                        serverId,
+                        new IrcEvent.LabeledResponseObserved(
+                            at,
+                            command,
+                            observed.label(),
+                            observed.outcome()
+                                == Ircv3LabeledResponseRuntimeSupport.Outcome.FAILURE))));
   }
 
   private boolean emitReadMarkerIfSupported(
