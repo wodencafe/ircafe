@@ -875,6 +875,10 @@ public class IrcMediator implements MediatorControlPort {
             ircv3EventCallbacks, sid, status, ev);
       }
 
+      case IrcEvent.LabeledResponseObserved ev -> {
+        mediatorServerStatusEventHandler.handleLabeledResponseObserved(sid, status, ev);
+      }
+
       case IrcEvent.Ircv3CapabilityChanged ev -> {
         mediatorIrcv3EventHandler.handleIrcv3CapabilityChanged(sid, status, ev);
       }

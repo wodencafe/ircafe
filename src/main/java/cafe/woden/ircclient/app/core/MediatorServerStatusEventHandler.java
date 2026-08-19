@@ -252,6 +252,38 @@ public class MediatorServerStatusEventHandler {
     }
   }
 
+  public void handleLabeledResponseObserved(
+      String sid, TargetRef status, IrcEvent.LabeledResponseObserved event) {
+    if (event == null || event.label().isBlank()) {
+      return;
+    }
+    LabeledResponseRoutingPort.PendingLabeledRequest pending =
+        labeledResponseRoutingState.findIfFresh(
+            sid, event.label(), LABELED_RESPONSE_CORRELATION_WINDOW);
+    if (pending == null || pending.originTarget() == null) {
+      return;
+    }
+
+    TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
+    LabeledResponseRoutingPort.Outcome outcome =
+        event.failure()
+            ? LabeledResponseRoutingPort.Outcome.FAILURE
+            : LabeledResponseRoutingPort.Outcome.SUCCESS;
+    LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
+        labeledResponseRoutingState.markOutcomeIfPending(sid, event.label(), outcome, event.at());
+    if (transitioned != null) {
+      String detail =
+          event.command().isBlank() ? "response received" : event.command() + " response received";
+      appendLabeledOutcome(
+          dest,
+          event.at(),
+          event.label(),
+          transitioned.requestPreview(),
+          transitioned.outcome(),
+          detail);
+    }
+  }
+
   public void handlePendingEchoTimeouts() {
     Instant now = Instant.now();
     List<PendingEchoMessagePort.PendingOutboundChat> timedOut =

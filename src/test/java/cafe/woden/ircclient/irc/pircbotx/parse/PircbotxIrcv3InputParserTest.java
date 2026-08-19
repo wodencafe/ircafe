@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
@@ -722,6 +723,51 @@ class PircbotxIrcv3InputParserTest {
                         && "bob".equals(r.from())
                         && "#ircafe".equals(r.target())
                         && "abc123".equals(r.messageId())));
+  }
+
+  @Test
+  void labeledKickAndBanEchoesEmitCompletionObservations() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircBotX bot = dummyBot();
+    bot.getUserChannelDao().createChannel("#ircafe");
+    PircbotxIrcv3InputParser parser = parser(bot, "libera", conn, out::add, stsPolicies());
+    parser.processCommand(
+        "#ircafe",
+        hostmask("trouble", "u", "h"),
+        "JOIN",
+        ":trouble!u@h JOIN #ircafe",
+        List.of("#ircafe"),
+        ImmutableMap.of());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            parser.processCommand(
+                "#ircafe",
+                source("me"),
+                "MODE",
+                "@label=ban-1 :me!u@h MODE #ircafe +b trouble!*@*",
+                List.of("#ircafe", "+b", "trouble!*@*"),
+                ImmutableMap.of("label", "ban-1")));
+    parser.processCommand(
+        "#ircafe",
+        source("me"),
+        "KICK",
+        "@label=kick-1 :me!u@h KICK #ircafe trouble :test",
+        List.of("#ircafe", "trouble", ":test"),
+        ImmutableMap.of("label", "kick-1"));
+
+    List<IrcEvent.LabeledResponseObserved> labeled =
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.LabeledResponseObserved.class::isInstance)
+            .map(IrcEvent.LabeledResponseObserved.class::cast)
+            .toList();
+    assertTrue(
+        labeled.stream().anyMatch(e -> "MODE".equals(e.command()) && "ban-1".equals(e.label())));
+    assertTrue(
+        labeled.stream().anyMatch(e -> "KICK".equals(e.command()) && "kick-1".equals(e.label())));
   }
 
   @Test

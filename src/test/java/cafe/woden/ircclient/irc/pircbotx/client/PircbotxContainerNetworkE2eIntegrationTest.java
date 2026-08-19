@@ -79,6 +79,7 @@ import org.testcontainers.utility.MountableFile;
  * </ul>
  */
 class PircbotxContainerNetworkE2eIntegrationTest {
+  private static final String ERGO_IRC_IMAGE = "ghcr.io/ergochat/ergo:stable";
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(80);
   private static final Duration JOIN_TIMEOUT = Duration.ofSeconds(40);
   private static final Duration MESSAGE_TIMEOUT = Duration.ofSeconds(40);
@@ -184,6 +185,135 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             events.cancel();
           } catch (Exception ignored) {
           }
+        }
+      }
+    }
+  }
+
+  @Test
+  void labeledKickAndBanCommandsCompleteAgainstContainerIrcd() throws Exception {
+    E2eConfig cfg = E2eConfig.fromSystem();
+    Assumptions.assumeTrue(
+        cfg.enabled(),
+        "Container IRC backend E2E test disabled. Set -Dirc.it.container.e2e.enabled=true.");
+    Assumptions.assumeTrue(
+        DockerClientFactory.instance().isDockerAvailable(),
+        "Docker is not available on this machine.");
+
+    try (GenericContainer<?> ircServer =
+        new GenericContainer<>(DockerImageName.parse(ERGO_IRC_IMAGE))
+            .withExposedPorts(cfg.ircPort())
+            .withEnv("TZ", "UTC")
+            .waitingFor(Wait.forListeningPort())
+            .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()))) {
+      ircServer.start();
+      RuntimeIrcConfig runtimeCfg =
+          cfg.toRuntimeConfig(ircServer.getHost(), ircServer.getMappedPort(cfg.ircPort()))
+              .withServerId(cfg.serverId() + "-labeled-admin")
+              .withNickAndLogin("adminapp", "adminapp");
+
+      try (SimpleIrcBot peerBot =
+              SimpleIrcBot.connect(
+                  ircServer.getHost(), ircServer.getMappedPort(cfg.ircPort()), cfg.botNick());
+          ServiceFixture fixture = newService(runtimeCfg, false)) {
+        PircbotxIrcClientService service = fixture.service();
+        TestSubscriber<ServerIrcEvent> events = service.events().test();
+        String serverId = runtimeCfg.serverId();
+        String channel = cfg.channel();
+        String peerNick = cfg.botNick();
+        try {
+          int readyCount = countEvents(events, serverId, IrcEvent.ConnectionReady.class);
+          service.connect(serverId).blockingAwait();
+          awaitNextEvent(
+              events, serverId, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
+
+          int joinedCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
+          service.joinChannel(serverId, channel).blockingAwait();
+          awaitNextEvent(events, serverId, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
+          peerBot.join(channel, JOIN_TIMEOUT);
+
+          String banLabel = "ircafe-it-ban";
+          String banMask = peerNick + "!*@*";
+          int banModeCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.ChannelModeObserved.class,
+                  e ->
+                      channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                          && Objects.toString(e.details(), "").contains("+b")
+                          && Objects.toString(e.details(), "").contains(banMask));
+          int banLabelCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.LabeledResponseObserved.class,
+                  e -> banLabel.equals(e.label()) && "MODE".equals(e.command()));
+          service
+              .sendRaw(serverId, "@label=" + banLabel + " MODE " + channel + " +b " + banMask)
+              .blockingAwait();
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.ChannelModeObserved.class,
+              e ->
+                  channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                      && Objects.toString(e.details(), "").contains("+b")
+                      && Objects.toString(e.details(), "").contains(banMask),
+              banModeCount,
+              MESSAGE_TIMEOUT);
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.LabeledResponseObserved.class,
+              e -> banLabel.equals(e.label()) && "MODE".equals(e.command()) && !e.failure(),
+              banLabelCount,
+              MESSAGE_TIMEOUT);
+
+          String kickLabel = "ircafe-it-kick";
+          String kickReason = "labeled-kick-integration-test";
+          int kickCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.UserKickedFromChannel.class,
+                  e ->
+                      channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                          && peerNick.equalsIgnoreCase(Objects.toString(e.nick(), "")));
+          int kickLabelCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.LabeledResponseObserved.class,
+                  e -> kickLabel.equals(e.label()) && "KICK".equals(e.command()));
+          service
+              .sendRaw(
+                  serverId,
+                  "@label=" + kickLabel + " KICK " + channel + " " + peerNick + " :" + kickReason)
+              .blockingAwait();
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.UserKickedFromChannel.class,
+              e ->
+                  channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                      && peerNick.equalsIgnoreCase(Objects.toString(e.nick(), ""))
+                      && Objects.toString(e.reason(), "").contains(kickReason),
+              kickCount,
+              MESSAGE_TIMEOUT);
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.LabeledResponseObserved.class,
+              e -> kickLabel.equals(e.label()) && "KICK".equals(e.command()) && !e.failure(),
+              kickLabelCount,
+              MESSAGE_TIMEOUT);
+        } finally {
+          try {
+            service.disconnect(serverId, "labeled admin e2e shutdown").blockingAwait();
+          } catch (Exception ignored) {
+          }
+          events.cancel();
         }
       }
     }

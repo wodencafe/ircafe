@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.core;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -15,6 +16,8 @@ import cafe.woden.ircclient.irc.ircv3.Ircv3RuntimeTestFixtures;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.LabeledResponseRoutingState;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -113,15 +116,46 @@ class MediatorServerStatusEventHandlerTest {
             eq("[465] You are banned from this server"));
   }
 
+  @Test
+  void taggedKickEchoCompletesPendingRequestBeforeTimeout() {
+    UiPort ui = mock(UiPort.class);
+    LabeledResponseRoutingState routingState = new LabeledResponseRoutingState();
+    MediatorServerStatusEventHandler handler = newHandler(null, ui, routingState);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Instant startedAt = Instant.now().minusSeconds(1);
+    Instant completedAt = Instant.now();
+    routingState.remember("libera", "kick-1", channel, "KICK #ircafe trouble :test", startedAt);
+
+    handler.handleLabeledResponseObserved(
+        "libera",
+        new TargetRef("libera", "status"),
+        new IrcEvent.LabeledResponseObserved(completedAt, "KICK", "kick-1", false));
+
+    verify(ui)
+        .appendStatusAt(
+            channel,
+            completedAt,
+            "(label-ok)",
+            "Request completed {label=kick-1}: KICK #ircafe trouble :test (KICK response received)");
+    assertTrue(routingState.collectTimedOut(Duration.ofNanos(1), 1).isEmpty());
+  }
+
   private static MediatorServerStatusEventHandler newHandler(
       IrcMediatorInteractionPort irc, UiPort ui) {
+    return newHandler(irc, ui, null);
+  }
+
+  private static MediatorServerStatusEventHandler newHandler(
+      IrcMediatorInteractionPort irc,
+      UiPort ui,
+      LabeledResponseRoutingState labeledResponseRoutingState) {
     return new MediatorServerStatusEventHandler(
         irc,
         ui,
         null,
         null,
         null,
-        null,
+        labeledResponseRoutingState,
         null,
         null,
         null,

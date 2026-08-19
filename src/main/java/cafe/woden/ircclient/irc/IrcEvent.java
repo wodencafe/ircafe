@@ -52,6 +52,7 @@ public sealed interface IrcEvent
         IrcEvent.MessageReactObserved,
         IrcEvent.MessageUnreactObserved,
         IrcEvent.MessageRedactionObserved,
+        IrcEvent.LabeledResponseObserved,
         IrcEvent.Ircv3CapabilityChanged,
         IrcEvent.WhoisResult,
         IrcEvent.WhoisProbeCompleted,
@@ -591,6 +592,15 @@ public sealed interface IrcEvent
   /** Observed IRCv3 message redaction signal (for example draft/delete tags or REDACT command). */
   record MessageRedactionObserved(Instant at, String from, String target, String messageId)
       implements IrcEvent {}
+
+  /** A non-numeric IRC command carrying a labeled-response correlation tag. */
+  record LabeledResponseObserved(Instant at, String command, String label, boolean failure)
+      implements IrcEvent {
+    public LabeledResponseObserved {
+      command = normalizeToken(command);
+      label = normalizeToken(label);
+    }
+  }
 
   /** Observed CAP change line (ACK/NEW/DEL) for a capability. */
   record Ircv3CapabilityChanged(Instant at, String subcommand, String capability, boolean enabled)
