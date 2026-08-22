@@ -670,7 +670,7 @@ public class MediatorInboundTextEventHandler {
       return;
     }
 
-    if (shouldObserveMemoServNotice(sid, event, fromSelf, suppress)) {
+    if (shouldObserveMemoServNotice(sid, event, fromSelf, suppress, dest)) {
       log.info(
           "[memoserv] captured notice serverId={} from={} target={} dest={} textLength={} preview={}",
           sid,
@@ -1341,15 +1341,13 @@ public class MediatorInboundTextEventHandler {
   }
 
   private boolean shouldObserveMemoServNotice(
-      String sid, IrcEvent.Notice event, boolean fromSelf, boolean suppress) {
+      String sid,
+      IrcEvent.Notice event,
+      boolean fromSelf,
+      boolean suppress,
+      @Nullable TargetRef destination) {
     if (fromSelf || suppress || event == null) {
-      logMemoServNoticeCandidate(
-          sid,
-          event,
-          fromSelf,
-          suppress,
-          event != null ? new TargetRef(sid, event.target()) : null,
-          "decision-skip");
+      logMemoServNoticeCandidate(sid, event, fromSelf, suppress, destination, "decision-skip");
       return false;
     }
     boolean endpoint = isMemoServEndpoint(event.from()) || isMemoServEndpoint(event.target());

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
@@ -1126,6 +1127,22 @@ class IrcMediatorMockVerifyTest {
             anyString(),
             anyString(),
             org.mockito.ArgumentMatchers.<Map<String, String>>any());
+  }
+
+  @Test
+  void selfNoticeWithoutTargetDoesNotFailInboundEventHandling() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+
+    assertDoesNotThrow(
+        () ->
+            invokeOnServerIrcEvent(
+                new ServerIrcEvent(
+                    "libera",
+                    new IrcEvent.Notice(
+                        Instant.now(), "me", "", "NOTICE → alice: heads up", "", Map.of()))));
   }
 
   @Test

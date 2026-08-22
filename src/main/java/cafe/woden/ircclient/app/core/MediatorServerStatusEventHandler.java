@@ -341,7 +341,12 @@ public class MediatorServerStatusEventHandler {
         TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
         LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
             labeledResponseRoutingState.markOutcomeIfPending(
-                sid, label, LabeledResponseRoutingPort.Outcome.SUCCESS, event.at());
+                sid,
+                label,
+                isErrorNumeric(event.code())
+                    ? LabeledResponseRoutingPort.Outcome.FAILURE
+                    : LabeledResponseRoutingPort.Outcome.SUCCESS,
+                event.at());
         if (transitioned != null) {
           appendLabeledOutcome(
               dest,

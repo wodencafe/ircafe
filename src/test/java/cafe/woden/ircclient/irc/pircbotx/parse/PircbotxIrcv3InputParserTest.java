@@ -771,6 +771,41 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
+  void labeledNumericEmitsCompletionObservationBeforePircbotxStripsTags() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxIrcv3InputParser parser = parser(dummyBot(), "libera", conn, out::add, stsPolicies());
+
+    parser.handleLine(
+        "@time=2026-08-19T19:43:56.130Z;label=invite-1 " + ":irc.example 341 me friend #ircafe");
+    assertThrows(
+        org.pircbotx.exception.IrcException.class,
+        () ->
+            parser.handleLine(
+                "@time=2026-08-19T19:43:57.130Z;label=mode-1 "
+                    + ":irc.example 482 me #ircafe :You're not a channel operator"));
+
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.LabeledResponseObserved labeled
+                        && "341".equals(labeled.command())
+                        && "invite-1".equals(labeled.label())
+                        && !labeled.failure()));
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.LabeledResponseObserved labeled
+                        && "482".equals(labeled.command())
+                        && "mode-1".equals(labeled.label())
+                        && labeled.failure()));
+  }
+
+  @Test
   void unreactTagUsesChannelContextTargetWhenPresent() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();

@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.app.outbound.invite;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,7 +51,7 @@ class OutboundInviteCommandServiceTest {
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       TestIrcv3RuntimeSupport.rawLineCorrelation(
-          backendCapabilityPolicy, labeledResponseRoutingState);
+          backendCapabilityPolicy, labeledResponseRoutingState, () -> 1L);
   private final OutboundRawCommandSupport rawCommandSupport =
       new OutboundRawCommandSupport(rawLineCorrelationService);
   private final IrcSessionRuntimeConfigPort sessionRuntimeConfig =
@@ -98,6 +100,27 @@ class OutboundInviteCommandServiceTest {
 
     verify(ui).ensureTargetExists(channel);
     verify(irc).sendRaw("libera", "INVITE bob #ircafe");
+  }
+
+  @Test
+  void inviteUsesPreparedLabeledRawLineAndRemembersCorrelation() {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "@label=ircafe-libera-1 INVITE bob #ircafe"))
+        .thenReturn(Completable.complete());
+
+    service.handleInvite(disposables, "bob", "");
+
+    verify(labeledResponseRoutingState)
+        .remember(
+            eq("libera"),
+            eq("ircafe-libera-1"),
+            eq(channel),
+            eq("INVITE bob #ircafe"),
+            any(Instant.class));
+    verify(irc).sendRaw("libera", "@label=ircafe-libera-1 INVITE bob #ircafe");
   }
 
   @Test
