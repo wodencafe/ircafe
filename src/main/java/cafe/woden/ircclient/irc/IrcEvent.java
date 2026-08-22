@@ -593,7 +593,7 @@ public sealed interface IrcEvent
   record MessageRedactionObserved(Instant at, String from, String target, String messageId)
       implements IrcEvent {}
 
-  /** A non-numeric IRC command carrying a labeled-response correlation tag. */
+  /** An IRC command or numeric carrying a labeled-response correlation tag. */
   record LabeledResponseObserved(Instant at, String command, String label, boolean failure)
       implements IrcEvent {
     public LabeledResponseObserved {

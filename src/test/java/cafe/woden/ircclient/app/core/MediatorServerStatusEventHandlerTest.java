@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -137,6 +138,40 @@ class MediatorServerStatusEventHandlerTest {
             completedAt,
             "(label-ok)",
             "Request completed {label=kick-1}: KICK #ircafe trouble :test (KICK response received)");
+    assertTrue(routingState.collectTimedOut(Duration.ofNanos(1), 1).isEmpty());
+  }
+
+  @Test
+  void taggedErrorNumericFailsPendingRequestBeforeTimeout() {
+    UiPort ui = mock(UiPort.class);
+    LabeledResponseRoutingState routingState = new LabeledResponseRoutingState();
+    MediatorServerStatusEventHandler handler = newHandler(null, ui, routingState);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Instant startedAt = Instant.now().minusSeconds(1);
+    Instant completedAt = Instant.now();
+    routingState.remember("libera", "mode-1", channel, "MODE #ircafe +q trouble", startedAt);
+
+    handler.handleServerResponseLineEvent(
+        callbacks(),
+        "libera",
+        new TargetRef("libera", "status"),
+        new IrcEvent.ServerResponseLine(
+            completedAt,
+            482,
+            "You're not a channel operator",
+            "@label=mode-1 :irc.example 482 me #ircafe :You're not a channel operator",
+            "",
+            Map.of("label", "mode-1")));
+
+    assertEquals(
+        cafe.woden.ircclient.state.api.LabeledResponseRoutingPort.Outcome.FAILURE,
+        routingState.findIfFresh("libera", "mode-1", Duration.ofMinutes(1)).outcome());
+    verify(ui)
+        .appendStatusAt(
+            channel,
+            completedAt,
+            "(label-fail)",
+            "Request failed {label=mode-1}: MODE #ircafe +q trouble (response received)");
     assertTrue(routingState.collectTimedOut(Duration.ofNanos(1), 1).isEmpty());
   }
 

@@ -191,7 +191,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
   }
 
   @Test
-  void labeledKickAndBanCommandsCompleteAgainstContainerIrcd() throws Exception {
+  void labeledChannelAdminCommandsCompleteAgainstContainerIrcd() throws Exception {
     E2eConfig cfg = E2eConfig.fromSystem();
     Assumptions.assumeTrue(
         cfg.enabled(),
@@ -230,7 +230,102 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           int joinedCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
           service.joinChannel(serverId, channel).blockingAwait();
           awaitNextEvent(events, serverId, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
+
+          String inviteLabel = "ircafe-it-invite";
+          int inviteReplyCount =
+              countEventsWhere(
+                  events, serverId, IrcEvent.ServerResponseLine.class, e -> e.code() == 341);
+          int inviteLabelCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.LabeledResponseObserved.class,
+                  e -> inviteLabel.equals(e.label()) && "341".equals(e.command()));
+          service
+              .sendRaw(serverId, "@label=" + inviteLabel + " INVITE " + peerNick + " " + channel)
+              .blockingAwait();
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.ServerResponseLine.class,
+              e -> e.code() == 341,
+              inviteReplyCount,
+              MESSAGE_TIMEOUT);
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.LabeledResponseObserved.class,
+              e -> inviteLabel.equals(e.label()) && "341".equals(e.command()) && !e.failure(),
+              inviteLabelCount,
+              MESSAGE_TIMEOUT);
+
           peerBot.join(channel, JOIN_TIMEOUT);
+
+          String modeLabel = "ircafe-it-mode";
+          int modeCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.ChannelModeObserved.class,
+                  e ->
+                      channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                          && Objects.toString(e.details(), "").contains("+v")
+                          && Objects.toString(e.details(), "").contains(peerNick));
+          int modeLabelCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.LabeledResponseObserved.class,
+                  e -> modeLabel.equals(e.label()) && "MODE".equals(e.command()));
+          service
+              .sendRaw(serverId, "@label=" + modeLabel + " MODE " + channel + " +v " + peerNick)
+              .blockingAwait();
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.ChannelModeObserved.class,
+              e ->
+                  channel.equalsIgnoreCase(Objects.toString(e.channel(), ""))
+                      && Objects.toString(e.details(), "").contains("+v")
+                      && Objects.toString(e.details(), "").contains(peerNick),
+              modeCount,
+              MESSAGE_TIMEOUT);
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.LabeledResponseObserved.class,
+              e -> modeLabel.equals(e.label()) && "MODE".equals(e.command()) && !e.failure(),
+              modeLabelCount,
+              MESSAGE_TIMEOUT);
+
+          String founderModeLabel = "ircafe-it-mode-q";
+          int founderModeLabelCount =
+              countEventsWhere(
+                  events,
+                  serverId,
+                  IrcEvent.LabeledResponseObserved.class,
+                  e -> founderModeLabel.equals(e.label()));
+          int founderModeErrorCount =
+              countEventsWhere(
+                  events, serverId, IrcEvent.ServerResponseLine.class, e -> e.code() == 482);
+          service
+              .sendRaw(
+                  serverId, "@label=" + founderModeLabel + " MODE " + channel + " +q " + peerNick)
+              .blockingAwait();
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.LabeledResponseObserved.class,
+              e -> founderModeLabel.equals(e.label()) && "482".equals(e.command()) && e.failure(),
+              founderModeLabelCount,
+              MESSAGE_TIMEOUT);
+          awaitNextEventWhere(
+              events,
+              serverId,
+              IrcEvent.ServerResponseLine.class,
+              e -> e.code() == 482,
+              founderModeErrorCount,
+              MESSAGE_TIMEOUT);
 
           String banLabel = "ircafe-it-ban";
           String banMask = peerNick + "!*@*";

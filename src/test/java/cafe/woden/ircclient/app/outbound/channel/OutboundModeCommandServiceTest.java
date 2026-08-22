@@ -88,6 +88,27 @@ class OutboundModeCommandServiceTest {
   }
 
   @Test
+  void modeUsesPreparedLabeledRawLineAndRemembersCorrelation() {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "@label=ircafe-libera-1 MODE #ircafe +q trouble"))
+        .thenReturn(Completable.complete());
+
+    service.handleMode(disposables, "+q", "trouble");
+
+    verify(labeledResponseRoutingState)
+        .remember(
+            eq("libera"),
+            eq("ircafe-libera-1"),
+            eq(channel),
+            eq("MODE #ircafe +q trouble"),
+            any(Instant.class));
+    verify(irc).sendRaw("libera", "@label=ircafe-libera-1 MODE #ircafe +q trouble");
+  }
+
+  @Test
   void opUsesPreparedLabeledRawLineAndRemembersCorrelation() {
     TargetRef status = new TargetRef("libera", "status");
     TargetRef channel = new TargetRef("libera", "#ircafe");

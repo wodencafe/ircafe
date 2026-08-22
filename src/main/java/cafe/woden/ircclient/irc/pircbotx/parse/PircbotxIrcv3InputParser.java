@@ -18,6 +18,7 @@ import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.pircbotx.UserHostmask;
 import org.pircbotx.exception.DaoException;
+import org.pircbotx.exception.IrcException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,6 +133,12 @@ final class PircbotxIrcv3InputParser extends InputParser {
   }
 
   @Override
+  public void handleLine(String rawLine) throws IOException, IrcException {
+    emitLabeledNumericObservation(rawLine);
+    super.handleLine(rawLine);
+  }
+
+  @Override
   public void processCommand(
       String target,
       UserHostmask source,
@@ -225,6 +232,38 @@ final class PircbotxIrcv3InputParser extends InputParser {
                             observed.label(),
                             observed.outcome()
                                 == Ircv3LabeledResponseRuntimeSupport.Outcome.FAILURE))));
+  }
+
+  private void emitLabeledNumericObservation(String rawLine) {
+    String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+    ParsedIrcLine parsed = PircbotxInboundLineParsers.parseIrcLine(normalized);
+    if (parsed == null || !PircbotxLineParseUtil.looksNumeric(parsed.command())) {
+      return;
+    }
+    Instant at = serverTimeRuntimeSupport.resolveRawLineOrNow(rawLine);
+    labeledResponseRuntimeSupport
+        .fromRawLine(parsed.command(), rawLine)
+        .ifPresent(
+            observed ->
+                sink.accept(
+                    new ServerIrcEvent(
+                        serverId,
+                        new IrcEvent.LabeledResponseObserved(
+                            at,
+                            parsed.command(),
+                            observed.label(),
+                            isFailureNumeric(parsed.command())
+                                || observed.outcome()
+                                    == Ircv3LabeledResponseRuntimeSupport.Outcome.FAILURE))));
+  }
+
+  private static boolean isFailureNumeric(String command) {
+    try {
+      int code = Integer.parseInt(Objects.toString(command, ""));
+      return code >= 400 && code < 600;
+    } catch (NumberFormatException ignored) {
+      return false;
+    }
   }
 
   private boolean emitReadMarkerIfSupported(
