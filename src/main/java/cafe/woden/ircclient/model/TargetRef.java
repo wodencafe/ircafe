@@ -22,6 +22,7 @@ public final class TargetRef {
   public static final String WEECHAT_FILTERS_TARGET = "__weechat_filters__";
   public static final String IGNORES_TARGET = "__ignores__";
   public static final String DCC_TRANSFERS_TARGET = "__dcc_transfers__";
+  public static final String DCC_CHAT_PREFIX = "__dcc_chat__:";
   public static final String MONITOR_GROUP_TARGET = "__monitor_group__";
   public static final String INTERCEPTORS_GROUP_TARGET = "__interceptors_group__";
   public static final String INTERCEPTOR_PREFIX = "__interceptor__:";
@@ -92,6 +93,12 @@ public final class TargetRef {
 
   public static TargetRef dccTransfers(String serverId) {
     return new TargetRef(serverId, DCC_TRANSFERS_TARGET);
+  }
+
+  public static TargetRef dccChat(String serverId, String nick) {
+    String peer = norm(nick);
+    if (peer.isEmpty()) throw new IllegalArgumentException("nick must not be blank");
+    return new TargetRef(serverId, DCC_CHAT_PREFIX + peer);
   }
 
   public static TargetRef monitorGroup(String serverId) {
@@ -207,6 +214,16 @@ public final class TargetRef {
 
   public boolean isDccTransfers() {
     return matchesBuiltInKey(DCC_TRANSFERS_TARGET);
+  }
+
+  public boolean isDccChat() {
+    return key.startsWith(DCC_CHAT_PREFIX) && !dccChatNick().isEmpty();
+  }
+
+  public String dccChatNick() {
+    String base = baseTarget();
+    if (!base.startsWith(DCC_CHAT_PREFIX)) return "";
+    return base.substring(DCC_CHAT_PREFIX.length()).trim();
   }
 
   public boolean isMonitorGroup() {
@@ -353,6 +370,9 @@ public final class TargetRef {
     if (WEECHAT_FILTERS_TARGET.equals(t)) return WEECHAT_FILTERS_TARGET;
     if (IGNORES_TARGET.equals(t)) return IGNORES_TARGET;
     if (DCC_TRANSFERS_TARGET.equals(t)) return DCC_TRANSFERS_TARGET;
+    if (t.startsWith(DCC_CHAT_PREFIX)) {
+      return DCC_CHAT_PREFIX + t.substring(DCC_CHAT_PREFIX.length()).toLowerCase(Locale.ROOT);
+    }
     if (MONITOR_GROUP_TARGET.equals(t)) return MONITOR_GROUP_TARGET;
     if (INTERCEPTORS_GROUP_TARGET.equals(t)) return INTERCEPTORS_GROUP_TARGET;
     if (t.startsWith(INTERCEPTOR_PREFIX)) {

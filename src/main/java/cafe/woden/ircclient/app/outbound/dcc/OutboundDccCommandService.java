@@ -78,6 +78,18 @@ public class OutboundDccCommandService {
         at, serverId, fromNick, dccArgument, spoiler);
   }
 
+  /** Sends ordinary input from a dedicated DCC chat tab through its active socket session. */
+  public void handleChatTargetMessage(TargetRef target, String text) {
+    if (target == null || !target.isDccChat()) return;
+    String message = Objects.toString(text, "").trim();
+    if (message.isEmpty()) return;
+
+    String nick = target.dccChatNick();
+    if (!dccChatSessionSupport.sendChatMessage(target.serverId(), nick, message)) {
+      ui.appendStatus(target, DCC_TAG, "No active DCC chat session with " + nick + ".");
+    }
+  }
+
   private void sendChatMessage(String sid, TargetRef out, String nick, String text) {
     String n = DccCommandSupport.normalizeNick(nick);
     String message = Objects.toString(text, "").trim();

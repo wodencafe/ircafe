@@ -51,7 +51,7 @@ final class DccChatSessionSupport {
       return false;
     }
 
-    TargetRef pm = dccCommandSupport.ensurePmTarget(sid, nick);
+    TargetRef chat = dccCommandSupport.ensureDccChatTarget(sid, nick);
     try {
       synchronized (session.writeLock()) {
         session.writer().write(message);
@@ -59,10 +59,10 @@ final class DccChatSessionSupport {
         session.writer().flush();
       }
       String me = mediatorIrc.currentNick(sid).orElse("me");
-      ui.appendChat(pm, "(" + me + ")", "[DCC] " + message, true);
+      ui.appendChat(chat, "(" + me + ")", message, true);
       return true;
     } catch (Exception e) {
-      ui.appendError(pm, DCC_ERR_TAG, "Failed to write DCC chat message: " + e.getMessage());
+      ui.appendError(chat, DCC_ERR_TAG, "Failed to write DCC chat message: " + e.getMessage());
       closeChatSession(sid, nick, "write-failed", true);
       return true;
     }
@@ -84,8 +84,9 @@ final class DccChatSessionSupport {
         new DccChatSession(sid, nick, socket, writer, new Object(), new AtomicBoolean(false));
     chatSessions.put(key, session);
 
-    TargetRef pm = dccCommandSupport.ensurePmTarget(sid, nick);
-    ui.appendStatus(pm, DCC_TAG, "DCC CHAT " + connectedText + " with " + nick + ".");
+    TargetRef chat = dccCommandSupport.ensureDccChatTarget(sid, nick);
+    ui.appendStatus(chat, DCC_TAG, "DCC CHAT " + connectedText + " with " + nick + ".");
+    ui.selectTarget(chat);
     if (connectedText != null && connectedText.contains("outgoing")) {
       dccCommandSupport.upsertTransfer(
           sid,
@@ -129,8 +130,8 @@ final class DccChatSessionSupport {
     session.closing().set(true);
     closeQuietly(session.socket());
     if (announce) {
-      TargetRef pm = dccCommandSupport.ensurePmTarget(sid, nick);
-      ui.appendStatus(pm, DCC_TAG, message);
+      TargetRef chat = dccCommandSupport.ensureDccChatTarget(sid, nick);
+      ui.appendStatus(chat, DCC_TAG, message);
     }
     dccCommandSupport.upsertTransfer(
         sid,
@@ -156,7 +157,7 @@ final class DccChatSessionSupport {
   }
 
   private void readDccChatLoop(String key, DccChatSession session) {
-    TargetRef pm = dccCommandSupport.ensurePmTarget(session.serverId(), session.nick());
+    TargetRef chat = dccCommandSupport.ensureDccChatTarget(session.serverId(), session.nick());
     ConcurrentMap<String, DccChatSession> chatSessions = dccRuntimeRegistry.chatSessions();
     try (BufferedReader reader =
         new BufferedReader(
@@ -167,11 +168,11 @@ final class DccChatSessionSupport {
         if (text.endsWith("\r")) {
           text = text.substring(0, text.length() - 1);
         }
-        ui.appendChat(pm, session.nick(), "[DCC] " + text, false);
-        dccCommandSupport.markUnreadIfInactive(pm);
+        ui.appendChat(chat, session.nick(), text, false);
+        dccCommandSupport.markUnreadIfInactive(chat);
       }
       if (!session.closing().get()) {
-        ui.appendStatus(pm, DCC_TAG, session.nick() + " closed the DCC CHAT session.");
+        ui.appendStatus(chat, DCC_TAG, session.nick() + " closed the DCC CHAT session.");
         dccCommandSupport.upsertTransfer(
             session.serverId(),
             session.nick(),
@@ -184,7 +185,7 @@ final class DccChatSessionSupport {
       }
     } catch (Exception e) {
       if (!session.closing().get()) {
-        ui.appendError(pm, DCC_ERR_TAG, "DCC chat connection lost: " + e.getMessage());
+        ui.appendError(chat, DCC_ERR_TAG, "DCC chat connection lost: " + e.getMessage());
         dccCommandSupport.upsertTransfer(
             session.serverId(),
             session.nick(),

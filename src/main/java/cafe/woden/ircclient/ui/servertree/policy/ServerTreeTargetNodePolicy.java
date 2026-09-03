@@ -30,7 +30,7 @@ public final class ServerTreeTargetNodePolicy {
 
   public boolean isPrivateMessageTarget(TargetRef ref) {
     if (ref == null) return false;
-    return !ref.isStatus() && !ref.isChannel() && !ref.isUiOnly();
+    return !ref.isStatus() && !ref.isChannel() && !ref.isUiOnly() && !ref.isDccChat();
   }
 
   public String leafLabel(TargetRef ref) {
@@ -51,6 +51,7 @@ public final class ServerTreeTargetNodePolicy {
     if (ref.isWeechatFilters()) return WEECHAT_FILTERS_LABEL;
     if (ref.isIgnores()) return IGNORES_LABEL;
     if (ref.isDccTransfers()) return DCC_TRANSFERS_LABEL;
+    if (ref.isDccChat()) return MESSAGES.text("serverTree.node.dccChat", ref.dccChatNick());
     return simplifyMatrixAddress(ref.baseTarget());
   }
 

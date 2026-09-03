@@ -17,6 +17,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.TestIrcv3RuntimeSupport;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationService;
@@ -45,6 +46,8 @@ class OutboundSayQuoteCommandServiceTest {
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
+  private final OutboundDccCommandService outboundDccCommandService =
+      mock(OutboundDccCommandService.class);
   private final Ircv3MultilineFeatureSupport multilineFeatureSupport =
       new Ircv3MultilineFeatureSupport(backendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc));
   private final OutboundMultilineMessageSupport outboundMultilineMessageSupport =
@@ -72,7 +75,8 @@ class OutboundSayQuoteCommandServiceTest {
           outboundConnectionStatusSupport,
           targetCoordinator,
           rawCommandSupport,
-          outboundMessagingCommandService);
+          outboundMessagingCommandService,
+          outboundDccCommandService);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach
@@ -92,6 +96,17 @@ class OutboundSayQuoteCommandServiceTest {
     service.handleSay(disposables, "hello");
 
     verify(ui).appendChat(chan, "(me)", "hello", true);
+  }
+
+  @Test
+  void sendsTextFromDccChatTargetThroughDccSession() {
+    TargetRef chat = TargetRef.dccChat("libera", "alice");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chat);
+
+    service.handleSay(disposables, "hello over DCC");
+
+    verify(outboundDccCommandService).handleChatTargetMessage(chat, "hello over DCC");
+    verify(irc, never()).sendMessage(any(), any(), any());
   }
 
   @Test

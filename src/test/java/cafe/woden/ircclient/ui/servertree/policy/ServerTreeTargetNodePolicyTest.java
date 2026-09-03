@@ -57,4 +57,13 @@ class ServerTreeTargetNodePolicyTest {
     assertEquals(
         "!abc123", policy.leafLabel(new TargetRef("matrix", "!abc123:matrix.example.org")));
   }
+
+  @Test
+  void dccChatTargetUsesDistinctLabelAndIsNotPersistedAsPrivateMessage() {
+    ServerTreeTargetNodePolicy policy = new ServerTreeTargetNodePolicy(null);
+    TargetRef chat = TargetRef.dccChat("libera", "Alice");
+
+    assertEquals("DCC: Alice", policy.leafLabel(chat));
+    assertEquals(false, policy.isPrivateMessageTarget(chat));
+  }
 }
