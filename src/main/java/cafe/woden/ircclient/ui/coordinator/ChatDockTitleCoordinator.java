@@ -70,6 +70,7 @@ public final class ChatDockTitleCoordinator {
     if (target.isWeechatFilters()) return title("chatDock.title.filters");
     if (target.isIgnores()) return title("chatDock.title.ignores");
     if (target.isDccTransfers()) return title("chatDock.title.dccTransfers");
+    if (target.isDccChat()) return MESSAGES.text("chatDock.title.dccChat", target.dccChatNick());
     if (target.isMonitorGroup()) return title("chatDock.title.monitor");
     if (target.isInterceptorsGroup()) return title("chatDock.title.interceptors");
     if (target.isApplicationUnhandledErrors()) return title("chatDock.title.unhandledErrors");

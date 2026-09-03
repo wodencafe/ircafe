@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
@@ -29,6 +30,7 @@ public final class OutboundSayQuoteCommandService {
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final OutboundMessagingCommandService outboundMessagingCommandService;
+  @NonNull private final OutboundDccCommandService outboundDccCommandService;
 
   public void handleSay(CompositeDisposable disposables, String msg) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -42,6 +44,11 @@ public final class OutboundSayQuoteCommandService {
 
     if (at.isStatus()) {
       sendRawFromStatus(disposables, at.serverId(), m);
+      return;
+    }
+
+    if (at.isDccChat()) {
+      outboundDccCommandService.handleChatTargetMessage(at, m);
       return;
     }
 

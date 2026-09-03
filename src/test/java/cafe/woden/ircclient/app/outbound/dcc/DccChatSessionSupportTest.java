@@ -14,6 +14,8 @@ import cafe.woden.ircclient.dcc.api.DccActionHint;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.StringWriter;
 import java.net.Socket;
 import java.util.Optional;
@@ -48,7 +50,7 @@ class DccChatSessionSupportTest {
     StringWriter sink = new StringWriter();
     BufferedWriter writer = new BufferedWriter(sink);
     Socket socket = mock(Socket.class);
-    TargetRef pm = new TargetRef("libera", "alice");
+    TargetRef chat = TargetRef.dccChat("libera", "alice");
 
     dccRuntimeRegistry
         .chatSessions()
@@ -60,15 +62,29 @@ class DccChatSessionSupportTest {
 
     assertTrue(support.sendChatMessage("libera", "alice", "hello world"));
 
-    verify(ui).ensureTargetExists(pm);
-    verify(ui).appendChat(eq(pm), eq("(chris)"), eq("[DCC] hello world"), eq(true));
+    verify(ui).ensureTargetExists(chat);
+    verify(ui).appendChat(eq(chat), eq("(chris)"), eq("hello world"), eq(true));
     assertTrue(sink.toString().contains("hello world\r\n"));
+  }
+
+  @Test
+  void startChatSessionOpensAndSelectsDedicatedDccTarget() throws Exception {
+    Socket socket = mock(Socket.class);
+    TargetRef chat = TargetRef.dccChat("libera", "alice");
+    when(socket.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
+    when(socket.getOutputStream()).thenReturn(new ByteArrayOutputStream());
+
+    support.startChatSession("libera", "alice", socket, "incoming connection");
+
+    verify(ui).ensureTargetExists(chat);
+    verify(ui).appendStatus(chat, "(dcc)", "DCC CHAT incoming connection with alice.");
+    verify(ui).selectTarget(chat);
   }
 
   @Test
   void closeChatSessionAnnouncesAndUpdatesTransferState() {
     Socket socket = mock(Socket.class);
-    TargetRef pm = new TargetRef("libera", "alice");
+    TargetRef chat = TargetRef.dccChat("libera", "alice");
 
     dccRuntimeRegistry
         .chatSessions()
@@ -84,8 +100,8 @@ class DccChatSessionSupportTest {
 
     assertTrue(support.closeChatSession("libera", "alice", "Closed DCC CHAT session.", true));
 
-    verify(ui).ensureTargetExists(pm);
-    verify(ui).appendStatus(pm, "(dcc)", "Closed DCC CHAT session.");
+    verify(ui).ensureTargetExists(chat);
+    verify(ui).appendStatus(chat, "(dcc)", "Closed DCC CHAT session.");
     verify(dccTransferStore)
         .upsert(
             "libera",

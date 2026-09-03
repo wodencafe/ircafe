@@ -29,6 +29,12 @@ final class DccCommandSupport {
     return pm;
   }
 
+  TargetRef ensureDccChatTarget(String sid, String nick) {
+    TargetRef chat = TargetRef.dccChat(sid, nick);
+    ui.ensureTargetExists(chat);
+    return chat;
+  }
+
   void markUnreadIfInactive(TargetRef target) {
     TargetRef active = targetCoordinator.getActiveTarget();
     if (!target.equals(active)) {

@@ -60,4 +60,16 @@ class TargetRefChannelSemanticsTest {
     assertEquals(TargetRef.MEMOSERV_TARGET, ref.baseTarget());
     assertEquals("libera", ref.networkQualifierToken());
   }
+
+  @Test
+  void dccChatTargetHasSeparateCaseInsensitiveIdentityAndExposesPeerNick() {
+    TargetRef ref = TargetRef.dccChat("libera", "Alice");
+
+    assertTrue(ref.isDccChat());
+    assertFalse(ref.isUiOnly());
+    assertFalse(ref.isChannel());
+    assertEquals("Alice", ref.dccChatNick());
+    assertEquals(ref, TargetRef.dccChat("libera", "alice"));
+    assertFalse(ref.equals(new TargetRef("libera", "Alice")));
+  }
 }

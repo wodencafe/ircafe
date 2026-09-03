@@ -45,6 +45,9 @@ class ChatDockTitleCoordinatorTest {
 
     activeTarget.set(new TargetRef("libera", "#ircafe"));
     assertEquals("#ircafe", coordinator.tabText());
+
+    activeTarget.set(TargetRef.dccChat("libera", "Alice"));
+    assertEquals("DCC: Alice", coordinator.tabText());
   }
 
   @Test
