@@ -239,7 +239,7 @@ class IrcMediatorMockVerifyTest {
       mock(MessageTranslationDispatcher.class);
   private final MediatorInboundEventPreparationService eventPreparationService =
       new MediatorInboundEventPreparationService(
-          irc, notificationRuleMatcherPort, inboundIgnorePolicy);
+          irc, notificationRuleMatcherPort, inboundIgnorePolicy, targetCoordinator);
   private final MediatorTargetUiSupport mediatorTargetUiSupport =
       new MediatorTargetUiSupport(ui, targetCoordinator, eventPreparationService);
   private final MediatorNotificationSupport mediatorNotificationSupport =
@@ -1443,6 +1443,23 @@ class IrcMediatorMockVerifyTest {
     verify(ui, never())
         .failPendingOutgoingChat(eq(pm), anyString(), any(), anyString(), anyString(), anyString());
     verify(ui, never()).appendErrorAt(eq(pm), any(), eq("(send)"), anyString());
+  }
+
+  @Test
+  void preparedNickListFinishesWithoutRepeatingRosterWork() throws Exception {
+    IrcEvent.NickListUpdated roster =
+        new IrcEvent.NickListUpdated(
+            Instant.parse("2026-09-03T12:00:00Z"),
+            "#linux",
+            List.of(new IrcEvent.NickInfo("alice", "@", "alice!user@host")),
+            1,
+            1);
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", roster));
+
+    verify(targetCoordinator).prepareNickListUpdated("libera", roster);
+    verify(targetCoordinator).finishNickListUpdated("libera", roster);
+    verify(targetCoordinator, never()).onNickListUpdated("libera", roster);
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

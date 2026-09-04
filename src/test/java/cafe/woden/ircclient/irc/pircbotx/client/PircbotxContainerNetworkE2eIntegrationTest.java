@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.contains;
@@ -64,6 +65,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -108,6 +110,56 @@ class PircbotxContainerNetworkE2eIntegrationTest {
   @AfterEach
   void tearDownSchedulers() {
     RxVirtualSchedulers.shutdown();
+  }
+
+  @Test
+  void ircBackendLoadsLargeNamesRosterFromScriptedServer() throws Exception {
+    int rosterSize = 1_200;
+    try (ScriptedLargeRosterIrcServer server = new ScriptedLargeRosterIrcServer(rosterSize)) {
+      RuntimeIrcConfig runtimeCfg =
+          new RuntimeIrcConfig(
+              "large-roster-it",
+              InetAddress.getLoopbackAddress().getHostAddress(),
+              server.port(),
+              "",
+              "ircafe-it",
+              "ircafe-it",
+              "IRCafe IT");
+      try (ServiceFixture fixture = newService(runtimeCfg, false)) {
+        PircbotxIrcClientService service = fixture.service();
+        TestSubscriber<ServerIrcEvent> events = service.events().test();
+        try {
+          service.connect(runtimeCfg.serverId()).blockingAwait();
+          awaitNextEvent(
+              events, runtimeCfg.serverId(), IrcEvent.Connected.class, 0, CONNECT_TIMEOUT);
+
+          IrcEvent.NickListUpdated roster =
+              assertTimeout(
+                  Duration.ofSeconds(5),
+                  () -> {
+                    service.joinChannel(runtimeCfg.serverId(), "#linux").blockingAwait();
+                    return awaitNextEventWhere(
+                        events,
+                        runtimeCfg.serverId(),
+                        IrcEvent.NickListUpdated.class,
+                        event -> event.totalUsers() == rosterSize,
+                        0,
+                        JOIN_TIMEOUT);
+                  });
+
+          assertEquals(rosterSize, roster.totalUsers());
+          assertEquals(rosterSize, roster.nicks().size());
+          assertEquals("ircafe-it", roster.nicks().getFirst().nick());
+          server.assertHealthy();
+        } finally {
+          try {
+            service.disconnect(runtimeCfg.serverId(), "scripted roster shutdown").blockingAwait();
+          } catch (Exception ignored) {
+          }
+          events.cancel();
+        }
+      }
+    }
   }
 
   @Test
@@ -1869,6 +1921,137 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     private static String safeTrim(String value, String fallback) {
       String trimmed = Objects.toString(value, "").trim();
       return trimmed.isEmpty() ? fallback : trimmed;
+    }
+  }
+
+  private static final class ScriptedLargeRosterIrcServer implements AutoCloseable {
+    private static final String CHANNEL = "#linux";
+    private static final String SERVER_NAME = "irc.large.test";
+
+    private final ServerSocket serverSocket;
+    private final Thread serverThread;
+    private final int rosterSize;
+    private final AtomicReference<Throwable> failure = new AtomicReference<>();
+    private volatile Socket clientSocket;
+
+    private ScriptedLargeRosterIrcServer(int rosterSize) throws IOException {
+      this.rosterSize = rosterSize;
+      this.serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+      this.serverThread = Thread.startVirtualThread(this::serve);
+    }
+
+    private int port() {
+      return serverSocket.getLocalPort();
+    }
+
+    private void serve() {
+      try (Socket socket = serverSocket.accept();
+          BufferedReader reader =
+              new BufferedReader(
+                  new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+          BufferedWriter writer =
+              new BufferedWriter(
+                  new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
+        clientSocket = socket;
+        socket.setSoTimeout((int) CONNECT_TIMEOUT.toMillis());
+        String nick = "ircafe-it";
+        boolean userSeen = false;
+        boolean capEnded = false;
+        boolean welcomed = false;
+        String line;
+        while ((line = reader.readLine()) != null) {
+          if (line.startsWith("NICK ")) {
+            nick = line.substring(5).trim();
+          } else if (line.startsWith("USER ")) {
+            userSeen = true;
+          } else if (line.startsWith("CAP LS")) {
+            sendLine(writer, ":" + SERVER_NAME + " CAP * LS :multi-prefix");
+          } else if (line.startsWith("CAP REQ")) {
+            String requested = line.substring("CAP REQ".length()).trim();
+            sendLine(writer, ":" + SERVER_NAME + " CAP " + nick + " ACK " + requested);
+          } else if (line.equals("CAP END")) {
+            capEnded = true;
+          } else if (line.startsWith("PING ")) {
+            sendLine(writer, "PONG " + line.substring(5));
+          }
+
+          if (!welcomed && userSeen && capEnded) {
+            welcomed = true;
+            sendWelcome(writer, nick);
+          }
+
+          if (welcomed && line.equalsIgnoreCase("JOIN " + CHANNEL)) {
+            sendRoster(writer, nick);
+          }
+        }
+      } catch (java.net.SocketException ignored) {
+        // Expected when the fixture closes the socket after the client disconnects.
+      } catch (Throwable t) {
+        failure.compareAndSet(null, t);
+      }
+    }
+
+    private void sendWelcome(BufferedWriter writer, String nick) throws IOException {
+      sendLine(writer, ":" + SERVER_NAME + " 001 " + nick + " :Welcome to the test network");
+      sendLine(
+          writer,
+          ":" + SERVER_NAME + " 005 " + nick + " PREFIX=(qaohv)~&@%+ CHANTYPES=# :are supported");
+      sendLine(writer, ":" + SERVER_NAME + " 376 " + nick + " :End of MOTD");
+    }
+
+    private void sendRoster(BufferedWriter writer, String nick) throws IOException {
+      sendLine(writer, ":" + nick + "!user@localhost JOIN :" + CHANNEL);
+      ArrayList<String> names = new ArrayList<>(rosterSize);
+      names.add("@" + nick);
+      for (int i = 1; i < rosterSize; i++) {
+        names.add((i % 100 == 0 ? "+" : "") + "user" + String.format("%04d", i));
+      }
+      int batchSize = 30;
+      for (int start = 0; start < names.size(); start += batchSize) {
+        int end = Math.min(names.size(), start + batchSize);
+        sendLine(
+            writer,
+            ":"
+                + SERVER_NAME
+                + " 353 "
+                + nick
+                + " = "
+                + CHANNEL
+                + " :"
+                + String.join(" ", names.subList(start, end)));
+      }
+      sendLine(writer, ":" + SERVER_NAME + " 366 " + nick + " " + CHANNEL + " :End of NAMES");
+    }
+
+    private static void sendLine(BufferedWriter writer, String line) throws IOException {
+      writer.write(line);
+      writer.write("\r\n");
+      writer.flush();
+    }
+
+    private void assertHealthy() {
+      Throwable problem = failure.get();
+      if (problem != null) {
+        throw new AssertionError("scripted IRC server failed", problem);
+      }
+    }
+
+    @Override
+    public void close() {
+      try {
+        Socket socket = clientSocket;
+        if (socket != null) socket.close();
+      } catch (IOException ignored) {
+      }
+      try {
+        serverSocket.close();
+      } catch (IOException ignored) {
+      }
+      try {
+        serverThread.join(2_000L);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+      }
     }
   }
 

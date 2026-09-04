@@ -92,7 +92,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final Set<TargetRef> bouncerDetachedChannels = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
-  private TargetRef activeTarget;
+  private volatile TargetRef activeTarget;
 
   public TargetCoordinator(
       UiPort ui,
@@ -258,6 +258,11 @@ public class TargetCoordinator implements ActiveTargetPort {
   }
 
   public void onNickListUpdated(String serverId, IrcEvent.NickListUpdated ev) {
+    prepareNickListUpdated(serverId, ev);
+    finishNickListUpdated(serverId, ev);
+  }
+
+  public void prepareNickListUpdated(String serverId, IrcEvent.NickListUpdated ev) {
     if (ev == null) return;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
@@ -268,6 +273,12 @@ public class TargetCoordinator implements ActiveTargetPort {
     // USERHOST probes for nicks with missing hostmask/away info. This is a no-op unless the
     // feature is enabled in Preferences.
     updateEnrichmentFromRoster(sid, ev.channel(), ev.nicks());
+  }
+
+  public void finishNickListUpdated(String serverId, IrcEvent.NickListUpdated ev) {
+    if (ev == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
 
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
