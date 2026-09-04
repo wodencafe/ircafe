@@ -378,7 +378,10 @@ class MemoServPanelContainerFunctionalTest {
 
     MediatorInboundEventPreparationService preparationService =
         new MediatorInboundEventPreparationService(
-            mediatorIrc, mock(NotificationRuleMatcherPort.class), allowAllInbound());
+            mediatorIrc,
+            mock(NotificationRuleMatcherPort.class),
+            allowAllInbound(),
+            targetCoordinator);
     MediatorTargetUiSupport targetUiSupport =
         new MediatorTargetUiSupport(ui, targetCoordinator, preparationService);
     MediatorNotificationSupport notificationSupport =
