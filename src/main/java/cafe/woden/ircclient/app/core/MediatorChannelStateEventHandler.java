@@ -88,9 +88,18 @@ public class MediatorChannelStateEventHandler {
   }
 
   public void handleNickListUpdated(String sid, IrcEvent.NickListUpdated event) {
+    handleNickListUpdated(sid, event, false);
+  }
+
+  public void handleNickListUpdated(
+      String sid, IrcEvent.NickListUpdated event, boolean rosterPrepared) {
     observeChannelActivity(sid, event.channel());
     inboundModeEventHandler.onNickListUpdated(sid, event.channel());
-    targetCoordinator.onNickListUpdated(sid, event);
+    if (rosterPrepared) {
+      targetCoordinator.finishNickListUpdated(sid, event);
+    } else {
+      targetCoordinator.onNickListUpdated(sid, event);
+    }
   }
 
   public void handleUserHostmaskObserved(String sid, IrcEvent.UserHostmaskObserved event) {

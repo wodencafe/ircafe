@@ -2,18 +2,98 @@ package cafe.woden.ircclient.irc.roster;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import java.lang.reflect.Field;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class UserListStoreTest {
+
+  @Test
+  void deferredPresenceUpdatesPreserveMissingDetailsAndClearLoggedOutState() {
+    UserListStore store = new UserListStore();
+    String serverId = "libera";
+    String channel = "#linux";
+    store.put(
+        serverId,
+        channel,
+        List.of(
+            new NickInfo(
+                "alice",
+                "",
+                "alice!user@host",
+                AwayState.AWAY,
+                "brb",
+                AccountState.LOGGED_IN,
+                "alice-account")));
+
+    assertTrue(store.updateAwayStateAcrossChannels(serverId, "alice", AwayState.AWAY).isEmpty());
+    assertTrue(
+        store
+            .updateAccountAcrossChannels(serverId, "alice", AccountState.LOGGED_IN, null)
+            .isEmpty());
+    assertEquals("brb", store.get(serverId, channel).getFirst().awayMessage());
+    assertEquals("alice-account", store.get(serverId, channel).getFirst().accountName());
+
+    assertEquals(
+        Set.of(channel), store.updateAwayStateAcrossChannels(serverId, "alice", AwayState.HERE));
+    assertEquals(
+        Set.of(channel),
+        store.updateAccountAcrossChannels(serverId, "alice", AccountState.LOGGED_OUT, null));
+    NickInfo updated = store.get(serverId, channel).getFirst();
+    assertEquals(AwayState.HERE, updated.awayState());
+    assertNull(updated.awayMessage());
+    assertEquals(AccountState.LOGGED_OUT, updated.accountState());
+    assertNull(updated.accountName());
+  }
+
+  @Test
+  void enrichesLargeRosterMetadataWithoutRepeatedFullRosterCopies() {
+    UserListStore store = new UserListStore();
+    String serverId = "libera";
+    String channel = "#linux";
+    int rosterSize = 1_200;
+    ArrayList<NickInfo> roster = new ArrayList<>(rosterSize);
+    for (int i = 0; i < rosterSize; i++) {
+      roster.add(new NickInfo("user" + i, "", ""));
+    }
+    store.put(serverId, channel, roster);
+
+    assertTimeout(
+        Duration.ofSeconds(2),
+        () -> {
+          for (int i = 0; i < rosterSize; i++) {
+            String nick = "user" + i;
+            assertEquals(
+                Set.of(channel),
+                store.updateHostmaskAcrossChannels(
+                    serverId, nick, nick + "!user@host" + i + ".example"));
+            assertEquals(
+                Set.of(channel),
+                store.updateAwayStateAcrossChannels(serverId, nick, AwayState.AWAY, "away " + i));
+            assertEquals(
+                Set.of(channel),
+                store.updateAccountAcrossChannels(
+                    serverId, nick, AccountState.LOGGED_IN, "account" + i));
+          }
+        });
+
+    NickInfo last = store.get(serverId, channel).get(1199);
+    assertEquals("user1199!user@host1199.example", last.hostmask());
+    assertEquals(AwayState.AWAY, last.awayState());
+    assertEquals("away 1199", last.awayMessage());
+    assertEquals(AccountState.LOGGED_IN, last.accountState());
+    assertEquals("account1199", last.accountName());
+  }
 
   @Test
   void updateRealNameAcrossChannelsRefreshesRosterWithoutLosingOtherIdentityFields() {

@@ -28,6 +28,7 @@ public class MediatorInboundEventPreparationService {
 
   private final NotificationRuleMatcherPort notificationRuleMatcherPort;
   private final InboundIgnorePolicyPort inboundIgnorePolicy;
+  private final TargetCoordinator targetCoordinator;
 
   boolean shouldPrepareOffEdt(ServerIrcEvent se) {
     if (se == null || se.event() == null) return false;
@@ -37,7 +38,8 @@ public class MediatorInboundEventPreparationService {
         || se.event() instanceof IrcEvent.PrivateMessage
         || se.event() instanceof IrcEvent.PrivateAction
         || se.event() instanceof IrcEvent.Notice
-        || se.event() instanceof IrcEvent.CtcpRequestReceived;
+        || se.event() instanceof IrcEvent.CtcpRequestReceived
+        || se.event() instanceof IrcEvent.NickListUpdated;
   }
 
   PreparedServerIrcEvent prepare(ServerIrcEvent se) {
@@ -52,7 +54,8 @@ public class MediatorInboundEventPreparationService {
           PreparedPrivateMessage.empty(),
           PreparedPrivateAction.empty(),
           PreparedNotice.empty(),
-          PreparedCtcpRequest.empty());
+          PreparedCtcpRequest.empty(),
+          false);
     }
     if (event instanceof IrcEvent.ChannelAction ev) {
       return new PreparedServerIrcEvent(
@@ -61,7 +64,8 @@ public class MediatorInboundEventPreparationService {
           PreparedPrivateMessage.empty(),
           PreparedPrivateAction.empty(),
           PreparedNotice.empty(),
-          PreparedCtcpRequest.empty());
+          PreparedCtcpRequest.empty(),
+          false);
     }
     if (event instanceof IrcEvent.PrivateMessage ev) {
       return new PreparedServerIrcEvent(
@@ -70,7 +74,8 @@ public class MediatorInboundEventPreparationService {
           preparePrivateMessage(sid, ev),
           PreparedPrivateAction.empty(),
           PreparedNotice.empty(),
-          PreparedCtcpRequest.empty());
+          PreparedCtcpRequest.empty(),
+          false);
     }
     if (event instanceof IrcEvent.PrivateAction ev) {
       return new PreparedServerIrcEvent(
@@ -79,7 +84,8 @@ public class MediatorInboundEventPreparationService {
           PreparedPrivateMessage.empty(),
           preparePrivateAction(sid, ev),
           PreparedNotice.empty(),
-          PreparedCtcpRequest.empty());
+          PreparedCtcpRequest.empty(),
+          false);
     }
     if (event instanceof IrcEvent.Notice ev) {
       return new PreparedServerIrcEvent(
@@ -88,7 +94,8 @@ public class MediatorInboundEventPreparationService {
           PreparedPrivateMessage.empty(),
           PreparedPrivateAction.empty(),
           prepareNotice(sid, ev),
-          PreparedCtcpRequest.empty());
+          PreparedCtcpRequest.empty(),
+          false);
     }
     if (event instanceof IrcEvent.CtcpRequestReceived ev) {
       return new PreparedServerIrcEvent(
@@ -97,7 +104,12 @@ public class MediatorInboundEventPreparationService {
           PreparedPrivateMessage.empty(),
           PreparedPrivateAction.empty(),
           PreparedNotice.empty(),
-          prepareCtcpRequest(sid, ev));
+          prepareCtcpRequest(sid, ev),
+          false);
+    }
+    if (event instanceof IrcEvent.NickListUpdated ev) {
+      targetCoordinator.prepareNickListUpdated(sid, ev);
+      return PreparedServerIrcEvent.preparedRoster(se);
     }
     return PreparedServerIrcEvent.unprepared(se);
   }
@@ -403,7 +415,8 @@ record PreparedServerIrcEvent(
     PreparedPrivateMessage privateMessage,
     PreparedPrivateAction privateAction,
     PreparedNotice notice,
-    PreparedCtcpRequest ctcpRequest) {
+    PreparedCtcpRequest ctcpRequest,
+    boolean rosterPrepared) {
   static PreparedServerIrcEvent empty() {
     return new PreparedServerIrcEvent(
         null,
@@ -411,7 +424,8 @@ record PreparedServerIrcEvent(
         PreparedPrivateMessage.empty(),
         PreparedPrivateAction.empty(),
         PreparedNotice.empty(),
-        PreparedCtcpRequest.empty());
+        PreparedCtcpRequest.empty(),
+        false);
   }
 
   static PreparedServerIrcEvent unprepared(ServerIrcEvent event) {
@@ -421,6 +435,18 @@ record PreparedServerIrcEvent(
         PreparedPrivateMessage.empty(),
         PreparedPrivateAction.empty(),
         PreparedNotice.empty(),
-        PreparedCtcpRequest.empty());
+        PreparedCtcpRequest.empty(),
+        false);
+  }
+
+  static PreparedServerIrcEvent preparedRoster(ServerIrcEvent event) {
+    return new PreparedServerIrcEvent(
+        event,
+        PreparedChannelText.empty(),
+        PreparedPrivateMessage.empty(),
+        PreparedPrivateAction.empty(),
+        PreparedNotice.empty(),
+        PreparedCtcpRequest.empty(),
+        true);
   }
 }

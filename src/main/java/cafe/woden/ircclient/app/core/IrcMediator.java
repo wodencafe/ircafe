@@ -800,7 +800,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.NickListUpdated ev -> {
-        handleNickListUpdated(sid, ev);
+        handleNickListUpdated(sid, ev, prepared.rosterPrepared());
       }
 
       case IrcEvent.UserHostmaskObserved ev -> {
@@ -907,8 +907,9 @@ public class IrcMediator implements MediatorControlPort {
     mediatorChannelStateEventHandler.handleZncPlaybackBatchReceived(sid, ev);
   }
 
-  private void handleNickListUpdated(String sid, IrcEvent.NickListUpdated ev) {
-    mediatorChannelStateEventHandler.handleNickListUpdated(sid, ev);
+  private void handleNickListUpdated(
+      String sid, IrcEvent.NickListUpdated ev, boolean rosterPrepared) {
+    mediatorChannelStateEventHandler.handleNickListUpdated(sid, ev, rosterPrepared);
   }
 
   private void handleUserHostmaskObserved(String sid, IrcEvent.UserHostmaskObserved ev) {
