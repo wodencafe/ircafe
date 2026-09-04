@@ -734,6 +734,17 @@ public class MediatorInboundTextEventHandler {
       return;
     }
 
+    if ("DCC".equalsIgnoreCase(command)
+        && Objects.toString(event.channel(), "").trim().isEmpty()
+        && outboundDccCommandService.handleInboundDccOffer(
+            event.at(),
+            sid,
+            event.from(),
+            argument,
+            decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER)) {
+      return;
+    }
+
     TargetRef dest = resolveCtcpRequestDestination(callbacks, sid, status, event);
     maybeMarkPrivateMessagePeerOnlineForCtcp(callbacks, sid, event, dest);
 

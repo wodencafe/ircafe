@@ -231,11 +231,19 @@ public class MediatorInboundEventPreparationService {
     String command = Objects.toString(ev.command(), "").trim();
     String argument = Objects.toString(ev.argument(), "").trim();
     String normalizedText = normalizeCtcpPayload(command, argument);
+    boolean isDcc = "DCC".equalsIgnoreCase(command);
+    String[] ignoreLevels = isDcc ? new String[] {"DCC", "CTCPS"} : new String[] {"CTCPS"};
     return new PreparedCtcpRequest(
         command,
         argument,
         normalizedText,
-        decideInbound(serverId, ev.from(), true, ev.channel(), normalizedText, "CTCPS"));
+        decideInbound(
+            serverId,
+            ev.from(),
+            true,
+            ev.channel(),
+            isDcc ? argument : normalizedText,
+            ignoreLevels));
   }
 
   private NotificationRuleMatch firstRuleMatchForChannel(

@@ -1174,6 +1174,36 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void dccCtcpRequestIsHandledAsInboundOffer() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    Instant at = Instant.now();
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(outboundDccCommandService.handleInboundDccOffer(
+            at, "libera", "alice", "CHAT chat 127.0.0.1 54321", false))
+        .thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(
+                at, "alice", "DCC", "CHAT chat 127.0.0.1 54321", null)));
+
+    verify(outboundDccCommandService)
+        .handleInboundDccOffer(at, "libera", "alice", "CHAT chat 127.0.0.1 54321", false);
+    verify(inboundIgnorePolicy)
+        .decide(
+            "libera",
+            "alice",
+            null,
+            true,
+            List.of("DCC", "CTCPS"),
+            "",
+            "CHAT chat 127.0.0.1 54321");
+    verify(ui, never()).appendStatusAt(eq(status), any(), eq("(ctcp)"), anyString());
+  }
+
+  @Test
   void ctcpReceiveHardDropIgnoreDecisionSuppressesOutput() throws Exception {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
