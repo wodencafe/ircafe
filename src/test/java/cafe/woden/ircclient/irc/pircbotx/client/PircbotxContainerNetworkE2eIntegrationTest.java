@@ -3,33 +3,48 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.QuitMessageRuntimeConfigPort;
+import cafe.woden.ircclient.config.execution.ExecutorConfig;
 import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.dcc.api.DccTransferCommandPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.playback.*;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,6 +59,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -53,6 +69,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -188,6 +205,127 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         }
       }
     }
+  }
+
+  @Test
+  void ircBackendReceivesAndConnectsInboundDccChatFromContainerPeer() throws Exception {
+    E2eConfig cfg = E2eConfig.fromSystem();
+    Assumptions.assumeTrue(
+        cfg.enabled(),
+        "Container IRC backend E2E test disabled. Set -Dirc.it.container.e2e.enabled=true.");
+    Assumptions.assumeTrue(
+        DockerClientFactory.instance().isDockerAvailable(),
+        "Docker is not available on this machine.");
+
+    try (GenericContainer<?> ircServer = newIrcContainer(cfg);
+        ServerSocket dccPeer = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+      ircServer.start();
+      dccPeer.setSoTimeout((int) MESSAGE_TIMEOUT.toMillis());
+      RuntimeIrcConfig runtimeCfg =
+          cfg.toRuntimeConfig(ircServer.getHost(), ircServer.getMappedPort(cfg.ircPort()))
+              .withServerId(cfg.serverId() + "-dcc-inbound")
+              .withNickAndLogin("dccapp", "dccapp");
+
+      try (SimpleIrcBot peer =
+              SimpleIrcBot.connect(
+                  ircServer.getHost(), ircServer.getMappedPort(cfg.ircPort()), "dccpeer");
+          ServiceFixture fixture = newService(runtimeCfg, false)) {
+        PircbotxIrcClientService service = fixture.service();
+        TestSubscriber<ServerIrcEvent> events = service.events().test();
+        try {
+          String serverId = runtimeCfg.serverId();
+          service.connect(serverId).blockingAwait();
+          awaitNextEvent(events, serverId, IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
+
+          peer.sendLine(
+              "PRIVMSG dccapp :\u0001DCC CHAT chat 2130706433 "
+                  + dccPeer.getLocalPort()
+                  + "\u0001");
+
+          IrcEvent.CtcpRequestReceived offer =
+              awaitNextEventWhere(
+                  events,
+                  serverId,
+                  IrcEvent.CtcpRequestReceived.class,
+                  event -> "DCC".equals(event.command()),
+                  0,
+                  MESSAGE_TIMEOUT);
+          assertEquals("dccpeer", offer.from());
+          assertEquals("CHAT chat 127.0.0.1 " + dccPeer.getLocalPort(), offer.argument());
+
+          try (DccServiceFixture dcc = newDccServiceFixture(serverId)) {
+            CompositeDisposable disposables = new CompositeDisposable();
+            try {
+              assertTrue(
+                  dcc.service()
+                      .handleInboundDccOffer(
+                          offer.at(), serverId, offer.from(), offer.argument(), false));
+              TargetRef pmTarget = new TargetRef(serverId, "dccpeer");
+              verify(dcc.ui())
+                  .appendStatusAt(
+                      eq(pmTarget), eq(offer.at()), eq("(dcc)"), contains("DCC CHAT offer"));
+              verify(dcc.ui()).markUnread(pmTarget);
+              dcc.service().handleDcc(disposables, "accept", "dccpeer", "");
+
+              try (Socket dccSocket = dccPeer.accept();
+                  BufferedReader dccReader =
+                      new BufferedReader(
+                          new InputStreamReader(
+                              dccSocket.getInputStream(), StandardCharsets.UTF_8));
+                  BufferedWriter dccWriter =
+                      new BufferedWriter(
+                          new OutputStreamWriter(
+                              dccSocket.getOutputStream(), StandardCharsets.UTF_8))) {
+                dccSocket.setSoTimeout((int) MESSAGE_TIMEOUT.toMillis());
+                TargetRef dccTarget = TargetRef.dccChat(serverId, "dccpeer");
+                verify(dcc.ui(), timeout(MESSAGE_TIMEOUT.toMillis()))
+                    .appendStatus(eq(dccTarget), eq("(dcc)"), contains("connected (incoming)"));
+
+                dccWriter.write("hello-from-dcc-peer\r\n");
+                dccWriter.flush();
+                verify(dcc.ui(), timeout(MESSAGE_TIMEOUT.toMillis()))
+                    .appendChat(dccTarget, "dccpeer", "hello-from-dcc-peer", false);
+
+                dcc.service().handleChatTargetMessage(dccTarget, "hello-from-ircafe");
+                assertEquals("hello-from-ircafe", dccReader.readLine());
+              }
+            } finally {
+              disposables.dispose();
+            }
+          }
+        } finally {
+          try {
+            service
+                .disconnect(runtimeCfg.serverId(), "container ircd DCC shutdown")
+                .blockingAwait();
+          } catch (Exception ignored) {
+          }
+          events.cancel();
+        }
+      }
+    }
+  }
+
+  private static DccServiceFixture newDccServiceFixture(String serverId) {
+    UiPort ui = mock(UiPort.class);
+    TargetCoordinator targets = mock(TargetCoordinator.class);
+    IrcMediatorInteractionPort mediatorIrc = mock(IrcMediatorInteractionPort.class);
+    ExecutorService io =
+        Executors.newFixedThreadPool(2, namedDaemonFactory("it-dcc-chat-" + serverId));
+    when(targets.getActiveTarget()).thenReturn(new TargetRef(serverId, "status"));
+    when(mediatorIrc.currentNick(serverId)).thenReturn(Optional.of("dccapp"));
+
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+    context.registerBean(UiPort.class, () -> ui);
+    context.registerBean(TargetCoordinator.class, () -> targets);
+    context.registerBean(ConnectionCoordinator.class, () -> mock(ConnectionCoordinator.class));
+    context.registerBean(DccTransferCommandPort.class, () -> mock(DccTransferCommandPort.class));
+    context.registerBean(
+        "ircMediatorInteractionPort", IrcMediatorInteractionPort.class, () -> mediatorIrc);
+    context.registerBean(ExecutorConfig.OUTBOUND_DCC_EXECUTOR, ExecutorService.class, () -> io);
+    context.scan("cafe.woden.ircclient.app.outbound.dcc");
+    context.refresh();
+    return new DccServiceFixture(context.getBean(OutboundDccCommandService.class), ui, context, io);
   }
 
   @Test
@@ -1544,6 +1682,23 @@ class PircbotxContainerNetworkE2eIntegrationTest {
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
       } catch (Exception ignored) {
+      }
+    }
+  }
+
+  private record DccServiceFixture(
+      OutboundDccCommandService service,
+      UiPort ui,
+      AnnotationConfigApplicationContext context,
+      ExecutorService io)
+      implements AutoCloseable {
+
+    @Override
+    public void close() {
+      try {
+        context.close();
+      } finally {
+        io.shutdownNow();
       }
     }
   }

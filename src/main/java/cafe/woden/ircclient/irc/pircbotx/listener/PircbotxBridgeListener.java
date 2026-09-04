@@ -9,6 +9,7 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxActionEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelModeEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxDccRequestEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxInviteEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxMembershipEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxMonitorEventEmitter;
@@ -57,6 +58,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final PircbotxActionEventEmitter actionEvents;
   private final PircbotxNoticeEventEmitter noticeEvents;
   private final PircbotxInboundCtcpHandler inboundCtcpHandler;
+  private final PircbotxDccRequestEmitter dccRequests;
   private final PircbotxWhoisResultEmitter whoisResults;
   private final PircbotxUnknownLineFallbackHandler unknownLineFallback;
   private final PircbotxUnknownEventRouter unknownEventRouter;
@@ -254,6 +256,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             bus::onNext,
             ctcpHandler,
             serverTimeRuntimeSupport);
+    this.dccRequests =
+        new PircbotxDccRequestEmitter(serverId, bus::onNext, serverTimeRuntimeSupport);
     this.whoisResults = new PircbotxWhoisResultEmitter(serverId, bus::onNext);
     this.unknownLineFallback =
         new PircbotxUnknownLineFallbackHandler(
@@ -348,6 +352,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
     session.recordInboundActivity();
     inboundCtcpHandler.onGenericCtcp(event);
+  }
+
+  @Override
+  public void onIncomingChatRequest(IncomingChatRequestEvent event) {
+    session.recordInboundActivity();
+    dccRequests.onIncomingChatRequest(event);
+  }
+
+  @Override
+  public void onIncomingFileTransfer(IncomingFileTransferEvent event) {
+    session.recordInboundActivity();
+    dccRequests.onIncomingFileTransfer(event);
   }
 
   @Override
