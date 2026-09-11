@@ -127,6 +127,7 @@ tasks.named("jpackage").configure {
 def isLinux = OperatingSystem.current().isLinux()
 def isMac = OperatingSystem.current().isMacOsX()
 def appName = "IRCafe"
+def macCodeSignIdentity = providers.gradleProperty("macCodeSignIdentity").getOrElse("-")
 def appImageDir = layout.buildDirectory.dir("dist/${appName}")
 def desktopFileName = "${appName}.desktop"
 def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
@@ -405,16 +406,16 @@ tasks.named("jpackage").configure {
         "generateLinuxDesktopEntry",
         "generateLinuxInstallScript",
         "generateLinuxUninstallScript",
-        "bundleTerminalNotifier"
+        "bundleAlerter"
     )
 }
-tasks.register("bundleTerminalNotifier") {
+tasks.register("bundleAlerter") {
     onlyIf { isMac }
 
     doLast {
-        def notifierSrc = file("packaging/macos/terminal-notifier.app")
-        if (!notifierSrc.exists()) {
-            logger.warn("[ircafe] Skipping terminal-notifier bundle; source app not found at: ${notifierSrc}")
+        def alerterSrc = file("packaging/macos/alerter/alerter")
+        if (!alerterSrc.exists()) {
+            logger.warn("[ircafe] Skipping Alerter bundle; source binary not found at: ${alerterSrc}")
             return
         }
 
@@ -428,31 +429,43 @@ tasks.register("bundleTerminalNotifier") {
         }
         if (appBundle == null || !appBundle.exists()) {
             logger.warn(
-                "[ircafe] Skipping terminal-notifier bundle; no macOS app bundle found under ${buildDir}/dist")
+                "[ircafe] Skipping Alerter bundle; no macOS app bundle found under ${buildDir}/dist")
             return
         }
 
         def resourcesDir = new File(appBundle, "Contents/Resources")
         if (!resourcesDir.exists()) {
             logger.warn(
-                "[ircafe] Skipping terminal-notifier bundle; Resources directory not found at: ${resourcesDir}")
+                "[ircafe] Skipping Alerter bundle; Resources directory not found at: ${resourcesDir}")
             return
         }
 
         copy {
-            from notifierSrc.parentFile
-            include "${notifierSrc.name}/**"
+            from alerterSrc
             into resourcesDir
+            rename { "alerter" }
+        }
+        copy {
+            from new File(alerterSrc.parentFile, "LICENSE")
+            into resourcesDir
+            rename { "Alerter-LICENSE" }
         }
 
-        def notifierDest = new File(resourcesDir, "terminal-notifier.app/Contents/MacOS/terminal-notifier")
-        if (!notifierDest.exists()) {
+        def alerterDest = new File(resourcesDir, "alerter")
+        if (!alerterDest.exists()) {
             logger.warn(
-                "[ircafe] terminal-notifier bundle copy finished, but binary not found at: ${notifierDest}")
+                "[ircafe] Alerter bundle copy finished, but binary not found at: ${alerterDest}")
             return
         }
-        notifierDest.setExecutable(true, false)
+        alerterDest.setExecutable(true, false)
 
-        println "Bundled terminal-notifier into app: $notifierDest"
+        def codeSignResult = project.providers.exec {
+            commandLine("codesign", "--force", "--deep", "--sign", macCodeSignIdentity, appBundle.absolutePath)
+        }.result.get()
+        if (codeSignResult.exitValue != 0) {
+            throw new GradleException("Failed to re-sign macOS app bundle: ${appBundle}")
+        }
+
+        println "Bundled Alerter into and re-signed app: $alerterDest"
     }
 }

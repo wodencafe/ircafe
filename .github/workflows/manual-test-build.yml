@@ -112,18 +112,21 @@ jobs:
           set -euo pipefail
           ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
 
-      - name: Verify terminal-notifier bundle (macOS)
+      - name: Verify Alerter bundle (macOS)
         if: inputs.target == 'mac'
         shell: bash
         run: |
           set -euo pipefail
-          notifier_path="build/dist/IRCafe.app/Contents/Resources/terminal-notifier.app/Contents/MacOS/terminal-notifier"
-          if [[ ! -f "$notifier_path" ]]; then
-            echo "::error::Missing terminal-notifier binary at expected path: $notifier_path"
+          alerter_path="build/dist/IRCafe.app/Contents/Resources/alerter"
+          if [[ ! -f "$alerter_path" ]]; then
+            echo "::error::Missing Alerter binary at expected path: $alerter_path"
             echo "Contents/Resources snapshot:"
             find build/dist/IRCafe.app/Contents/Resources -maxdepth 4 -mindepth 1 -print || true
             exit 1
           fi
+          lipo "$alerter_path" -verify_arch arm64 x86_64
+          test -f build/dist/IRCafe.app/Contents/Resources/Alerter-LICENSE
+          codesign --verify --deep --strict build/dist/IRCafe.app
 
       - name: Archive Linux app-image
         if: inputs.target == 'linux'
