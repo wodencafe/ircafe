@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.util.EmojiFontSupport;
@@ -14,6 +15,28 @@ import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
 class SingleLineEmojiTextPaneRenderTest {
+
+  @Test
+  void caretLayoutDoesNotWrapLongDraftAtCurrentComponentWidth() throws Exception {
+    SwingUtilities.invokeAndWait(
+        () -> {
+          try {
+            SingleLineEmojiTextPane pane = new SingleLineEmojiTextPane();
+            pane.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+            pane.setText("hello");
+            pane.setSize(120, pane.getPreferredSize().height);
+            double firstLineY = pane.modelToView2D(0).getY();
+            int firstLineHeight = pane.getPreferredSize().height;
+            pane.setText("hello alice, this draft is wider than the input viewport");
+            var caretBounds = pane.modelToView2D(pane.getDocument().getLength());
+            assertEquals(
+                firstLineY, caretBounds.getY(), "completion caret must stay on the first line");
+            assertEquals(firstLineHeight, pane.getPreferredSize().height);
+          } catch (javax.swing.text.BadLocationException e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
 
   @Test
   void paintsEmojiRunsWithVisiblePixels() throws Exception {

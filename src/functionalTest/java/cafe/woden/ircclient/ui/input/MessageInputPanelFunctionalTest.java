@@ -14,8 +14,10 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsTestFixtures;
 import io.reactivex.rxjava3.disposables.Disposable;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
@@ -31,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import javax.swing.text.JTextComponent;
@@ -38,6 +41,43 @@ import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
 class MessageInputPanelFunctionalTest {
+
+  @Test
+  void caretQueriesDuringTypingDoNotRaiseInputBar() throws Exception {
+    onEdt(
+        () -> {
+          MessageInputPanel panel =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          try {
+            JTextComponent input = findFirst(panel, JTextComponent.class);
+            assertNotNull(input);
+            panel.setNickCompletions(List.of("alice", "alina"));
+            JPanel chat = new JPanel(new BorderLayout());
+            chat.add(new JPanel(), BorderLayout.CENTER);
+            chat.add(panel, BorderLayout.SOUTH);
+            chat.setSize(500, 300);
+            layoutRecursively(chat);
+            Rectangle initialBounds = panel.getBounds();
+
+            for (char c : "hello alice hello alina ".repeat(4).toCharArray()) {
+              input.replaceSelection(String.valueOf(c));
+              // Completion/caret code may query the new text before the viewport has resized.
+              input.modelToView2D(input.getCaretPosition());
+              layoutRecursively(chat);
+              assertEquals(initialBounds, panel.getBounds(), "draft: " + input.getText());
+            }
+          } finally {
+            panel.shutdownResources();
+          }
+        });
+  }
+
+  private static void layoutRecursively(Container container) {
+    container.doLayout();
+    for (Component child : container.getComponents()) {
+      if (child instanceof Container nested) layoutRecursively(nested);
+    }
+  }
 
   @Test
   void composeFieldMarksEmojiRunsForInlineRendering() throws Exception {
