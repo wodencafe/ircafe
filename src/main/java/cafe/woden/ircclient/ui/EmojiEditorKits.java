@@ -50,6 +50,16 @@ final class EmojiEditorKits {
       }
 
       View view = delegate.create(elem);
+      if (!wrapParagraphs && view instanceof ParagraphView) {
+        return new ParagraphView(elem) {
+          @Override
+          public int getFlowSpan(int index) {
+            // Caret/popup queries can lay out a newly edited draft before its viewport grows.
+            // Never wrap at that stale width: the compose field scrolls horizontally.
+            return Integer.MAX_VALUE;
+          }
+        };
+      }
       if (wrapParagraphs && view instanceof ParagraphView) {
         return new ParagraphView(elem) {
           @Override
