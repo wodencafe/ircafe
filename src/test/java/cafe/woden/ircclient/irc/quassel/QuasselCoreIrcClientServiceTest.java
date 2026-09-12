@@ -106,6 +106,9 @@ class QuasselCoreIrcClientServiceTest {
     service.connect("quassel").blockingAwait();
     events.awaitCount(3);
 
+    // Protocol negotiation is reported before the asynchronous session handshake completes.
+    awaitEstablishedSession(service, "quassel");
+
     assertEquals(3, events.values().size());
     IrcEvent.Connecting connecting =
         assertInstanceOf(IrcEvent.Connecting.class, events.values().get(0).event());
