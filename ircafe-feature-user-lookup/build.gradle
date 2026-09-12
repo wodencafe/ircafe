@@ -1,0 +1,18 @@
+apply from: rootProject.file('gradle/java-library-subproject-conventions.gradle')
+
+description = 'IRCafe user lookup planning, rate limiting, cooldown, and refresh policy.'
+
+def libsCatalog = extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
+def lib = { String alias -> libsCatalog.findLibrary(alias).get() }
+def catalogVersion = { String alias -> libsCatalog.findVersion(alias).get().requiredVersion }
+
+dependencies {
+    implementation platform("org.springframework.boot:spring-boot-dependencies:${catalogVersion('springBootPlugin')}")
+    implementation 'org.springframework:spring-context'
+    implementation lib('fastutil')
+    implementation lib('jmoleculesLayeredArchitecture')
+
+    testImplementation platform("org.springframework.boot:spring-boot-dependencies:${catalogVersion('springBootPlugin')}")
+    testImplementation lib('springBootStarterTest')
+    testRuntimeOnly lib('junitPlatformLauncher')
+}

@@ -60,6 +60,7 @@ dependencies {
     implementation project(':ircafe-feature-embed')
     implementation project(':ircafe-feature-bouncer')
     implementation project(':ircafe-feature-notify')
+    implementation project(':ircafe-feature-user-lookup')
     implementation project(':ircafe-feature-ircv3-common')
     implementation project(':ircafe-feature-ircv3-negotiation')
     implementation project(':ircafe-feature-ircv3-message-tags')
