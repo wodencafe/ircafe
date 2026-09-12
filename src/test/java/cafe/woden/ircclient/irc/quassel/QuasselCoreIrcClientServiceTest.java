@@ -103,11 +103,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-
-    // Protocol negotiation is reported before the asynchronous session handshake completes.
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     assertEquals(3, events.values().size());
     IrcEvent.Connecting connecting =
@@ -137,6 +133,66 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void networkConnectIsRejectedUntilAuthenticationCompletes() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    CountDownLatch authenticationStarted = new CountDownLatch(1);
+    CountDownLatch releaseAuthentication = new CountDownLatch(1);
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenAnswer(
+            invocation -> {
+              authenticationStarted.countDown();
+              assertTrue(
+                  releaseAuthentication.await(5, TimeUnit.SECONDS),
+                  "test should release authentication");
+              return new QuasselCoreAuthHandshake.AuthResult("quassel", 5, List.of(5), Map.of());
+            });
+
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      service.connect("quassel").blockingAwait();
+      assertTrue(authenticationStarted.await(2, TimeUnit.SECONDS));
+      events.awaitCount(3);
+      assertInstanceOf(IrcEvent.ConnectionFeaturesUpdated.class, events.values().get(2).event());
+      assertFalse(service.hasEstablishedQuasselCoreSession("quassel"));
+
+      service
+          .quasselCoreConnectNetwork("quassel", "5")
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertError(
+              error ->
+                  error instanceof BackendNotAvailableException unavailable
+                      && unavailable.detail().contains("handshake is not complete"));
+      org.mockito.Mockito.verifyNoInteractions(datastreamCodec);
+    } finally {
+      releaseAuthentication.countDown();
+      try {
+        awaitEstablishedSession(service, "quassel");
+      } finally {
+        service.disconnect("quassel").blockingAwait();
+        events.cancel();
+      }
+    }
+  }
+
+  @Test
   void disconnectReasonWinsWhenReadLoopSeesEofDuringClose() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
@@ -162,8 +218,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     TestObserver<Void> disconnect = service.disconnect("quassel").test();
     assertTrue(socket.awaitCloseStarted(), "disconnect should close the socket");
@@ -208,9 +263,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.sendRaw("quassel", "WHOIS alice").blockingAwait();
 
@@ -252,9 +305,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.sendToChannel("quassel", "#other", "hello net2").blockingAwait();
 
@@ -296,9 +347,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.sendToChannel("quassel", "#dupe{net:network-2}", "reply net2").blockingAwait();
     service
@@ -351,12 +400,7 @@ class QuasselCoreIrcClientServiceTest {
     assertFalse(service.isChatHistoryAvailable("quassel"));
     assertFalse(service.isEchoMessageAvailable("quassel"));
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    long deadline = System.currentTimeMillis() + 2_000L;
-    while (!service.isChatHistoryAvailable("quassel") && System.currentTimeMillis() < deadline) {
-      Thread.sleep(10L);
-    }
+    connectAndAwaitEstablishedSession(service, events);
 
     assertTrue(service.isChatHistoryAvailable("quassel"));
     assertTrue(service.isEchoMessageAvailable("quassel"));
@@ -406,9 +450,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.sendRaw("quassel", "TAGMSG #dupe{net:network-2}").blockingAwait();
 
@@ -450,9 +492,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -508,9 +548,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -596,8 +634,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -653,8 +690,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -697,8 +733,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -740,8 +775,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -803,8 +837,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -862,8 +895,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -927,9 +959,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1001,9 +1031,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1122,8 +1150,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1213,8 +1240,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     TestObserver<Void> connect = service.quasselCoreConnectNetwork("quassel", "5").test();
 
@@ -1276,9 +1302,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
         new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
@@ -1342,9 +1366,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
         new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
@@ -1391,8 +1413,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1450,8 +1471,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     long observedDeadline = System.currentTimeMillis() + 2_000L;
     while (System.currentTimeMillis() < observedDeadline
@@ -1498,9 +1518,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1551,9 +1569,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -1605,8 +1621,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     String raw = ":irc.example.net FAIL PRIVMSG INVALID_TARGET #ircafe :No such channel";
     socket.writeInbound(
@@ -1665,8 +1680,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     long now = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
     socket.writeInbound(
@@ -1808,8 +1822,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     assertFalse(service.isMonitorAvailable("quassel"));
     assertEquals(0, service.negotiatedMonitorLimit("quassel"));
@@ -1862,8 +1875,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -1912,8 +1924,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     long knownEpochSeconds = 1_700_000_500L;
     socket.writeInbound(
@@ -1975,8 +1986,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2040,8 +2050,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2140,8 +2149,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2193,9 +2201,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.requestLagProbe("quassel").blockingAwait();
 
@@ -2245,9 +2251,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.requestChatHistoryBefore("quassel", "#ircafe", "msgid=100", 25).blockingAwait();
 
@@ -2293,9 +2297,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.requestChatHistoryLatest("quassel", "#ircafe", "msgid=100", 30).blockingAwait();
     service.requestChatHistoryAround("quassel", "#ircafe", "msgid=100", 20).blockingAwait();
@@ -2369,9 +2371,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     service.requestChatHistoryLatest("quassel", "#ircafe", "*", 999).blockingAwait();
 
@@ -2417,9 +2417,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2481,9 +2479,7 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
-    awaitEstablishedSession(service, "quassel");
+    connectAndAwaitEstablishedSession(service, events);
 
     IllegalArgumentException err =
         assertThrows(
@@ -2524,8 +2520,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     QuasselCoreDatastreamCodec.MessageValue message =
         new QuasselCoreDatastreamCodec.MessageValue(
@@ -2587,8 +2582,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2636,8 +2630,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -2681,8 +2674,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2790,8 +2782,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -2848,8 +2839,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -2918,8 +2908,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -2969,8 +2958,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -3044,8 +3032,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -3143,8 +3130,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -3188,8 +3174,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -3240,8 +3225,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeRpcCall(
@@ -3416,8 +3400,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     QuasselCoreDatastreamCodec.MessageValue net2Inbound =
         new QuasselCoreDatastreamCodec.MessageValue(
@@ -3472,8 +3455,7 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    service.connect("quassel").blockingAwait();
-    events.awaitCount(3);
+    connectAndAwaitEstablishedSession(service, events);
 
     socket.writeInbound(
         encodeSignalProxyFrame(
@@ -3668,6 +3650,15 @@ class QuasselCoreIrcClientServiceTest {
         new QuasselCoreDatastreamCodec.BufferInfoValue(bufferId, 1, 0x02, -1, bufferName),
         sender,
         content);
+  }
+
+  private static void connectAndAwaitEstablishedSession(
+      QuasselCoreIrcClientService service, TestSubscriber<ServerIrcEvent> events)
+      throws InterruptedException {
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+    // Protocol negotiation is reported before the asynchronous session handshake completes.
+    awaitEstablishedSession(service, "quassel");
   }
 
   private static void awaitEstablishedSession(QuasselCoreIrcClientService service, String serverId)
