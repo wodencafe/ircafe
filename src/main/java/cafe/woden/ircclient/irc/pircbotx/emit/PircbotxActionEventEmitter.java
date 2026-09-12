@@ -46,13 +46,13 @@ public final class PircbotxActionEventEmitter {
       Function<Object, String> privateTargetFromEvent,
       Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport,
       Ircv3MessageTagsRuntimeSupport messageTagsRuntimeSupport,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport) {
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this(
         serverId,
         rosterEmitter,
         chatHistoryBatches,
         new PircbotxPlaybackCaptureRecorder(conn),
-        new PircbotxPrivateConversationSupport(conn, historyTransportRuntimeSupport),
+        new PircbotxPrivateConversationSupport(conn, zncPlaybackRuntimeSupport),
         serverTimeRuntimeSupport,
         messageTagsRuntimeSupport,
         emit,

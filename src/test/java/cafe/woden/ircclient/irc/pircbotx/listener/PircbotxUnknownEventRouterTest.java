@@ -152,7 +152,7 @@ class PircbotxUnknownEventRouterTest {
             testRuntime.messageTags(),
             new PircbotxPresenceSignalSupport(
                 "libera", events::add, testRuntime.catalogs().inboundCommands()),
-            testRuntime.historyTransport());
+            testRuntime.zncPlayback());
     return new PircbotxUnknownEventRouter(
         "libera",
         conn::setSelfNickHint,

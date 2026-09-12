@@ -78,7 +78,7 @@ class PircbotxActionEventEmitterTest {
         privateTargetResolver,
         runtime.serverTime(),
         runtime.messageTags(),
-        runtime.historyTransport());
+        runtime.zncPlayback());
   }
 
   private static ActionEvent action(String nick, String action, String channelName) {

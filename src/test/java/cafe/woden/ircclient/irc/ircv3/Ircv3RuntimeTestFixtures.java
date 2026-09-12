@@ -40,10 +40,9 @@ public final class Ircv3RuntimeTestFixtures {
     return new Ircv3SaslRuntimeSupport(catalogs().inboundCommands());
   }
 
-  public static Ircv3HistoryTransportRuntimeSupport historyTransport() {
+  public static Ircv3ZncPlaybackRuntimeSupport zncPlayback() {
     Ircv3RuntimeCatalogs catalogs = catalogs();
-    return new Ircv3HistoryTransportRuntimeSupport(
-        catalogs.inboundCommands(), catalogs.inboundTags());
+    return new Ircv3ZncPlaybackRuntimeSupport(catalogs.inboundCommands(), catalogs.inboundTags());
   }
 
   public static Ircv3ChatHistoryRuntimeSupport chatHistory() {
@@ -65,8 +64,8 @@ public final class Ircv3RuntimeTestFixtures {
         new Ircv3MessageTagsRuntimeSupport(catalogs.messageTags(), messageId);
     Ircv3ServerTimeRuntimeSupport serverTime =
         new Ircv3ServerTimeRuntimeSupport(catalogs.inboundTags(), messageTags);
-    Ircv3HistoryTransportRuntimeSupport historyTransport =
-        new Ircv3HistoryTransportRuntimeSupport(catalogs.inboundCommands(), catalogs.inboundTags());
+    Ircv3ZncPlaybackRuntimeSupport zncPlayback =
+        new Ircv3ZncPlaybackRuntimeSupport(catalogs.inboundCommands(), catalogs.inboundTags());
     Ircv3MessageMutationRuntimeSupport messageMutation =
         new Ircv3MessageMutationRuntimeSupport(
             catalogs.messageMutations(), catalogs.inboundTags(), catalogs.inboundCommands());
@@ -94,7 +93,7 @@ public final class Ircv3RuntimeTestFixtures {
         messageId,
         serverTime,
         messageTags,
-        historyTransport,
+        zncPlayback,
         messageMutation,
         readMarker,
         accountTag,
@@ -112,7 +111,7 @@ public final class Ircv3RuntimeTestFixtures {
       Ircv3MessageIdRuntimeSupport messageId,
       Ircv3ServerTimeRuntimeSupport serverTime,
       Ircv3MessageTagsRuntimeSupport messageTags,
-      Ircv3HistoryTransportRuntimeSupport historyTransport,
+      Ircv3ZncPlaybackRuntimeSupport zncPlayback,
       Ircv3MessageMutationRuntimeSupport messageMutation,
       Ircv3ReadMarkerRuntimeSupport readMarker,
       Ircv3AccountTagRuntimeSupport accountTag,

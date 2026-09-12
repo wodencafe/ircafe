@@ -13,7 +13,7 @@ class Ircv3LeafRuntimeSupportConstructorTest {
   void leafSupportsRequireExplicitCatalogDependencies() {
     assertBoundary(Ircv3SaslRuntimeSupport.class, Ircv3InboundCommandSignalRuntimeCatalog.class);
     assertBoundary(
-        Ircv3HistoryTransportRuntimeSupport.class,
+        Ircv3ZncPlaybackRuntimeSupport.class,
         Ircv3InboundCommandSignalRuntimeCatalog.class,
         Ircv3InboundTagSignalRuntimeCatalog.class);
     assertBoundary(Ircv3EchoMessageRuntimeSupport.class, Ircv3InboundTagSignalRuntimeCatalog.class);

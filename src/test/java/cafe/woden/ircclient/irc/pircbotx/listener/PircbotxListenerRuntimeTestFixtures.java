@@ -50,7 +50,7 @@ final class PircbotxListenerRuntimeTestFixtures {
         serverResponses,
         emit,
         outboundCommandRuntimeCatalog,
-        runtime.historyTransport());
+        runtime.zncPlayback());
   }
 
   static PircbotxIsupportObserver isupportObserver(

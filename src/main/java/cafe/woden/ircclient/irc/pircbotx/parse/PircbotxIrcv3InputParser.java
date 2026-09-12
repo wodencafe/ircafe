@@ -64,7 +64,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       Ircv3StsPolicyService stsPolicies,
       Ircv3InboundCommandSignalRuntimeCatalog inboundCommandRuntimeCatalog,
       Ircv3CapabilityNegotiationRuntimeSupport capabilityNegotiationRuntimeSupport,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport,
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport,
       Ircv3MessageMutationRuntimeSupport messageMutationRuntimeSupport,
       Ircv3ReadMarkerRuntimeSupport readMarkerRuntimeSupport,
       Ircv3TypingRuntimeSupport typingRuntimeSupport,
@@ -107,8 +107,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
             capabilityStateSupport,
             Objects.requireNonNull(
                 capabilityNegotiationRuntimeSupport, "capabilityNegotiationRuntimeSupport"),
-            Objects.requireNonNull(
-                historyTransportRuntimeSupport, "historyTransportRuntimeSupport"));
+            Objects.requireNonNull(zncPlaybackRuntimeSupport, "zncPlaybackRuntimeSupport"));
     this.accountTagSupport =
         new PircbotxAccountTagSupport(
             this.serverId,

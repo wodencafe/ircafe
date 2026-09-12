@@ -49,7 +49,7 @@ public final class PircbotxParserRuntimeTestFixtures {
         sink,
         capabilityStateSupport,
         runtime.capabilityNegotiation(),
-        runtime.historyTransport());
+        runtime.zncPlayback());
   }
 
   public static PircbotxMultilineCapStateSupport multiline() {

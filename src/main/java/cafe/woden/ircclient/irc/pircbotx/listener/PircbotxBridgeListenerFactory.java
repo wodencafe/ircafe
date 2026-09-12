@@ -34,7 +34,7 @@ public class PircbotxBridgeListenerFactory {
   @NonNull private final Ircv3OutboundCommandRuntimeCatalog outboundCommandRuntimeCatalog;
   @NonNull private final Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport;
   @NonNull private final Ircv3MessageTagsRuntimeSupport messageTagsRuntimeSupport;
-  @NonNull private final Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport;
+  @NonNull private final Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport;
   @NonNull private final Ircv3IsupportRuntimeSupport isupportRuntimeSupport;
   @NonNull private final Ircv3TypingRuntimeSupport typingRuntimeSupport;
   @NonNull private final Ircv3SaslRuntimeSupport saslRuntimeSupport;
@@ -111,7 +111,7 @@ public class PircbotxBridgeListenerFactory {
     this.outboundCommandRuntimeCatalog = requiredRuntime.outboundCommands();
     this.serverTimeRuntimeSupport = requiredRuntime.serverTime();
     this.messageTagsRuntimeSupport = requiredRuntime.messageTags();
-    this.historyTransportRuntimeSupport = requiredRuntime.historyTransport();
+    this.zncPlaybackRuntimeSupport = requiredRuntime.zncPlayback();
     this.isupportRuntimeSupport = requiredRuntime.isupport();
     this.typingRuntimeSupport = requiredRuntime.typing();
     this.saslRuntimeSupport = requiredRuntime.sasl();
@@ -147,7 +147,7 @@ public class PircbotxBridgeListenerFactory {
         outboundCommandRuntimeCatalog,
         serverTimeRuntimeSupport,
         messageTagsRuntimeSupport,
-        historyTransportRuntimeSupport,
+        zncPlaybackRuntimeSupport,
         isupportRuntimeSupport,
         typingRuntimeSupport,
         saslRuntimeSupport);
@@ -183,7 +183,7 @@ public class PircbotxBridgeListenerFactory {
         outboundCommands,
         Objects.requireNonNull(serverTimeRuntimeSupport, "serverTimeRuntimeSupport"),
         Objects.requireNonNull(messageTagsRuntimeSupport, "messageTagsRuntimeSupport"),
-        new Ircv3HistoryTransportRuntimeSupport(inboundCommands, inboundTags),
+        new Ircv3ZncPlaybackRuntimeSupport(inboundCommands, inboundTags),
         new Ircv3IsupportRuntimeSupport(inboundCommands),
         new Ircv3TypingRuntimeSupport(outboundCommands, inboundTags, inboundCommands),
         new Ircv3SaslRuntimeSupport(inboundCommands));
@@ -195,7 +195,7 @@ public class PircbotxBridgeListenerFactory {
       Ircv3OutboundCommandRuntimeCatalog outboundCommands,
       Ircv3ServerTimeRuntimeSupport serverTime,
       Ircv3MessageTagsRuntimeSupport messageTags,
-      Ircv3HistoryTransportRuntimeSupport historyTransport,
+      Ircv3ZncPlaybackRuntimeSupport zncPlayback,
       Ircv3IsupportRuntimeSupport isupport,
       Ircv3TypingRuntimeSupport typing,
       Ircv3SaslRuntimeSupport sasl) {
@@ -206,7 +206,7 @@ public class PircbotxBridgeListenerFactory {
       Objects.requireNonNull(outboundCommands, "outboundCommands");
       Objects.requireNonNull(serverTime, "serverTime");
       Objects.requireNonNull(messageTags, "messageTags");
-      Objects.requireNonNull(historyTransport, "historyTransport");
+      Objects.requireNonNull(zncPlayback, "zncPlayback");
       Objects.requireNonNull(isupport, "isupport");
       Objects.requireNonNull(typing, "typing");
       Objects.requireNonNull(sasl, "sasl");

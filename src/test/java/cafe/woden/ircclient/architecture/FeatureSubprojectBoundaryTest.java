@@ -2987,12 +2987,12 @@ class FeatureSubprojectBoundaryTest {
                 "src/main/java/cafe/woden/ircclient/irc/pircbotx/emit/"
                     + "PircbotxPrivateConversationSupport.java"));
     assertTrue(
-        negotiationAdapter.contains("Ircv3HistoryTransportRuntimeSupport")
+        negotiationAdapter.contains("Ircv3ZncPlaybackRuntimeSupport")
             && negotiationAdapter.contains("detectZncCapability")
             && !negotiationAdapter.contains("Ircv3ZncDetector"),
         "CAP-based ZNC detection should use installed focused BATCH/ZNC playback runtime providers");
     assertTrue(
-        registrationAdapter.contains("Ircv3HistoryTransportRuntimeSupport")
+        registrationAdapter.contains("Ircv3ZncPlaybackRuntimeSupport")
             && registrationAdapter.contains("detectZncRpl004")
             && !registrationAdapter.contains("Ircv3ZncDetector"),
         "RPL 004 ZNC detection should use installed focused BATCH/ZNC playback runtime providers");
@@ -3020,7 +3020,7 @@ class FeatureSubprojectBoundaryTest {
         !batchCollector.contains("isChatHistoryBatchType"),
         "the root collector should not retain duplicate batch-type policy");
     assertTrue(
-        privateConversationAdapter.contains("Ircv3HistoryTransportRuntimeSupport")
+        privateConversationAdapter.contains("Ircv3ZncPlaybackRuntimeSupport")
             && privateConversationAdapter.contains("shouldSuppressBootstrap")
             && !privateConversationAdapter.contains("Ircv3HistoryBootstrapSuppressionPolicy"),
         "private conversation routing should use installed bootstrap-suppression providers");

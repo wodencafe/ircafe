@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityLine;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityNegotiationRuntimeSupport;
-import cafe.woden.ircclient.irc.ircv3.Ircv3HistoryTransportRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3InboundCommandSignalRuntimeCatalog;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ZncPlaybackRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandOperation;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandRequest;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
@@ -89,7 +89,7 @@ class PircbotxCapabilityNegotiationSupportTest {
             (ServerIrcEvent ignored) -> {},
             new PircbotxCapabilityStateSupport("libera", conn),
             new Ircv3CapabilityNegotiationRuntimeSupport(commandCatalog),
-            new Ircv3HistoryTransportRuntimeSupport(
+            new Ircv3ZncPlaybackRuntimeSupport(
                 commandCatalog,
                 PircbotxParserRuntimeTestFixtures.runtime().catalogs().inboundTags()));
 

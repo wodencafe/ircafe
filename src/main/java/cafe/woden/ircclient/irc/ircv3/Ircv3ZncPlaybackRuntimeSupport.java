@@ -12,14 +12,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Validates runtime-provider decisions for ZNC detection and history bootstrap suppression. */
-public final class Ircv3HistoryTransportRuntimeSupport {
+public final class Ircv3ZncPlaybackRuntimeSupport {
 
   private static final int MAX_EVIDENCE_LENGTH = 1024;
 
   private final Ircv3InboundCommandSignalRuntimeCatalog commandCatalog;
   private final Ircv3InboundTagSignalRuntimeCatalog tagCatalog;
 
-  public Ircv3HistoryTransportRuntimeSupport(
+  public Ircv3ZncPlaybackRuntimeSupport(
       Ircv3InboundCommandSignalRuntimeCatalog commandCatalog,
       Ircv3InboundTagSignalRuntimeCatalog tagCatalog) {
     this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");

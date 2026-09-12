@@ -90,12 +90,11 @@ class PircbotxInputParserHookInstallerRuntimeCompositionTest {
             "runtimeSupport",
             Ircv3CapabilityNegotiationRuntimeSupport.class));
     assertSame(
-        field(
-            installer, "historyTransportRuntimeSupport", Ircv3HistoryTransportRuntimeSupport.class),
+        field(installer, "zncPlaybackRuntimeSupport", Ircv3ZncPlaybackRuntimeSupport.class),
         field(
             capabilityNegotiationSupport,
-            "historyTransportRuntimeSupport",
-            Ircv3HistoryTransportRuntimeSupport.class));
+            "zncPlaybackRuntimeSupport",
+            Ircv3ZncPlaybackRuntimeSupport.class));
 
     assertSame(
         field(installer, "messageMutationRuntimeSupport", Ircv3MessageMutationRuntimeSupport.class),

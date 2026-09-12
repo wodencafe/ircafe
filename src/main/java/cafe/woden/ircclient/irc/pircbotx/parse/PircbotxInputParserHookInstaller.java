@@ -37,7 +37,7 @@ public class PircbotxInputParserHookInstaller {
   @NonNull
   private final Ircv3CapabilityNegotiationRuntimeSupport capabilityNegotiationRuntimeSupport;
 
-  @NonNull private final Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport;
+  @NonNull private final Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport;
   @NonNull private final Ircv3MessageMutationRuntimeSupport messageMutationRuntimeSupport;
   @NonNull private final Ircv3ReadMarkerRuntimeSupport readMarkerRuntimeSupport;
   @NonNull private final Ircv3TypingRuntimeSupport typingRuntimeSupport;
@@ -83,7 +83,7 @@ public class PircbotxInputParserHookInstaller {
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.inboundCommandRuntimeCatalog = requiredRuntime.inboundCommands();
     this.capabilityNegotiationRuntimeSupport = requiredRuntime.capabilityNegotiation();
-    this.historyTransportRuntimeSupport = requiredRuntime.historyTransport();
+    this.zncPlaybackRuntimeSupport = requiredRuntime.zncPlayback();
     this.messageMutationRuntimeSupport = requiredRuntime.messageMutation();
     this.readMarkerRuntimeSupport = requiredRuntime.readMarker();
     this.typingRuntimeSupport = requiredRuntime.typing();
@@ -128,7 +128,7 @@ public class PircbotxInputParserHookInstaller {
         stsPolicies,
         inboundCommandRuntimeCatalog,
         capabilityNegotiationRuntimeSupport,
-        historyTransportRuntimeSupport,
+        zncPlaybackRuntimeSupport,
         messageMutationRuntimeSupport,
         readMarkerRuntimeSupport,
         typingRuntimeSupport,
@@ -196,7 +196,7 @@ public class PircbotxInputParserHookInstaller {
     return new RuntimeComposition(
         inboundCommands,
         new Ircv3CapabilityNegotiationRuntimeSupport(inboundCommands),
-        new Ircv3HistoryTransportRuntimeSupport(inboundCommands, inboundTags),
+        new Ircv3ZncPlaybackRuntimeSupport(inboundCommands, inboundTags),
         Objects.requireNonNull(messageMutationRuntimeSupport, "messageMutationRuntimeSupport"),
         Objects.requireNonNull(readMarkerRuntimeSupport, "readMarkerRuntimeSupport"),
         Objects.requireNonNull(typingRuntimeSupport, "typingRuntimeSupport"),
@@ -213,7 +213,7 @@ public class PircbotxInputParserHookInstaller {
   private record RuntimeComposition(
       Ircv3InboundCommandSignalRuntimeCatalog inboundCommands,
       Ircv3CapabilityNegotiationRuntimeSupport capabilityNegotiation,
-      Ircv3HistoryTransportRuntimeSupport historyTransport,
+      Ircv3ZncPlaybackRuntimeSupport zncPlayback,
       Ircv3MessageMutationRuntimeSupport messageMutation,
       Ircv3ReadMarkerRuntimeSupport readMarker,
       Ircv3TypingRuntimeSupport typing,
@@ -228,7 +228,7 @@ public class PircbotxInputParserHookInstaller {
     private RuntimeComposition {
       Objects.requireNonNull(inboundCommands, "inboundCommands");
       Objects.requireNonNull(capabilityNegotiation, "capabilityNegotiation");
-      Objects.requireNonNull(historyTransport, "historyTransport");
+      Objects.requireNonNull(zncPlayback, "zncPlayback");
       Objects.requireNonNull(messageMutation, "messageMutation");
       Objects.requireNonNull(readMarker, "readMarker");
       Objects.requireNonNull(typing, "typing");

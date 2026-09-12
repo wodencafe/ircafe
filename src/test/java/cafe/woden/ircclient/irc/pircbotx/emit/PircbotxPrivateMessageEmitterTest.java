@@ -117,7 +117,7 @@ class PircbotxPrivateMessageEmitterTest {
         privateTargetResolver,
         runtime.serverTime(),
         runtime.messageTags(),
-        runtime.historyTransport());
+        runtime.zncPlayback());
   }
 
   private static PrivateMessageEvent privateMessage(String nick, String message) {

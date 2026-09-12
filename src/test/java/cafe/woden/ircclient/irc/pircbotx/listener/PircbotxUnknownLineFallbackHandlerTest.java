@@ -142,7 +142,7 @@ class PircbotxUnknownLineFallbackHandlerTest {
         testRuntime.messageTags(),
         new PircbotxPresenceSignalSupport(
             "libera", events::add, testRuntime.catalogs().inboundCommands()),
-        testRuntime.historyTransport());
+        testRuntime.zncPlayback());
   }
 
   private static UnknownEvent unknown(PircBotX bot) {
