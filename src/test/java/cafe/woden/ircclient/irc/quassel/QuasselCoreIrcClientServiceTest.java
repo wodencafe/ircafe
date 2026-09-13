@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class QuasselCoreIrcClientServiceTest {
   private static final String RX_SHUTDOWN_GRACE_PROPERTY = "ircafe.rx.shutdown.grace.ms";
@@ -1493,6 +1495,109 @@ class QuasselCoreIrcClientServiceTest {
       Thread.sleep(10L);
     }
     assertFalse(service.quasselCoreNetworks("quassel").stream().anyMatch(n -> n.networkId() == 9));
+  }
+
+  @Test
+  void inFlightNetworkSnapshotDoesNotResurrectRemovedNetwork() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 9, List.of(9), Map.of()));
+
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog,
+            connector,
+            protocolProbe,
+            authHandshake,
+            new QuasselCoreDatastreamCodec());
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    CountDownLatch snapshotReadingState = new CountDownLatch(1);
+    CountDownLatch resumeSnapshot = new CountDownLatch(1);
+    CountDownLatch removalCompleted = new CountDownLatch(1);
+    var removalSubscription =
+        service
+            .quasselCoreNetworkEvents()
+            .filter(event -> "forget-known-network".equals(event.source()))
+            .subscribe(event -> removalCompleted.countDown());
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      assertEquals(
+          List.of(9),
+          service.quasselCoreNetworks("quassel").stream()
+              .map(QuasselCoreControlPort.QuasselCoreNetworkSummary::networkId)
+              .toList());
+
+      // Gate the snapshot after it has collected the network IDs, without adding a production hook.
+      Map<?, ?> sessions =
+          assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
+      Object session = sessions.get("quassel");
+      @SuppressWarnings("unchecked")
+      Map<Integer, Map<String, Object>> networkStates =
+          (Map<Integer, Map<String, Object>>)
+              ReflectionTestUtils.getField(session, "networkStateByNetworkId");
+      @SuppressWarnings("unchecked")
+      Map<String, Object> state = mock(Map.class);
+      when(state.entrySet())
+          .thenAnswer(
+              invocation -> {
+                snapshotReadingState.countDown();
+                assertTrue(
+                    resumeSnapshot.await(5, TimeUnit.SECONDS), "snapshot should be released");
+                return Map.<String, Object>of("networkName", "Example").entrySet();
+              });
+      networkStates.put(9, state);
+
+      try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        var snapshot = executor.submit(() -> service.quasselCoreNetworks("quassel"));
+        try {
+          assertTrue(
+              snapshotReadingState.await(5, TimeUnit.SECONDS), "snapshot should capture network 9");
+          socket.writeInbound(
+              encodeSignalProxyFrame(
+                  List.of(
+                      QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                      "2networkRemoved(NetworkId)"
+                          .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                      new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 9))));
+          assertTrue(
+              removalCompleted.await(5, TimeUnit.SECONDS), "network removal should complete");
+          assertTrue(service.quasselCoreNetworks("quassel").isEmpty());
+        } finally {
+          resumeSnapshot.countDown();
+        }
+        // An already-running snapshot can be stale, but completing it must not undo removal.
+        snapshot.get(5, TimeUnit.SECONDS);
+        assertTrue(
+            service.quasselCoreNetworks("quassel").isEmpty(),
+            "reading a stale snapshot must not resurrect a removed network");
+
+        socket.writeInbound(
+            encodeSignalProxyFrame(
+                List.of(
+                    QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                    "2networkCreated(NetworkId)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 9))));
+        awaitCondition(
+            () ->
+                service.quasselCoreNetworks("quassel").stream().anyMatch(n -> n.networkId() == 9));
+      }
+    } finally {
+      resumeSnapshot.countDown();
+      removalSubscription.dispose();
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test
