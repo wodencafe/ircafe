@@ -15,6 +15,42 @@ class LabeledResponseRoutingStateTest {
   private final LabeledResponseRoutingState state = new LabeledResponseRoutingState();
 
   @Test
+  void adapterNormalizesTargetsAndPreviewsWithoutLosingOutcomeContext() {
+    Instant started = Instant.now().minusSeconds(2);
+    Instant finished = Instant.now();
+    state.remember(
+        " oftc ", " req ", new TargetRef("libera", "#ircafe"), " WHO\n  #ircafe ", started);
+    var pending = state.findIfFresh("oftc", "req", Duration.ofMinutes(2));
+    assertNotNull(pending);
+    assertEquals(new TargetRef("oftc", "#ircafe"), pending.originTarget());
+    assertEquals("WHO #ircafe", pending.requestPreview());
+    assertEquals(started, pending.startedAt());
+    assertEquals(LabeledResponseRoutingPort.Outcome.PENDING, pending.outcome());
+    assertNull(pending.outcomeAt());
+    var completed =
+        state.markOutcomeIfPending(
+            "oftc", "req", LabeledResponseRoutingPort.Outcome.SUCCESS, finished);
+    assertEquals(pending.originTarget(), completed.originTarget());
+    assertEquals(pending.requestPreview(), completed.requestPreview());
+    assertEquals(started, completed.startedAt());
+    assertEquals(finished, completed.outcomeAt());
+    assertEquals(LabeledResponseRoutingPort.Outcome.SUCCESS, completed.outcome());
+    assertNull(state.markOutcomeIfPending("oftc", "req", null, finished));
+  }
+
+  @Test
+  void adapterUsesOriginServerWhenOmittedAndRejectsMissingTargets() {
+    TargetRef origin = new TargetRef("libera", "#ircafe");
+    state.remember(" ", "req", origin, null, null);
+    var found = state.findIfFresh("libera", "req", Duration.ofMinutes(2));
+    assertNotNull(found);
+    assertEquals(origin, found.originTarget());
+    assertEquals("", found.requestPreview());
+    state.remember("libera", "missing", null, "WHO", null);
+    assertNull(state.findIfFresh("libera", "missing", Duration.ZERO));
+  }
+
+  @Test
   void rememberAndFindIfFreshReturnsPendingContext() {
     TargetRef origin = new TargetRef("libera", "#ircafe");
     Instant at = Instant.now(); // or Instant.now().minus(Duration.ofMinutes(1))

@@ -2458,6 +2458,39 @@ class FeatureSubprojectBoundaryTest {
   }
 
   @Test
+  void labeledResponseRequestTrackingStaysFeatureOwnedWithoutTransportDependencies()
+      throws IOException {
+    String relativePath = "cafe/woden/ircclient/state/LabeledResponseRequestStore.java";
+    Path feature = Path.of("ircafe-feature-ircv3-labeled-response");
+    Path store = feature.resolve("src/main/java").resolve(relativePath);
+    assertTrue(
+        Files.isRegularFile(store), "the labeled-response feature should own request tracking");
+    assertTrue(
+        !Files.exists(Path.of("src/main/java").resolve(relativePath)),
+        "the root should not retain a duplicate request store");
+    assertTrue(
+        Files.isRegularFile(
+            feature.resolve(
+                "src/test/java/cafe/woden/ircclient/state/LabeledResponseRequestStoreTest.java")),
+        "request tracking tests should run in the feature project");
+    Matcher imports = IMPORT_PATTERN.matcher(Files.readString(store));
+    while (imports.find()) {
+      assertTrue(
+          imports.group(1).startsWith("java."),
+          "the request store should use only JDK types, not root routing or transport contracts");
+    }
+    String adapter =
+        Files.readString(
+            Path.of("src/main/java/cafe/woden/ircclient/state/LabeledResponseRoutingState.java"));
+    assertTrue(
+        adapter.contains("LabeledResponseRequestStore") && adapter.contains("TargetRef"),
+        "root state should adapt feature request tracking to application targets");
+    assertTrue(
+        !adapter.contains("ConcurrentHashMap") && !adapter.contains("STALE_RETENTION"),
+        "root state should not duplicate request storage or retention policy");
+  }
+
+  @Test
   void ircv3LabeledResponsePolicyStaysFeatureOwned() throws IOException {
     Path featureRoot =
         Path.of(
