@@ -84,7 +84,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Ircv3OutboundCommandRuntimeCatalog outboundCommandRuntimeCatalog,
       Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport,
       Ircv3MessageTagsRuntimeSupport messageTagsRuntimeSupport,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport,
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport,
       Ircv3IsupportRuntimeSupport isupportRuntimeSupport,
       Ircv3TypingRuntimeSupport typingRuntimeSupport,
       Ircv3SaslRuntimeSupport saslRuntimeSupport) {
@@ -100,8 +100,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
     ServerIsupportStatePort isupportState =
         Objects.requireNonNull(serverIsupportState, "serverIsupportState");
-    Ircv3HistoryTransportRuntimeSupport historyTransport =
-        Objects.requireNonNull(historyTransportRuntimeSupport, "historyTransportRuntimeSupport");
+    Ircv3ZncPlaybackRuntimeSupport zncPlayback =
+        Objects.requireNonNull(zncPlaybackRuntimeSupport, "zncPlaybackRuntimeSupport");
     Ircv3IsupportRuntimeSupport isupport =
         Objects.requireNonNull(isupportRuntimeSupport, "isupportRuntimeSupport");
     Ircv3TypingRuntimeSupport typing =
@@ -173,7 +173,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             serverResponses,
             bus::onNext,
             outboundCommandRuntimeCatalog,
-            historyTransport);
+            zncPlayback);
     this.rosterEmitter = new PircbotxRosterEmitter(serverId, conn, isupportState, bus::onNext);
     this.membershipEvents =
         new PircbotxMembershipEventEmitter(
@@ -218,7 +218,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             PircbotxEventAccessors::privmsgTargetFromEvent,
             serverTimeRuntimeSupport,
             messageTagsRuntimeSupport,
-            historyTransport);
+            zncPlayback);
     this.actionEvents =
         new PircbotxActionEventEmitter(
             serverId,
@@ -230,7 +230,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             PircbotxEventAccessors::privmsgTargetFromEvent,
             serverTimeRuntimeSupport,
             messageTagsRuntimeSupport,
-            historyTransport);
+            zncPlayback);
     this.noticeEvents =
         new PircbotxNoticeEventEmitter(
             serverId,
@@ -274,7 +274,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             serverTimeRuntimeSupport,
             messageTagsRuntimeSupport,
             presenceSignals,
-            historyTransport);
+            zncPlayback);
     this.unknownEventRouter =
         new PircbotxUnknownEventRouter(
             serverId,

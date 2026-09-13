@@ -30,7 +30,7 @@ final class PircbotxRegistrationLifecycleHandler {
   private final PircbotxServerResponseEmitter serverResponses;
   private final Consumer<ServerIrcEvent> emit;
   private final Ircv3OutboundCommandRuntimeCatalog outboundCommandRuntimeCatalog;
-  private final Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport;
+  private final Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport;
 
   PircbotxRegistrationLifecycleHandler(
       String serverId,
@@ -40,7 +40,7 @@ final class PircbotxRegistrationLifecycleHandler {
       PircbotxServerResponseEmitter serverResponses,
       Consumer<ServerIrcEvent> emit,
       Ircv3OutboundCommandRuntimeCatalog outboundCommandRuntimeCatalog,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport) {
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
     this.playbackCursorProvider =
@@ -50,8 +50,8 @@ final class PircbotxRegistrationLifecycleHandler {
     this.emit = Objects.requireNonNull(emit, "emit");
     this.outboundCommandRuntimeCatalog =
         Objects.requireNonNull(outboundCommandRuntimeCatalog, "outboundCommandRuntimeCatalog");
-    this.historyTransportRuntimeSupport =
-        Objects.requireNonNull(historyTransportRuntimeSupport, "historyTransportRuntimeSupport");
+    this.zncPlaybackRuntimeSupport =
+        Objects.requireNonNull(zncPlaybackRuntimeSupport, "zncPlaybackRuntimeSupport");
   }
 
   boolean maybeHandle(int code, PircBotX bot, String line) {
@@ -73,8 +73,8 @@ final class PircbotxRegistrationLifecycleHandler {
 
   private void handleMyInfo(PircBotX bot, String line) {
     String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
-    Ircv3HistoryTransportRuntimeSupport.Detection detection =
-        historyTransportRuntimeSupport.detectZncRpl004(rawLine);
+    Ircv3ZncPlaybackRuntimeSupport.Detection detection =
+        zncPlaybackRuntimeSupport.detectZncRpl004(rawLine);
     if (detection.detected()) {
       bouncerDiscovery.maybeMarkZncDetected(detection.source(), "(" + detection.evidence() + ")");
     }

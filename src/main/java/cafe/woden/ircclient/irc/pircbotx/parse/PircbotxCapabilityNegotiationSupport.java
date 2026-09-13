@@ -9,7 +9,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityLine;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityNegotiationRuntimeSupport;
-import cafe.woden.ircclient.irc.ircv3.Ircv3HistoryTransportRuntimeSupport;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ZncPlaybackRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandRequest;
 import cafe.woden.ircclient.irc.pircbotx.capability.BatchedEnableCapHandler;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
@@ -41,7 +41,7 @@ public final class PircbotxCapabilityNegotiationSupport {
   private final Consumer<ServerIrcEvent> sink;
   private final PircbotxCapabilityStateSupport capabilityStateSupport;
   private final Ircv3CapabilityNegotiationRuntimeSupport runtimeSupport;
-  private final Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport;
+  private final Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport;
 
   public PircbotxCapabilityNegotiationSupport(
       PircBotX bot,
@@ -50,7 +50,7 @@ public final class PircbotxCapabilityNegotiationSupport {
       Consumer<ServerIrcEvent> sink,
       PircbotxCapabilityStateSupport capabilityStateSupport,
       Ircv3CapabilityNegotiationRuntimeSupport runtimeSupport,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport) {
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this.bot = Objects.requireNonNull(bot, "bot");
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
@@ -58,8 +58,8 @@ public final class PircbotxCapabilityNegotiationSupport {
     this.capabilityStateSupport =
         Objects.requireNonNull(capabilityStateSupport, "capabilityStateSupport");
     this.runtimeSupport = Objects.requireNonNull(runtimeSupport, "runtimeSupport");
-    this.historyTransportRuntimeSupport =
-        Objects.requireNonNull(historyTransportRuntimeSupport, "historyTransportRuntimeSupport");
+    this.zncPlaybackRuntimeSupport =
+        Objects.requireNonNull(zncPlaybackRuntimeSupport, "zncPlaybackRuntimeSupport");
   }
 
   public void observe(Ircv3CapabilityLine capLine) {
@@ -95,10 +95,10 @@ public final class PircbotxCapabilityNegotiationSupport {
   private void applyCapabilityChanges(Ircv3CapabilityNegotiationRuntimeSupport.Plan plan) {
     for (Ircv3CapabilityNegotiationRuntimeSupport.CapabilityChange change : plan.changes()) {
       if (change.updateState()) {
-        Ircv3HistoryTransportRuntimeSupport.Detection detection =
+        Ircv3ZncPlaybackRuntimeSupport.Detection detection =
             change.enabled()
-                ? historyTransportRuntimeSupport.detectZncCapability(change.capabilityName())
-                : Ircv3HistoryTransportRuntimeSupport.Detection.notDetected();
+                ? zncPlaybackRuntimeSupport.detectZncCapability(change.capabilityName())
+                : Ircv3ZncPlaybackRuntimeSupport.Detection.notDetected();
         if (detection.detected() && conn.markZncDetected()) {
           log.debug(
               "[{}] detected ZNC via CAP {}: {}", serverId, change.action(), detection.evidence());

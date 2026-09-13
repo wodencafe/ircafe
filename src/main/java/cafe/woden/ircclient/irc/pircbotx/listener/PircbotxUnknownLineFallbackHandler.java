@@ -64,7 +64,7 @@ final class PircbotxUnknownLineFallbackHandler {
       Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport,
       Ircv3MessageTagsRuntimeSupport messageTagsRuntimeSupport,
       PircbotxPresenceSignalSupport presenceSignals,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport) {
+      Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this(
         serverId,
         conn,
@@ -75,7 +75,7 @@ final class PircbotxUnknownLineFallbackHandler {
         isupportObserver,
         whoEvents,
         new PircbotxPlaybackCaptureRecorder(conn),
-        new PircbotxPrivateConversationSupport(conn, historyTransportRuntimeSupport),
+        new PircbotxPrivateConversationSupport(conn, zncPlaybackRuntimeSupport),
         serverTimeRuntimeSupport,
         messageTagsRuntimeSupport,
         presenceSignals,

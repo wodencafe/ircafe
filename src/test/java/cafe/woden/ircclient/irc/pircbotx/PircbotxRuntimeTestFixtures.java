@@ -108,7 +108,7 @@ public final class PircbotxRuntimeTestFixtures {
 
   public static PircbotxPrivateConversationSupport privateConversation(
       PircbotxConnectionState conn, Runtime runtime) {
-    return new PircbotxPrivateConversationSupport(conn, runtime.historyTransport());
+    return new PircbotxPrivateConversationSupport(conn, runtime.zncPlayback());
   }
 
   public static PircbotxServerResponseEmitter serverResponses(

@@ -85,7 +85,7 @@ class Ircv3InboundTagSignalRuntimeCatalogTest {
   }
 
   @Test
-  void historyTransportProviderSuppressesOnlySelfAuthoredBootstrapTraffic() {
+  void zncPlaybackProviderSuppressesOnlySelfAuthoredBootstrapTraffic() {
     Ircv3InboundTagSignalRuntimeCatalog catalog =
         Ircv3InboundTagSignalRuntimeCatalog.applicationClasspath();
 

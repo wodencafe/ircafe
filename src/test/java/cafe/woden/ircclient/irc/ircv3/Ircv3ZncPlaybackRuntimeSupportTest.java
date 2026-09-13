@@ -17,15 +17,15 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-class Ircv3HistoryTransportRuntimeSupportTest {
+class Ircv3ZncPlaybackRuntimeSupportTest {
 
   @Test
   void builtInProviderDetectsZncAndSuppressesBootstrapTraffic() {
-    Ircv3HistoryTransportRuntimeSupport support = Ircv3RuntimeTestFixtures.historyTransport();
+    Ircv3ZncPlaybackRuntimeSupport support = Ircv3RuntimeTestFixtures.zncPlayback();
 
-    Ircv3HistoryTransportRuntimeSupport.Detection capability =
+    Ircv3ZncPlaybackRuntimeSupport.Detection capability =
         support.detectZncCapability("znc.in/playback");
-    Ircv3HistoryTransportRuntimeSupport.Detection myInfo =
+    Ircv3ZncPlaybackRuntimeSupport.Detection myInfo =
         support.detectZncRpl004(":server 004 me irc.example ZNC-1.9.1 oiwsz biklmnopst");
 
     assertTrue(capability.detected());
@@ -40,8 +40,8 @@ class Ircv3HistoryTransportRuntimeSupportTest {
 
   @Test
   void higherPriorityRuntimeProvidersCanReplaceDetectionAndSuppression() {
-    Ircv3HistoryTransportRuntimeSupport support =
-        new Ircv3HistoryTransportRuntimeSupport(
+    Ircv3ZncPlaybackRuntimeSupport support =
+        new Ircv3ZncPlaybackRuntimeSupport(
             Ircv3InboundCommandSignalRuntimeCatalog.fromProviders(
                 List.of(new CustomDetectionProvider())),
             Ircv3InboundTagSignalRuntimeCatalog.fromProviders(
@@ -77,8 +77,8 @@ class Ircv3HistoryTransportRuntimeSupportTest {
                     Ircv3InboundTagSignalType.HISTORY_BOOTSTRAP_SUPPRESSED, "two"));
           }
         };
-    Ircv3HistoryTransportRuntimeSupport support =
-        new Ircv3HistoryTransportRuntimeSupport(
+    Ircv3ZncPlaybackRuntimeSupport support =
+        new Ircv3ZncPlaybackRuntimeSupport(
             Ircv3InboundCommandSignalRuntimeCatalog.fromProviders(List.of(ambiguous)),
             Ircv3InboundTagSignalRuntimeCatalog.fromProviders(List.of(ambiguousSuppression)));
 

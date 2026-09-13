@@ -11,14 +11,13 @@ import java.util.Objects;
 /** Shared routing and suppression helpers for private conversations. */
 public final class PircbotxPrivateConversationSupport {
   private final PircbotxConnectionState conn;
-  private final Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport;
+  private final Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport;
 
   public PircbotxPrivateConversationSupport(
-      PircbotxConnectionState conn,
-      Ircv3HistoryTransportRuntimeSupport historyTransportRuntimeSupport) {
+      PircbotxConnectionState conn, Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this.conn = Objects.requireNonNull(conn, "conn");
-    this.historyTransportRuntimeSupport =
-        Objects.requireNonNull(historyTransportRuntimeSupport, "historyTransportRuntimeSupport");
+    this.zncPlaybackRuntimeSupport =
+        Objects.requireNonNull(zncPlaybackRuntimeSupport, "zncPlaybackRuntimeSupport");
   }
 
   public String deriveConversationTarget(String botNick, String fromNick, String dest) {
@@ -42,6 +41,6 @@ public final class PircbotxPrivateConversationSupport {
   }
 
   public boolean shouldSuppressSelfBootstrapMessage(boolean fromSelf, String target, String msg) {
-    return historyTransportRuntimeSupport.shouldSuppressBootstrap(fromSelf, target, msg);
+    return zncPlaybackRuntimeSupport.shouldSuppressBootstrap(fromSelf, target, msg);
   }
 }
