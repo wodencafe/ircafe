@@ -116,6 +116,45 @@ class FeatureSubprojectBoundaryTest {
   }
 
   @Test
+  void userLookupPlanningLivesInFeatureWhileExecutionStaysRootOwned() throws IOException {
+    Path feature = Path.of("ircafe-feature-user-lookup");
+    String packagePath = "cafe/woden/ircclient/irc/enrichment/";
+    Path rootMain = Path.of("src/main/java", packagePath);
+    Path featureMain = feature.resolve("src/main/java").resolve(packagePath);
+    assertTrue(
+        Files.isRegularFile(featureMain.resolve("UserInfoEnrichmentPlanner.java")),
+        "user lookup planning should live in its feature module");
+    assertTrue(
+        Files.isRegularFile(
+            feature
+                .resolve("src/test/java")
+                .resolve(packagePath)
+                .resolve("UserInfoEnrichmentPlannerTest.java")),
+        "planner tests should run independently in the feature module");
+    assertTrue(
+        !Files.exists(rootMain.resolve("UserInfoEnrichmentPlanner.java")),
+        "root must not retain a duplicate planner implementation");
+    assertTrue(
+        Files.isRegularFile(rootMain.resolve("UserInfoEnrichmentService.java"))
+            && !Files.exists(featureMain.resolve("UserInfoEnrichmentService.java")),
+        "scheduling, transport execution, and connection lifecycle should remain root-owned");
+    assertTrue(
+        Files.readString(rootMain.resolve("package-info.java"))
+            .contains("@NamedInterface(\"enrichment\")"),
+        "the extraction should preserve the existing irc::enrichment named interface");
+    try (Stream<Path> files = Files.walk(feature.resolve("src/main/java"))) {
+      for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+        Matcher matcher = PACKAGE_PATTERN.matcher(Files.readString(file));
+        assertTrue(
+            matcher.find()
+                && (matcher.group(1).equals("cafe.woden.ircclient.irc.enrichment")
+                    || matcher.group(1).startsWith("cafe.woden.ircclient.irc.enrichment.")),
+            file + " should stay within the existing enrichment boundary");
+      }
+    }
+  }
+
+  @Test
   void filterRulePatchParsingLivesInCommandFeatureSubproject() throws IOException {
     Path featureRoot =
         Path.of("ircafe-feature-commands/src/main/java/cafe/woden/ircclient/app/commands");

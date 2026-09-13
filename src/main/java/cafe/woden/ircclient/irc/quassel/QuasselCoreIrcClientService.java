@@ -4430,11 +4430,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void observeKnownNetwork(QuasselSession session, int networkId, String networkName) {
-    observeKnownNetwork(session, networkId, networkName, true);
-  }
-
-  private void observeKnownNetwork(
-      QuasselSession session, int networkId, String networkName, boolean emitSnapshotEvent) {
     if (session == null || networkId < 0) return;
     session.removedNetworkIds.remove(networkId);
     String display = Objects.toString(networkName, "").trim();
@@ -4465,9 +4460,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     trimMapToMaxSize(session.networkDisplayByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
     trimMapToMaxSize(session.networkTokenByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
     trimMapToMaxSize(session.networkIdByTokenLower, MAX_NETWORK_IDENTITIES_PER_SESSION);
-    if (emitSnapshotEvent) {
-      emitQuasselNetworkSnapshotEvent(session, "observe-known-network");
-    }
+    emitQuasselNetworkSnapshotEvent(session, "observe-known-network");
   }
 
   private void forgetKnownNetwork(QuasselSession session, int networkId) {
@@ -4634,6 +4627,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private List<QuasselCoreNetworkSummary> snapshotQuasselCoreNetworks(QuasselSession session) {
     if (session == null) return List.of();
+    // Keep snapshot reads side-effect-free: a collected ID may be removed while we build the
+    // result.
     LinkedHashSet<Integer> knownIds = collectKnownNetworkIds(session);
     if (knownIds.isEmpty()) return List.of();
 
@@ -4652,7 +4647,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               mapValueIgnoreCase(state, "name"),
               session.networkDisplayByNetworkId.get(networkId));
       if (networkName.isBlank()) networkName = "network-" + networkId;
-      observeKnownNetwork(session, networkId, networkName, false);
 
       NetworkServerEndpoint endpoint = parsePrimaryNetworkServer(state);
       Map<String, Object> rawState =
