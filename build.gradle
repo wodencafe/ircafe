@@ -216,6 +216,7 @@ dependencies {
 
     implementation lib('rxjava')
     implementation lib('pircbotx')
+    implementation lib('guava')
     implementation lib('caffeine')
     implementation lib('fastutil')
 

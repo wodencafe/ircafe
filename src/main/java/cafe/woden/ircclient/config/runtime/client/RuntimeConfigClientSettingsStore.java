@@ -39,6 +39,19 @@ public class RuntimeConfigClientSettingsStore {
         "heartbeat");
   }
 
+  public synchronized void rememberFloodProtection(IrcProperties.FloodProtection floodProtection) {
+    IrcProperties.FloodProtection safe =
+        floodProtection == null ? IrcProperties.FloodProtection.defaults() : floodProtection;
+    clientSection.mutateMap(
+        "IRC flood protection",
+        floodMap -> {
+          floodMap.put("enabled", safe.enabled());
+          floodMap.put("commandIntervalMs", safe.commandIntervalMs());
+          floodMap.put("autoJoinDelayMs", safe.autoJoinDelayMs());
+        },
+        "floodProtection");
+  }
+
   public synchronized void rememberProxy(IrcProperties.Proxy proxy) {
     ProxySettings p = RuntimeConfigClientSettingsCodec.normalizeProxy(proxy);
 

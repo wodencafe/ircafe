@@ -35,6 +35,14 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 - Auto-reconnect with backoff + jitter, plus heartbeat timeout detection.
 - Global SOCKS5 proxy plus per-server proxy override (auth, remote DNS, connect/read timeouts, proxy test).
 - Auto-join channels or PM targets and per-server perform-on-connect commands.
+- Native IRC flood protection in Preferences > Network > Flood protection is enabled by default
+  for new and existing configurations. Ordinary commands share a Guava rate limiter targeting
+  a 1500 ms interval, with conservative warm-up instead of burst credit after idle time. Auto-joins start
+  five seconds after registration (and NickServ identification when required), run in the
+  background, and stop on disconnect. Both timings are configurable. Uncheck "Enable outgoing
+  rate limiting" to completely bypass command pacing; the separate auto-join startup delay still
+  applies (set it to zero to join immediately). Changes apply on reconnect. Protocol negotiation,
+  keepalives, and QUIT remain immediate.
 - Rich slash command support for connection/session control, channel/user ops, invite workflows, monitor, ignore/soft-ignore, CTCP, DCC, CHATHISTORY, filters, and raw IRC.
 
 ### Matrix Backend

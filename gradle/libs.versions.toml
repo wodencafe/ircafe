@@ -30,6 +30,7 @@ soundlibsTritonusShare = "0.3.7.4"
 twoSlices = "0.9.4"
 rxjava = "3.1.12"
 pircbotx = "2.3.1"
+guava = "33.3.1-jre"
 fastutil = "8.5.18"
 modernDocking = "1.4.1"
 flatlaf = "3.7"
@@ -75,6 +76,7 @@ snakeyaml = { module = "org.yaml:snakeyaml" }
 jacksonDatabind = { module = "com.fasterxml.jackson.core:jackson-databind" }
 rxjava = { module = "io.reactivex.rxjava3:rxjava", version.ref = "rxjava" }
 pircbotx = { module = "com.github.pircbotx:pircbotx", version.ref = "pircbotx" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
 fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
 modernDockingApi = { module = "io.github.andrewauclair:modern-docking-api", version.ref = "modernDocking" }

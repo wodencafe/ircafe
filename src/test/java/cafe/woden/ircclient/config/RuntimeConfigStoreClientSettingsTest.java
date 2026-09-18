@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.config;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -10,6 +11,28 @@ import org.junit.jupiter.api.io.TempDir;
 class RuntimeConfigStoreClientSettingsTest {
 
   @TempDir Path tempDir;
+
+  @Test
+  void persistsFloodPreferencesAndReloadsThemThroughSpringBinding() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(cfg, "irc:\n  client:\n    floodProtection:\n      futureOption: keep\n");
+    RuntimeConfigStore store = RuntimeConfigStoreTestFixtures.store(cfg);
+    IrcProperties.FloodProtection settings = new IrcProperties.FloodProtection(false, 2200, 8000);
+    store.rememberClientFloodProtection(settings);
+    org.springframework.core.env.StandardEnvironment env =
+        new org.springframework.core.env.StandardEnvironment();
+    var source =
+        new org.springframework.boot.env.YamlPropertySourceLoader()
+            .load("test", new org.springframework.core.io.FileSystemResource(cfg))
+            .getFirst();
+    env.getPropertySources().addFirst(source);
+    IrcProperties rebound =
+        org.springframework.boot.context.properties.bind.Binder.get(env)
+            .bind("irc", IrcProperties.class)
+            .get();
+    assertEquals(settings, rebound.client().floodProtection());
+    assertTrue(Files.readString(cfg).contains("futureOption: keep"));
+  }
 
   @Test
   void persistsNormalizedClientHeartbeatAndProxySettings() throws Exception {

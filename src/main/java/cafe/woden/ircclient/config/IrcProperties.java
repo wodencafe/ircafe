@@ -41,7 +41,8 @@ public record IrcProperties(Client client, List<Server> servers) {
       Heartbeat heartbeat,
       Proxy proxy,
       Tls tls,
-      Translation translation) {
+      Translation translation,
+      FloodProtection floodProtection) {
 
     /** TLS settings for outbound connections (IRC-over-TLS and HTTPS fetching). */
     public record Tls(boolean trustAllCertificates) {
@@ -219,6 +220,7 @@ public record IrcProperties(Client client, List<Server> servers) {
 
     @ConstructorBinding
     public Client {
+      if (floodProtection == null) floodProtection = FloodProtection.defaults();
       version = AppVersion.decorateIfDefaultName(version);
       if (reconnect == null) {
         reconnect = new Reconnect(true, 1_000, 120_000, 2.0, 0.20, 0);
@@ -241,6 +243,37 @@ public record IrcProperties(Client client, List<Server> servers) {
 
     public Client(String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy, Tls tls) {
       this(version, reconnect, heartbeat, proxy, tls, null);
+    }
+
+    public Client(
+        String version,
+        Reconnect reconnect,
+        Heartbeat heartbeat,
+        Proxy proxy,
+        Tls tls,
+        Translation translation) {
+      this(version, reconnect, heartbeat, proxy, tls, translation, null);
+    }
+  }
+
+  /** Per-connection pacing for ordinary IRC commands and startup channel joins. */
+  public record FloodProtection(
+      @DefaultValue("true") boolean enabled,
+      @DefaultValue("1500") long commandIntervalMs,
+      @DefaultValue("5000") long autoJoinDelayMs) {
+    @ConstructorBinding
+    public FloodProtection {
+      commandIntervalMs =
+          commandIntervalMs <= 0 ? 1500 : Math.clamp(commandIntervalMs, 100, 10_000);
+      autoJoinDelayMs = Math.clamp(autoJoinDelayMs, 0, 120_000);
+    }
+
+    public FloodProtection(long commandIntervalMs, long autoJoinDelayMs) {
+      this(true, commandIntervalMs, autoJoinDelayMs);
+    }
+
+    public static FloodProtection defaults() {
+      return new FloodProtection(true, 1500, 5000);
     }
   }
 

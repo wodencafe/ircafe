@@ -1324,6 +1324,11 @@ public class RuntimeConfigStore {
     stores.connectionStores.clientSettingsStore.rememberHeartbeat(heartbeat);
   }
 
+  public synchronized void rememberClientFloodProtection(
+      IrcProperties.FloodProtection floodProtection) {
+    stores.connectionStores.clientSettingsStore.rememberFloodProtection(floodProtection);
+  }
+
   public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
     stores.connectionStores.clientSettingsStore.rememberProxy(proxy);
   }

@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.settings.network;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.NetworkSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
+import cafe.woden.ircclient.net.NetFloodProtectionContext;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
@@ -47,6 +48,7 @@ public final class NetworkAdvancedControlsSupport {
         NetworkConnectionPanelSupport.buildControls(
             proxy,
             heartbeat,
+            NetFloodProtectionContext.settings(),
             closeables,
             trustAllTlsCertificates,
             preferLoginHintDefault,
@@ -59,6 +61,7 @@ public final class NetworkAdvancedControlsSupport {
         userLookups.userhost,
         userLookups.enrichment,
         connection.heartbeat,
+        connection.floodProtection,
         connection.bouncer,
         userLookups.monitorIsonPollIntervalSeconds,
         connection.trustAllTlsCertificates,
@@ -136,7 +139,13 @@ public final class NetworkAdvancedControlsSupport {
 
     BouncerSettings bouncer = readBouncerSettings(controls.bouncer());
     boolean trustAllTlsCertificates = controls.trustAllTlsCertificates().isSelected();
-    return new NetworkSettings(proxy, heartbeat, bouncer, trustAllTlsCertificates);
+    FloodProtectionControls flood = controls.floodProtection();
+    IrcProperties.FloodProtection floodProtection =
+        new IrcProperties.FloodProtection(
+            flood.enabled().isSelected(),
+            PreferencesUiSupport.spinnerInt(flood.commandIntervalMs()),
+            PreferencesUiSupport.spinnerInt(flood.autoJoinDelaySeconds()) * 1000L);
+    return new NetworkSettings(proxy, heartbeat, floodProtection, bouncer, trustAllTlsCertificates);
   }
 
   public static void rememberSettings(
@@ -147,6 +156,8 @@ public final class NetworkAdvancedControlsSupport {
     NetProxyContext.configure(settings.proxy());
     runtimeConfig.rememberClientHeartbeat(settings.heartbeat());
     NetHeartbeatContext.configure(settings.heartbeat());
+    runtimeConfig.rememberClientFloodProtection(settings.floodProtection());
+    NetFloodProtectionContext.configure(settings.floodProtection());
     if (heartbeatMaintenance != null) {
       heartbeatMaintenance.rescheduleActiveHeartbeats();
     }
@@ -165,6 +176,7 @@ public final class NetworkAdvancedControlsSupport {
   public record NetworkSettings(
       IrcProperties.Proxy proxy,
       IrcProperties.Heartbeat heartbeat,
+      IrcProperties.FloodProtection floodProtection,
       BouncerSettings bouncer,
       boolean trustAllTlsCertificates) {}
 
