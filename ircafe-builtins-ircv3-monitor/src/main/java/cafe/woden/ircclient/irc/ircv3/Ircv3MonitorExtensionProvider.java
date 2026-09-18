@@ -158,7 +158,8 @@ public final class Ircv3MonitorExtensionProvider
         Ircv3ExtensionKind.CAPABILITY,
         Ircv3SpecStatus.STABLE,
         List.of(),
-        id,
+        // MONITOR is advertised through RPL_ISUPPORT (005), not negotiated with CAP REQ.
+        "",
         id,
         new Ircv3UiMetadata(label, Ircv3UiGroup.CORE, sortOrder, impactSummary));
   }

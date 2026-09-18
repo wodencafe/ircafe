@@ -10,6 +10,24 @@ import org.junit.jupiter.api.Test;
 class Ircv3ChannelContextPolicyTest {
 
   @Test
+  void stableTagWinsAndExistingChannelTargetsAreNeverRedirected() {
+    Map<String, String> tags =
+        Map.of("+channel-context", "#stable", "+draft/channel-context", "#legacy");
+    assertEquals("#stable", Ircv3ChannelContextPolicy.resolveTarget(tags, "me", "alice"));
+    assertEquals("#actual", Ircv3ChannelContextPolicy.resolveTarget(tags, "#actual", "alice"));
+  }
+
+  @Test
+  void invalidChannelContextsFallBackToTheSender() {
+    for (String invalid : new String[] {"nick", "#one,#two", "#bad name", "#bad\u0007name"}) {
+      assertEquals(
+          "alice",
+          Ircv3ChannelContextPolicy.resolveTarget(
+              Map.of("+channel-context", invalid), "me", "alice"));
+    }
+  }
+
+  @Test
   void channelContextOverridesDirectMessageTarget() {
     assertEquals(
         "#ircafe",

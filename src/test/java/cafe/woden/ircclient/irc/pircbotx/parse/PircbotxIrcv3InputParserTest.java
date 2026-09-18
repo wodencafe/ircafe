@@ -107,7 +107,7 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void capLsContinuationSendsFallbackReqForHistoryCapabilities() throws Exception {
+  void capLsSendsFallbackReqForPublishedDraftHistoryCapability() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircBotX bot = spy(dummyBot());
@@ -119,11 +119,11 @@ class PircbotxIrcv3InputParserTest {
         "*",
         source("server"),
         "CAP",
-        ":server CAP me LS * :batch chathistory",
-        List.of("me", "LS", "*", ":batch chathistory"),
+        ":server CAP me LS :batch draft/chathistory",
+        List.of("me", "LS", ":batch draft/chathistory"),
         ImmutableMap.of());
 
-    verify(outputCap, atLeastOnce()).request("batch", "chathistory");
+    verify(outputCap, atLeastOnce()).request("batch", "draft/chathistory");
   }
 
   @Test
@@ -806,7 +806,7 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void unreactTagUsesChannelContextTargetWhenPresent() throws Exception {
+  void unreactTagIgnoresChannelContextOnTagmsg() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxIrcv3InputParser parser = parser(dummyBot(), "libera", conn, out::add, stsPolicies());
@@ -829,7 +829,7 @@ class PircbotxIrcv3InputParserTest {
                 e ->
                     e instanceof IrcEvent.MessageUnreactObserved r
                         && "bob".equals(r.from())
-                        && "#ircafe".equals(r.target())
+                        && "bob".equals(r.target())
                         && ":+1:".equals(r.reaction())
                         && "abc123".equals(r.messageId())));
   }

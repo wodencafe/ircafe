@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigCtcpReplyAdapter;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
@@ -21,6 +21,7 @@ import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ import org.yaml.snakeyaml.Yaml;
 
 /**
  * Launches the real IRCafe window against a temporary Ergo-backed IRCv3 scene so screenshots can be
- * captured manually with the full native window chrome and the system look and feel.
+ * captured manually, or saved automatically with {@code -Dircv3.showcase.capture=true}.
  */
 public final class Ircv3ErgoShowcaseManualLauncher {
 
@@ -61,7 +62,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
   private static final int IRC_PORT = 6667;
 
   private static final String REPLY_ROOT_TEXT =
-      "Testing, please reply to this message to test IRCv3 reply capability";
+      "Testing, please reply to this message to test IRCv3 replies";
   private static final String REPLY_TEXT = "Reply rendering looks correct here.";
   private static final String REACT_ROOT_TEXT = "Reaction chips should appear under this line.";
   private static final String REDACT_ROOT_TEXT =
@@ -137,7 +138,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
           int appJoinCount =
               countUserJoinedEvents(
                   authorEvents, authorCfg.serverId(), cfg.channel(), cfg.appNick());
-          Process appProcess = launchClientProcess(runtimeConfigFile);
+          Process appProcess = launchClientProcess(runtimeConfigFile, cfg.capture());
           try {
             System.out.println("Launching IRCafe using temporary config: " + runtimeConfigFile);
             System.out.println(
@@ -167,6 +168,11 @@ public final class Ircv3ErgoShowcaseManualLauncher {
                 peerCfg.serverId(),
                 peerEvents);
             Thread.sleep(RENDER_SETTLE_DELAY_MS);
+
+            if (cfg.capture()) {
+              saveClientScreenshot(runDir, cfg, appProcess);
+              return;
+            }
 
             System.out.println();
             System.out.println(
@@ -238,12 +244,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
     peerService
         .sendRaw(
             peerServerId,
-            "@+draft/reply="
-                + rootMessage.messageId()
-                + " PRIVMSG "
-                + cfg.channel()
-                + " :"
-                + REPLY_TEXT)
+            "@+reply=" + rootMessage.messageId() + " PRIVMSG " + cfg.channel() + " :" + REPLY_TEXT)
         .blockingAwait();
   }
 
@@ -272,18 +273,12 @@ public final class Ircv3ErgoShowcaseManualLauncher {
     peerService
         .sendRaw(
             peerServerId,
-            "@+draft/react=:+1:;+draft/reply="
-                + rootMessage.messageId()
-                + " TAGMSG "
-                + cfg.channel())
+            "@+draft/react=:+1:;+reply=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
         .blockingAwait();
     authorService
         .sendRaw(
             authorServerId,
-            "@+draft/react=:eyes:;+draft/reply="
-                + rootMessage.messageId()
-                + " TAGMSG "
-                + cfg.channel())
+            "@+draft/react=:eyes:;+reply=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
         .blockingAwait();
   }
 
@@ -309,9 +304,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
             SCENE_TIMEOUT);
 
     authorService
-        .sendRaw(
-            authorServerId,
-            "@+draft/delete=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
+        .sendRaw(authorServerId, "REDACT " + cfg.channel() + " " + rootMessage.messageId())
         .blockingAwait();
   }
 
@@ -375,7 +368,28 @@ public final class Ircv3ErgoShowcaseManualLauncher {
     return server;
   }
 
-  private static Process launchClientProcess(Path runtimeConfigFile) throws IOException {
+  private static void saveClientScreenshot(Path runDir, ManualLaunchConfig cfg, Process process)
+      throws Exception {
+    Files.writeString(runDir.resolve("capture.request"), cfg.scene().token());
+    long deadline = System.nanoTime() + SCENE_TIMEOUT.toNanos();
+    while (!Files.exists(runDir.resolve("capture.done"))) {
+      Path error = runDir.resolve("capture.error");
+      if (Files.exists(error)) {
+        throw new IllegalStateException("Full-client capture failed: " + Files.readString(error));
+      }
+      if (!process.isAlive() || System.nanoTime() >= deadline) {
+        throw new IllegalStateException("IRCafe did not finish the full-client screenshot.");
+      }
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+    Files.createDirectories(cfg.outputDir());
+    Path output = cfg.outputDir().resolve(cfg.scene().token() + ".png");
+    Files.copy(runDir.resolve("capture.png"), output, StandardCopyOption.REPLACE_EXISTING);
+    System.out.println("Saved full-client screenshot: " + output.toAbsolutePath());
+  }
+
+  private static Process launchClientProcess(Path runtimeConfigFile, boolean capture)
+      throws IOException {
     String javaBin =
         Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java")
             .toString();
@@ -386,7 +400,9 @@ public final class Ircv3ErgoShowcaseManualLauncher {
             "-Dircafe.runtime-config=" + runtimeConfigFile.toAbsolutePath(),
             "-cp",
             System.getProperty("java.class.path"),
-            "cafe.woden.ircclient.IrcSwingApp");
+            capture
+                ? Ircv3ShowcaseCaptureClient.class.getName()
+                : "cafe.woden.ircclient.IrcSwingApp");
 
     ProcessBuilder processBuilder = new ProcessBuilder(command);
     processBuilder.inheritIO();
@@ -658,7 +674,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
             hookInstaller,
             botFactory,
             bridgeListenerFactory,
-            (CtcpReplyRuntimeConfigPort) runtimeConfig,
+            new RuntimeConfigCtcpReplyAdapter(runtimeConfig),
             runtimeConfig::readDefaultQuitMessage,
             stsPolicies,
             Ircv3OutboundCommandRuntimeCatalog.applicationClasspath(),
@@ -843,7 +859,9 @@ public final class Ircv3ErgoShowcaseManualLauncher {
       String appNick,
       String authorNick,
       String peerNick,
-      Path baseDir) {
+      Path baseDir,
+      boolean capture,
+      Path outputDir) {
 
     private static final String DEFAULT_IRC_IMAGE = "ghcr.io/ergochat/ergo:stable";
     private static final String DEFAULT_CHANNEL = "#ircv3-showcase";
@@ -865,7 +883,9 @@ public final class Ircv3ErgoShowcaseManualLauncher {
           readString("ircv3.showcase.app-nick", DEFAULT_APP_NICK),
           readString("ircv3.showcase.author-nick", DEFAULT_AUTHOR_NICK),
           readString("ircv3.showcase.peer-nick", DEFAULT_PEER_NICK),
-          Path.of(readString("ircv3.showcase.base-dir", DEFAULT_BASE_DIR)));
+          Path.of(readString("ircv3.showcase.base-dir", DEFAULT_BASE_DIR)),
+          Boolean.parseBoolean(readString("ircv3.showcase.capture", "false")),
+          Path.of(readString("ircv3.showcase.output-dir", "build/ircv3-showcase/full-client")));
     }
   }
 

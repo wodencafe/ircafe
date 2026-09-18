@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -10,8 +11,8 @@ import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigCtcpReplyAdapter;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
@@ -114,7 +115,7 @@ class Ircv3ErgoShowcaseFunctionalTest {
   private static final int CAPTURE_HEIGHT = 760;
 
   private static final String REPLY_ROOT_TEXT =
-      "Testing, please reply to this message to test IRCv3 reply capability";
+      "Testing, please reply to this message to test IRCv3 replies";
   private static final String REPLY_TEXT = "Reply rendering looks correct here.";
   private static final String REACT_ROOT_TEXT = "Reaction chips should appear under this line.";
   private static final String REDACT_ROOT_TEXT =
@@ -165,15 +166,19 @@ class Ircv3ErgoShowcaseFunctionalTest {
         TestSubscriber<ServerIrcEvent> peerEvents = runtimePeer.service().events().test();
 
         try {
-          connectAndJoin(runtimeApp.service(), appCfg.serverId(), cfg.channel(), appEvents);
+          // The author creates the channel and receives +o. Ergo permits operators to redact
+          // channel messages; unauthenticated non-operators cannot delete even their own.
           connectAndJoin(
               runtimeAuthor.service(), authorCfg.serverId(), cfg.channel(), authorEvents);
+          connectAndJoin(runtimeApp.service(), appCfg.serverId(), cfg.channel(), appEvents);
           connectAndJoin(runtimePeer.service(), peerCfg.serverId(), cfg.channel(), peerEvents);
 
           TargetRef channelTarget = new TargetRef(appCfg.serverId(), cfg.channel());
           onEdt(
               () -> {
                 chat.chat().setSize(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+                // ComponentView needs a displayable hierarchy to lay out embedded reaction chips.
+                chat.chat().addNotify();
                 chat.chat().setActiveTarget(channelTarget);
                 chat.chat().setInputEnabled(true);
               });
@@ -208,6 +213,7 @@ class Ircv3ErgoShowcaseFunctionalTest {
               runtimeAuthor.service(),
               authorCfg.serverId(),
               appEvents,
+              appCfg.serverId(),
               cfg);
           captureTypingScene(
               cfg.outputDir(),
@@ -265,12 +271,7 @@ class Ircv3ErgoShowcaseFunctionalTest {
     peerService
         .sendRaw(
             peerServerId,
-            "@+draft/reply="
-                + rootMessage.messageId()
-                + " PRIVMSG "
-                + cfg.channel()
-                + " :"
-                + REPLY_TEXT)
+            "@+reply=" + rootMessage.messageId() + " PRIVMSG " + cfg.channel() + " :" + REPLY_TEXT)
         .blockingAwait();
     awaitChannelMessage(
         appEvents, appServerId, cfg.channel(), cfg.peerNick(), REPLY_TEXT, replyCount, UI_TIMEOUT);
@@ -278,9 +279,9 @@ class Ircv3ErgoShowcaseFunctionalTest {
     waitForTranscriptSnippet(
         chat.transcripts(),
         channelTarget,
-        "replied to " + rootMessage.messageId(),
+        "↪ Reply to " + cfg.authorNick() + ": " + REPLY_ROOT_TEXT,
         UI_TIMEOUT,
-        "reply context line did not render");
+        "quoted reply preview did not render");
     waitForTranscriptSnippet(
         chat.transcripts(), channelTarget, REPLY_TEXT, UI_TIMEOUT, "reply line did not render");
     captureScene(chat.chat(), outputDir.resolve("reply.png"));
@@ -320,23 +321,31 @@ class Ircv3ErgoShowcaseFunctionalTest {
     peerService
         .sendRaw(
             peerServerId,
-            "@+draft/react=:+1:;+draft/reply="
-                + rootMessage.messageId()
-                + " TAGMSG "
-                + cfg.channel())
+            "@+draft/react=:+1:;+reply=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
         .blockingAwait();
     authorService
         .sendRaw(
             authorServerId,
-            "@+draft/react=:eyes:;+draft/reply="
-                + rootMessage.messageId()
-                + " TAGMSG "
-                + cfg.channel())
+            "@+draft/react=:eyes:;+reply=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
         .blockingAwait();
 
     waitForReactionTokens(
         chat.chat(), List.of(":+1:", ":eyes:"), UI_TIMEOUT, "reaction chips did not render");
     captureScene(chat.chat(), outputDir.resolve("react.png"));
+    assertTrue(
+        onEdtCall(
+            () -> {
+              MessageReactionsComponent reactions =
+                  findFirst(chat.chat(), MessageReactionsComponent.class);
+              if (reactions == null || reactions.getWidth() <= 0 || reactions.getHeight() <= 0) {
+                return false;
+              }
+              for (Component chip : reactions.getComponents()) {
+                if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
+              }
+              return true;
+            }),
+        "reaction chips must occupy visible space in the screenshot");
   }
 
   private static void captureRedactionScene(
@@ -346,18 +355,19 @@ class Ircv3ErgoShowcaseFunctionalTest {
       PircbotxIrcClientService authorService,
       String authorServerId,
       TestSubscriber<ServerIrcEvent> appEvents,
+      String appServerId,
       ShowcaseConfig cfg)
       throws Exception {
     resetScene(chat, channelTarget);
 
     int rootCount =
         countChannelMessages(
-            appEvents, authorServerId, cfg.channel(), cfg.authorNick(), REDACT_ROOT_TEXT);
+            appEvents, appServerId, cfg.channel(), cfg.authorNick(), REDACT_ROOT_TEXT);
     authorService.sendToChannel(authorServerId, cfg.channel(), REDACT_ROOT_TEXT).blockingAwait();
     IrcEvent.ChannelMessage rootMessage =
         awaitChannelMessage(
             appEvents,
-            authorServerId,
+            appServerId,
             cfg.channel(),
             cfg.authorNick(),
             REDACT_ROOT_TEXT,
@@ -367,10 +377,9 @@ class Ircv3ErgoShowcaseFunctionalTest {
         Objects.toString(rootMessage.messageId(), "").isBlank(),
         "redaction root message id should not be blank");
 
+    assertTrue(authorService.isMessageRedactionAvailable(authorServerId));
     authorService
-        .sendRaw(
-            authorServerId,
-            "@+draft/delete=" + rootMessage.messageId() + " TAGMSG " + cfg.channel())
+        .sendRaw(authorServerId, "REDACT " + cfg.channel() + " " + rootMessage.messageId())
         .blockingAwait();
 
     waitForTranscriptSnippet(
@@ -792,7 +801,7 @@ class Ircv3ErgoShowcaseFunctionalTest {
             hookInstaller,
             botFactory,
             bridgeListenerFactory,
-            (CtcpReplyRuntimeConfigPort) runtimeConfig,
+            new RuntimeConfigCtcpReplyAdapter(runtimeConfig),
             runtimeConfig::readDefaultQuitMessage,
             stsPolicies,
             Ircv3OutboundCommandRuntimeCatalog.applicationClasspath(),
@@ -944,7 +953,7 @@ class Ircv3ErgoShowcaseFunctionalTest {
                       redaction.from(),
                       epochMs(redaction.at()),
                       "",
-                      Map.of("draft/delete", redaction.messageId()));
+                      Map.of());
                 }
                 case IrcEvent.UserTypingObserved typing -> {
                   TargetRef target = new TargetRef(sid, typing.target());
@@ -993,7 +1002,11 @@ class Ircv3ErgoShowcaseFunctionalTest {
 
     @Override
     public void close() throws Exception {
-      onEdt(() -> shutdownChatDockable(chat));
+      onEdt(
+          () -> {
+            shutdownChatDockable(chat);
+            chat.removeNotify();
+          });
       flushEdt();
       try {
         logViewerExecutor.shutdownNow();

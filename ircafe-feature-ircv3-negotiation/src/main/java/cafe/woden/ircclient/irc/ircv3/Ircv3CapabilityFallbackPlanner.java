@@ -58,12 +58,10 @@ public final class Ircv3CapabilityFallbackPlanner {
             && !state.pendingCapabilities().contains(BATCH);
 
     String historyCapability = "";
-    if (!state.chatHistoryAcked()) {
-      if (offered.contains(CHATHISTORY)) {
-        historyCapability = CHATHISTORY;
-      } else if (offered.contains(DRAFT_CHATHISTORY)) {
-        historyCapability = DRAFT_CHATHISTORY;
-      }
+    // CHATHISTORY is still a draft. An advertised unprefixed name must not opt us into
+    // a future protocol version, including when the draft request is already pending.
+    if (!state.chatHistoryAcked() && offered.contains(DRAFT_CHATHISTORY)) {
+      historyCapability = DRAFT_CHATHISTORY;
     }
     if (state.pendingCapabilities().contains(historyCapability)) {
       historyCapability = "";

@@ -43,6 +43,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private final PircbotxConnectionState conn;
   private final Ircv3StsPolicyService stsPolicies;
   private final PircbotxCapabilityNegotiationSupport capabilityNegotiationSupport;
+  private final PircbotxCapLsAccumulator capLsAccumulator = new PircbotxCapLsAccumulator();
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport;
   private final PircbotxAccountTagSupport accountTagSupport;
   private final PircbotxPresenceSignalSupport presenceSignalSupport;
@@ -133,8 +134,16 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
   @Override
   public void handleLine(String rawLine) throws IOException, IrcException {
+    rawLine = capLsAccumulator.accept(rawLine);
+    if (rawLine == null) return;
     emitLabeledNumericObservation(rawLine);
     super.handleLine(rawLine);
+  }
+
+  @Override
+  public void close() {
+    capLsAccumulator.clear();
+    super.close();
   }
 
   @Override

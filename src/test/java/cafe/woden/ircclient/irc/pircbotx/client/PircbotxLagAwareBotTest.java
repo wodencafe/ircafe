@@ -21,6 +21,15 @@ class PircbotxLagAwareBotTest {
   }
 
   @Test
+  void requestsCap302OnTheWire() throws Exception {
+    TestLagAwareBot bot = new TestLagAwareBot(configuration());
+    StringWriter output = new StringWriter();
+    bot.setOutputWriter(output);
+    bot.sendLine("CAP LS");
+    assertEquals("CAP LS 302\r\n", output.toString());
+  }
+
+  @Test
   void sendRawLineToServerRecordsOutboundPingTokens() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     TestLagAwareBot bot = new TestLagAwareBot(configuration());

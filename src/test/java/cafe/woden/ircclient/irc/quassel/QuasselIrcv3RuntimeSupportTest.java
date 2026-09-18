@@ -65,6 +65,9 @@ class QuasselIrcv3RuntimeSupportTest {
 
     assertEquals(
         "#plugin",
+        support.channelContext("PRIVMSG", "alice", "quassel", List.of("quassel"), tags, "raw"));
+    assertEquals(
+        "alice",
         support.channelContext("TAGMSG", "alice", "quassel", List.of("quassel"), tags, "raw"));
     assertEquals(
         List.of(

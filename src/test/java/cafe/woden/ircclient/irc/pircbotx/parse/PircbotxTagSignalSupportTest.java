@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class PircbotxTagSignalSupportTest {
 
@@ -136,8 +138,9 @@ class PircbotxTagSignalSupportTest {
     assertEquals("bob", typing.target());
   }
 
-  @Test
-  void channelContextOverridesDirectMessageTargetAndTagLookupUnescapesValues() {
+  @ParameterizedTest
+  @ValueSource(strings = {"PRIVMSG", "NOTICE", "TAGMSG"})
+  void channelContextOnlyOverridesPrivateMessagesAndTagLookupUnescapesValues(String command) {
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxTagSignalSupport support = support("libera", out::add);
 
@@ -145,7 +148,7 @@ class PircbotxTagSignalSupportTest {
         Instant.parse("2026-03-22T12:05:00Z"),
         "bob",
         "me",
-        "TAGMSG",
+        command,
         List.of("me"),
         ImmutableMap.of(
             "+draft/channel-context", "#ircafe",
@@ -160,7 +163,7 @@ class PircbotxTagSignalSupportTest {
                 e ->
                     e instanceof IrcEvent.MessageUnreactObserved r
                         && "bob".equals(r.from())
-                        && "#ircafe".equals(r.target())
+                        && (command.equals("TAGMSG") ? "bob" : "#ircafe").equals(r.target())
                         && ":+1:".equals(r.reaction())
                         && "abc123".equals(r.messageId())));
     assertTrue(
@@ -170,7 +173,7 @@ class PircbotxTagSignalSupportTest {
                 e ->
                     e instanceof IrcEvent.ReadMarkerObserved rm
                         && "bob".equals(rm.from())
-                        && "#ircafe".equals(rm.target())
+                        && (command.equals("TAGMSG") ? "bob" : "#ircafe").equals(rm.target())
                         && "timestamp=2026-03-22T12;05;00Z".equals(rm.marker())));
     assertEquals(
         "abc123",

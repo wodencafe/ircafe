@@ -12,7 +12,9 @@ public final class Ircv3ChannelContextPolicy {
   private Ircv3ChannelContextPolicy() {}
 
   public static String resolveTarget(Map<String, String> tags, String rawTarget, String fromNick) {
-    String context = Ircv3Tags.firstDecodedTagValue(tags, DRAFT_CHANNEL_CONTEXT, CHANNEL_CONTEXT);
+    // The tag only supplies context for private messages, never for an existing channel target.
+    if (isChannelName(rawTarget)) return Objects.toString(rawTarget, "").trim();
+    String context = Ircv3Tags.firstDecodedTagValue(tags, CHANNEL_CONTEXT, DRAFT_CHANNEL_CONTEXT);
     if (isChannelName(context)) return context;
     return resolveConversationTarget(rawTarget, fromNick);
   }
@@ -27,6 +29,10 @@ public final class Ircv3ChannelContextPolicy {
   public static boolean isChannelName(String target) {
     String value = Objects.toString(target, "").trim();
     if (value.isEmpty()) return false;
+    if (value.indexOf(',') >= 0
+        || value.chars().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c))) {
+      return false;
+    }
     char leading = value.charAt(0);
     return leading == '#' || leading == '&' || leading == '!' || leading == '+';
   }

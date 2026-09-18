@@ -706,6 +706,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             if (e == null || chat == null) return;
             if (!SwingUtilities.isLeftMouseButton(e)) return;
 
+            // Quoted previews can contain nicknames, URLs, and channel names; the whole preview
+            // navigates to the original message.
+            String msgRef = messageReferenceAt(e.getPoint());
+            if (msgRef != null) {
+              try {
+                if (onMessageReferenceClicked(msgRef)) return;
+              } catch (Exception ignored) {
+              }
+            }
+
             ManualPreviewHit manual = manualPreviewHitAt(e.getPoint());
             if (manual != null) {
               try {
@@ -732,14 +742,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             if (nick != null) {
               try {
                 if (onNickClicked(nick)) return;
-              } catch (Exception ignored) {
-              }
-            }
-
-            String msgRef = messageReferenceAt(e.getPoint());
-            if (msgRef != null) {
-              try {
-                if (onMessageReferenceClicked(msgRef)) return;
               } catch (Exception ignored) {
               }
             }

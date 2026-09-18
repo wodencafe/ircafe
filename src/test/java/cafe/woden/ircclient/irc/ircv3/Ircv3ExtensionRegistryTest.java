@@ -19,6 +19,33 @@ import org.junit.jupiter.api.Test;
 class Ircv3ExtensionRegistryTest {
 
   @Test
+  void channelContextIsAStableClientTagWithNoCapRequest() {
+    var feature = Ircv3ExtensionRegistry.find("channel-context").orElseThrow();
+    assertEquals(Ircv3ExtensionRegistry.SpecStatus.STABLE, feature.specStatus());
+    assertEquals(Ircv3ExtensionRegistry.ExtensionKind.TAG_FEATURE, feature.kind());
+    assertEquals("", feature.requestToken());
+  }
+
+  @Test
+  void publishedClientTagsAndDraftFeaturesKeepTheirSpecificationStatus() {
+    // Checked against https://ircv3.net/irc/ and its linked specs on 2026-09-18.
+    for (String id : List.of("reply", "typing", "channel-context", "extended-monitor")) {
+      assertEquals(
+          Ircv3ExtensionRegistry.SpecStatus.STABLE,
+          Ircv3ExtensionRegistry.find(id).orElseThrow().specStatus(),
+          id);
+    }
+    for (String id :
+        List.of(
+            "react", "unreact", "read-marker", "multiline", "message-redaction", "chathistory")) {
+      assertEquals(
+          Ircv3ExtensionRegistry.SpecStatus.DRAFT,
+          Ircv3ExtensionRegistry.find(id).orElseThrow().specStatus(),
+          id);
+    }
+  }
+
+  @Test
   void draftCapabilitiesUseDraftRequestTokensAndFinalPreferenceKeys() {
     Ircv3ExtensionRegistry.ExtensionDefinition readMarker =
         Ircv3ExtensionRegistry.find("read-marker").orElseThrow();
@@ -47,6 +74,7 @@ class Ircv3ExtensionRegistryTest {
     assertEquals("", Ircv3ExtensionRegistry.requestTokenFor("draft/reply"));
     assertEquals("", Ircv3ExtensionRegistry.requestTokenFor("draft/react"));
     assertEquals("", Ircv3ExtensionRegistry.requestTokenFor("sts"));
+    assertEquals("", Ircv3ExtensionRegistry.requestTokenFor("monitor"));
     assertEquals("", Ircv3ExtensionRegistry.requestTokenFor("message-edit"));
     assertEquals("reply", Ircv3ExtensionRegistry.preferenceKeyFor("draft/reply"));
     assertEquals("react", Ircv3ExtensionRegistry.preferenceKeyFor("draft/react"));

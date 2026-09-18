@@ -12,7 +12,7 @@ class Ircv3CapabilityFallbackPlannerTest {
   private final Ircv3CapabilityFallbackPlanner planner = new Ircv3CapabilityFallbackPlanner();
 
   @Test
-  void plansMessageTagsBatchAndPreferredFinalHistoryCapability() {
+  void plansMessageTagsBatchAndPublishedDraftHistoryCapability() {
     Ircv3CapabilityFallbackPlanner.Plan plan =
         planner.plan(
             Ircv3CapabilityLine.parse("LS", ":message-tags batch draft/chathistory chathistory"),
@@ -20,7 +20,26 @@ class Ircv3CapabilityFallbackPlannerTest {
 
     assertTrue(plan.requestMessageTags());
     assertTrue(plan.requestBatch());
-    assertEquals("chathistory", plan.historyCapability());
+    assertEquals("draft/chathistory", plan.historyCapability());
+  }
+
+  @Test
+  void neverRequestsUnpublishedFinalHistoryNameFromLsOrNew() {
+    for (String action : new String[] {"LS", "NEW"}) {
+      assertFalse(
+          planner
+              .plan(
+                  Ircv3CapabilityLine.parse(action, ":chathistory"),
+                  new Ircv3CapabilityFallbackPlanner.State(false, false, false, Set.of()))
+              .requestHistory());
+      assertFalse(
+          planner
+              .plan(
+                  Ircv3CapabilityLine.parse(action, ":chathistory draft/chathistory"),
+                  new Ircv3CapabilityFallbackPlanner.State(
+                      false, false, false, Set.of("draft/chathistory")))
+              .requestHistory());
+    }
   }
 
   @Test

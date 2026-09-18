@@ -29,6 +29,9 @@ public class PircbotxLagAwareBot extends PircBotX {
 
   @Override
   protected void sendRawLineToServer(String line) throws IOException {
+    // PircBotX 2.x sends an unversioned LS. Request CAP 302 so servers expose values and
+    // complete multiline lists; PircbotxIrcv3InputParser assembles them before negotiation.
+    if ("CAP LS".equalsIgnoreCase(line.trim())) line = "CAP LS 302";
     super.sendRawLineToServer(line);
 
     String token = outboundPingToken(line);

@@ -22,7 +22,7 @@ class Ircv3ChannelContextRuntimeSupportTest {
         "#plugin",
         support.resolve(
             new Ircv3InboundTagRequest(
-                "TAGMSG", "alice", "me", List.of("me"), Map.of("plugin/context", "#plugin"))));
+                "PRIVMSG", "alice", "me", List.of("me"), Map.of("plugin/context", "#plugin"))));
   }
 
   @Test
@@ -33,6 +33,7 @@ class Ircv3ChannelContextRuntimeSupportTest {
 
     assertEquals("alice", support(List.of()).resolve(request));
     assertEquals("alice", support(signals("bad target")).resolve(request));
+    assertEquals("alice", support(signals("#one,#two")).resolve(request));
     assertEquals("alice", support(signals("mallory")).resolve(request));
     assertEquals(
         "alice",
@@ -42,6 +43,28 @@ class Ircv3ChannelContextRuntimeSupportTest {
                     Ircv3InboundTagSignal.of(
                         Ircv3InboundTagSignalType.CONVERSATION_TARGET, "#two")))
             .resolve(request));
+  }
+
+  @Test
+  void channelContextCannotRerouteChannelMessagesOrTagOnlyMessages() {
+    var support = support(signals("#redirect"));
+    assertEquals(
+        "#original",
+        support.resolve(
+            new Ircv3InboundTagRequest(
+                "PRIVMSG", "alice", "#original", List.of("#original"), Map.of())));
+    assertEquals(
+        "alice",
+        support.resolve(
+            new Ircv3InboundTagRequest("TAGMSG", "alice", "me", List.of("me"), Map.of())));
+    assertEquals(
+        "alice",
+        support.resolve(
+            new Ircv3InboundTagRequest("JOIN", "alice", "me", List.of("me"), Map.of())));
+    assertEquals(
+        "#redirect",
+        support.resolve(
+            new Ircv3InboundTagRequest("NOTICE", "alice", "me", List.of("me"), Map.of())));
   }
 
   @Test
