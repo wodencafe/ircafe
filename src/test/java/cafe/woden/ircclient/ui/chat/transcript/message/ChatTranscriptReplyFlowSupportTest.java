@@ -35,8 +35,7 @@ class ChatTranscriptReplyFlowSupportTest {
                   target, ignored -> newTranscriptState(messageCatalogSupport));
             },
             new ChatTranscriptDocumentLineSupport(new ChatStyles(null)),
-            new ChatTranscriptReplyContextSupport.Context(
-                new ChatStyles(null), null, (target, fromNick) -> "Alice"),
+            new ChatTranscriptReplyContextSupport.Context(new ChatStyles(null)),
             messageCatalogSupport);
     LineMeta meta =
         ChatTranscriptLineMetaSupport.create(
@@ -51,9 +50,7 @@ class ChatTranscriptReplyFlowSupportTest {
 
     support.appendReplyContextLine(context, ref, "alice", "m-1", 2_000L);
 
-    assertEquals(
-        "-> Alice replied to m-1 (Alice: hello)\n",
-        docs.get(ref).getText(0, docs.get(ref).getLength()));
+    assertEquals("↪ Reply to Alice: hello\n", docs.get(ref).getText(0, docs.get(ref).getLength()));
   }
 
   private static ChatTranscriptMessageCatalogSupport messageCatalogSupport() {

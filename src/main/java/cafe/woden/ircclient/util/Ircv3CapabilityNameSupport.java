@@ -53,6 +53,7 @@ public final class Ircv3CapabilityNameSupport {
   private static final Set<String> NON_REQUESTABLE_TOKENS =
       Set.of(
           Ircv3CapabilityNames.STS,
+          Ircv3CapabilityNames.MONITOR,
           Ircv3CapabilityNames.REPLY,
           Ircv3CapabilityNames.DRAFT_REPLY,
           Ircv3CapabilityNames.REACT,

@@ -69,7 +69,7 @@ final class ChatTranscriptMessageComposition {
         new ChatTranscriptMatrixDisplayNameCoordinator(
             uiSettings, userListStore, targetRuntimeCoordinator.docs());
     ChatTranscriptReplyContextSupport.Context replyContextSupportContext =
-        createReplyContextSupportContext(styles, ts, matrixDisplayNameCoordinator);
+        new ChatTranscriptReplyContextSupport.Context(styles);
     ChatTranscriptSenderStyleSupport.Context senderStyleSupportContext =
         createSenderStyleSupportContext(styles, nickColors, styleRoutingSupport);
     ChatTranscriptReactionSummarySupport reactionSummarySupport =
@@ -117,14 +117,6 @@ final class ChatTranscriptMessageComposition {
             messageTranslationSupport);
     return new Components(
         matrixDisplayNameCoordinator, messageLineCoordinator, messageInteractionCoordinator);
-  }
-
-  private static ChatTranscriptReplyContextSupport.Context createReplyContextSupportContext(
-      ChatStyles styles,
-      ChatTimestampFormatter ts,
-      ChatTranscriptMatrixDisplayNameCoordinator matrixDisplayNameCoordinator) {
-    return new ChatTranscriptReplyContextSupport.Context(
-        styles, ts, matrixDisplayNameCoordinator::renderTranscriptFrom);
   }
 
   private static ChatTranscriptSenderStyleSupport.Context createSenderStyleSupportContext(

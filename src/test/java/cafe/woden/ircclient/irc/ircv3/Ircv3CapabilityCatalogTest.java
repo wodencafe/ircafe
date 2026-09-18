@@ -16,7 +16,6 @@ class Ircv3CapabilityCatalogTest {
             "invite-notify",
             "away-notify",
             "account-notify",
-            "monitor",
             "extended-monitor",
             "extended-join",
             "setname",

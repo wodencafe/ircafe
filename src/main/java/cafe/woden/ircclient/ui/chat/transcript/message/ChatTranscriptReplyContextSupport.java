@@ -8,29 +8,20 @@ import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.transcript.line.ChatTranscriptLineMetaSupport;
+import cafe.woden.ircclient.ui.chat.transcript.line.ChatTranscriptReplyPreviewSupport;
 import cafe.woden.ircclient.ui.chat.transcript.line.LineMeta;
-import cafe.woden.ircclient.ui.chat.transcript.runtime.ChatTimestampFormatter;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import javax.swing.text.AttributeSet;
 import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
 public final class ChatTranscriptReplyContextSupport {
 
-  @FunctionalInterface
-  public interface TranscriptFromRenderer {
-    String render(TargetRef ref, String fromNick);
-  }
-
-  public record Context(
-      ChatStyles styles,
-      ChatTimestampFormatter timestamps,
-      TranscriptFromRenderer transcriptFromRenderer) {
+  public record Context(ChatStyles styles) {
     public Context {
       Objects.requireNonNull(styles, "styles");
-      Objects.requireNonNull(transcriptFromRenderer, "transcriptFromRenderer");
     }
   }
 
@@ -53,29 +44,43 @@ public final class ChatTranscriptReplyContextSupport {
     LineMeta meta =
         ChatTranscriptLineMetaSupport.create(
             ref, LogKind.STATUS, LogDirection.SYSTEM, fromNick, tsEpochMs, null, targetMsgId, tags);
-    AttributeSet tsStyle = ChatTranscriptLineMetaSupport.bind(context.styles().timestamp(), meta);
-    SimpleAttributeSet prefixStyle =
-        ChatTranscriptLineMetaSupport.bind(context.styles().status(), meta);
-    prefixStyle.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
     SimpleAttributeSet msgRefStyle =
-        ChatTranscriptLineMetaSupport.bind(context.styles().link(), meta);
+        ChatTranscriptLineMetaSupport.bind(
+            context.styles().byStyleId(ChatStyles.STYLE_REPLY_QUOTE), meta);
     msgRefStyle.addAttribute(ChatStyles.ATTR_MSG_REF, targetMsgId);
 
-    String from = context.transcriptFromRenderer().render(ref, fromNick);
-    String prefix = from.isEmpty() ? "-> Reply to " : ("-> " + from + " replied to ");
-    String preview = Objects.toString(previewLookup.apply(targetMsgId), "").trim();
+    String preview =
+        ChatTranscriptReplyPreviewSupport.normalizeReplyPreviewText(
+            Objects.toString(previewLookup.apply(targetMsgId), ""), 160);
+    String quote = preview.isBlank() ? "↪ Reply to an earlier message" : "↪ Reply to " + preview;
 
     try {
-      if (context.timestamps() != null && context.timestamps().enabled()) {
-        doc.insertString(doc.getLength(), context.timestamps().prefixAt(tsEpochMs), tsStyle);
-      }
-      doc.insertString(doc.getLength(), prefix, prefixStyle);
-      doc.insertString(doc.getLength(), targetMsgId, msgRefStyle);
-      if (!preview.isBlank()) {
-        doc.insertString(doc.getLength(), " (" + preview + ")", prefixStyle);
-      }
-      doc.insertString(doc.getLength(), "\n", tsStyle);
+      int start = doc.getLength();
+      doc.insertString(start, quote + "\n", msgRefStyle);
+      doc.setParagraphAttributes(start, quote.length(), blockParagraph(true), false);
     } catch (Exception ignored) {
     }
+  }
+
+  /** Attach a completed message to the immediately preceding quote without styling future rows. */
+  public static void styleReplyBody(StyledDocument doc, int start, int end) {
+    if (start <= 0 || end <= start) return;
+    if (!ChatStyles.REPLY_BLOCK_QUOTE.equals(
+        doc.getParagraphElement(start - 1)
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_REPLY_BLOCK))) return;
+    doc.setParagraphAttributes(start, end - start, blockParagraph(false), false);
+  }
+
+  private static SimpleAttributeSet blockParagraph(boolean quote) {
+    SimpleAttributeSet attrs = new SimpleAttributeSet();
+    attrs.addAttribute(
+        ChatStyles.ATTR_REPLY_BLOCK,
+        quote ? ChatStyles.REPLY_BLOCK_QUOTE : ChatStyles.REPLY_BLOCK_BODY);
+    StyleConstants.setLeftIndent(attrs, 14);
+    StyleConstants.setRightIndent(attrs, 8);
+    StyleConstants.setSpaceAbove(attrs, quote ? 8 : 0);
+    StyleConstants.setSpaceBelow(attrs, quote ? 2 : 8);
+    return attrs;
   }
 }

@@ -39,7 +39,7 @@ public final class Ircv3ChannelContextExtensionProvider
         new Ircv3ExtensionContribution(
             FEATURE,
             Ircv3ExtensionKind.TAG_FEATURE,
-            Ircv3SpecStatus.DRAFT,
+            Ircv3SpecStatus.STABLE,
             List.of(DRAFT_FEATURE),
             "",
             FEATURE,
@@ -61,9 +61,15 @@ public final class Ircv3ChannelContextExtensionProvider
     if (operation != Ircv3InboundTagOperation.CHANNEL_CONTEXT || request == null) {
       return List.of();
     }
+    boolean privateMessageCommand =
+        "PRIVMSG".equalsIgnoreCase(request.command())
+            || "NOTICE".equalsIgnoreCase(request.command());
     String target =
-        Ircv3ChannelContextPolicy.resolveTarget(
-            request.tags(), request.rawTarget(), request.sourceNick());
+        privateMessageCommand
+            ? Ircv3ChannelContextPolicy.resolveTarget(
+                request.tags(), request.rawTarget(), request.sourceNick())
+            : Ircv3ChannelContextPolicy.resolveConversationTarget(
+                request.rawTarget(), request.sourceNick());
     return target.isEmpty()
         ? List.of()
         : List.of(Ircv3InboundTagSignal.of(Ircv3InboundTagSignalType.CONVERSATION_TARGET, target));

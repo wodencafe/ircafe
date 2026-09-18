@@ -6,9 +6,11 @@ import static cafe.woden.ircclient.ui.chat.transcript.support.ChatTranscriptStor
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.transcript.message.RedactedMessageContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -32,7 +34,51 @@ class ChatTranscriptStoreMessageMutationTest {
         Map.of("msgid", "m-2", "draft/reply", "m-1"));
 
     String text = transcriptText(store.document(ref));
-    assertTrue(text.contains("-> bob replied to m-1 (alice: original message text)"));
+    assertTrue(text.contains("↪ Reply to alice: original message text\nbob: reply body"));
+    assertFalse(text.contains("m-1"));
+    var doc = store.document(ref);
+    assertEquals(
+        ChatStyles.REPLY_BLOCK_BODY,
+        doc.getParagraphElement(text.indexOf("bob:"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_REPLY_BLOCK));
+    assertNull(
+        doc.getCharacterElement(text.indexOf("reply body"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_MSG_REF));
+    store.appendChat(ref, "carol", "ordinary message");
+    String appended = transcriptText(doc);
+    assertNull(
+        doc.getParagraphElement(appended.indexOf("carol:"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_REPLY_BLOCK));
+    store.restyleAllDocuments();
+    assertEquals(
+        "m-1",
+        doc.getCharacterElement(text.indexOf("↪"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_MSG_REF));
+  }
+
+  @Test
+  void actionReplyDoesNotStyleFollowingMessagesAsReplies() throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = channelRef();
+    store.appendChatAt(ref, "alice", "hello", false, 1_000L, "m-1", Map.of());
+    store.appendActionAt(ref, "bob", "waves", false, 2_000L, "m-2", Map.of("+reply", "m-1"));
+    store.appendChat(ref, "carol", "ordinary message");
+    var doc = store.document(ref);
+    String text = transcriptText(doc);
+    assertTrue(text.contains("↪ Reply to alice: hello\n* bob waves"));
+    assertEquals(
+        ChatStyles.REPLY_BLOCK_BODY,
+        doc.getParagraphElement(text.indexOf("* bob"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_REPLY_BLOCK));
+    assertNull(
+        doc.getParagraphElement(text.indexOf("carol:"))
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_REPLY_BLOCK));
   }
 
   @Test
@@ -53,7 +99,7 @@ class ChatTranscriptStoreMessageMutationTest {
         Map.of("msgid", "m-2", "draft/reply", "m-1"));
 
     String text = transcriptText(store.document(ref));
-    assertTrue(text.contains("-> bob replied to m-1 (alice: after (edited))"));
+    assertTrue(text.contains("↪ Reply to alice: after (edited)\nbob: reply body"));
   }
 
   @Test

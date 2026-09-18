@@ -61,15 +61,7 @@ final class EmojiEditorKits {
         };
       }
       if (wrapParagraphs && view instanceof ParagraphView) {
-        return new ParagraphView(elem) {
-          @Override
-          public float getMinimumSpan(int axis) {
-            if (axis == View.X_AXIS) {
-              return 0;
-            }
-            return super.getMinimumSpan(axis);
-          }
-        };
+        return new ReplyBlockParagraphView(elem);
       }
       if (view instanceof LabelView) {
         return view;

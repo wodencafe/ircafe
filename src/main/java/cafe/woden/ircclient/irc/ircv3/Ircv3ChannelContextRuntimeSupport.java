@@ -32,6 +32,11 @@ public final class Ircv3ChannelContextRuntimeSupport {
       return "";
     }
     String fallback = fallbackTarget(request.rawTarget(), request.sourceNick());
+    if (!("PRIVMSG".equalsIgnoreCase(request.command())
+            || "NOTICE".equalsIgnoreCase(request.command()))
+        || isChannelName(normalizeTarget(request.rawTarget()))) {
+      return fallback;
+    }
     String accepted = "";
     for (Ircv3InboundTagSignal signal :
         inboundTagCatalog.parse(Ircv3InboundTagOperation.CHANNEL_CONTEXT, request)) {
@@ -64,6 +69,7 @@ public final class Ircv3ChannelContextRuntimeSupport {
     String target = Objects.toString(raw, "").trim();
     if (target.isEmpty()
         || target.length() > MAX_TARGET_LENGTH
+        || target.indexOf(',') >= 0
         || containsControl(target)
         || target.chars().anyMatch(Character::isWhitespace)) {
       return "";

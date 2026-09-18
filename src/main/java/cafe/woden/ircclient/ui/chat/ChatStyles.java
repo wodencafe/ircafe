@@ -23,6 +23,9 @@ public class ChatStyles {
   public static final String ATTR_MANUAL_PREVIEW_URL = "chat.manualPreviewUrl";
   public static final String ATTR_CHANNEL = "chat.channel";
   public static final String ATTR_MSG_REF = "chat.msgRef";
+  public static final String ATTR_REPLY_BLOCK = "chat.replyBlock";
+  public static final String REPLY_BLOCK_QUOTE = "quote";
+  public static final String REPLY_BLOCK_BODY = "body";
   public static final String ATTR_STYLE = "chat.style";
 
   // mIRC formatting metadata (preserved across restyle/theme changes)
@@ -74,6 +77,7 @@ public class ChatStyles {
   public static final String STYLE_NOTICE_FROM = "noticeFrom";
   public static final String STYLE_NOTICE_MESSAGE = "noticeMessage";
   public static final String STYLE_STATUS = "status";
+  public static final String STYLE_REPLY_QUOTE = "replyQuote";
   public static final String STYLE_PRESENCE = "presence";
   public static final String STYLE_ERROR = "error";
   public static final String STYLE_LINK = "link";
@@ -87,6 +91,7 @@ public class ChatStyles {
   private SimpleAttributeSet noticeFromStyle;
   private SimpleAttributeSet noticeMsgStyle;
   private SimpleAttributeSet statusStyle;
+  private SimpleAttributeSet replyQuoteStyle;
   private SimpleAttributeSet presenceStyle;
   private SimpleAttributeSet errorStyle;
   private SimpleAttributeSet linkStyle;
@@ -251,6 +256,7 @@ public class ChatStyles {
     noticeFromStyle = attrs(STYLE_NOTICE_FROM, noticeFg, bg, true, false);
     noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, noticeFg, bg, false, false);
     statusStyle = attrs(STYLE_STATUS, sysFg, bg, false, true);
+    replyQuoteStyle = attrs(STYLE_REPLY_QUOTE, dim, bg, false, false);
     presenceStyle = attrs(STYLE_PRESENCE, presenceFg, bg, false, true);
     errorStyle = attrs(STYLE_ERROR, errFg, bg, true, false);
 
@@ -324,6 +330,7 @@ public class ChatStyles {
       case STYLE_NOTICE_FROM -> noticeFromStyle;
       case STYLE_NOTICE_MESSAGE -> noticeMsgStyle;
       case STYLE_STATUS -> statusStyle;
+      case STYLE_REPLY_QUOTE -> replyQuoteStyle;
       case STYLE_PRESENCE -> presenceStyle;
       case STYLE_ERROR -> errorStyle;
       case STYLE_LINK -> linkStyle;

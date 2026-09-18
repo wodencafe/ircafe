@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat.transcript.line;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
+import cafe.woden.ircclient.ui.chat.transcript.message.ChatTranscriptReplyContextSupport;
 import cafe.woden.ircclient.ui.chat.transcript.runtime.ChatTimestampFormatter;
 import java.util.Objects;
 import javax.swing.text.AttributeSet;
@@ -42,6 +43,7 @@ public final class ChatTranscriptTextLineSupport {
     }
 
     int pos = Math.max(0, Math.min(insertAt, doc.getLength()));
+    int start = pos;
     if (shouldInsertTimestamp(
         timestampFormatter,
         messageStyle,
@@ -77,6 +79,7 @@ public final class ChatTranscriptTextLineSupport {
     int lineEndOffset = pos;
     doc.insertString(pos, "\n", timestampStyle);
     pos += 1;
+    ChatTranscriptReplyContextSupport.styleReplyBody(doc, start, lineEndOffset);
     return new WriteResult(pos, lineEndOffset);
   }
 

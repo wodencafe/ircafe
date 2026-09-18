@@ -60,6 +60,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -70,6 +71,8 @@ import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.testcontainers.DockerClientFactory;
@@ -156,6 +159,63 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             service.disconnect(runtimeCfg.serverId(), "scripted roster shutdown").blockingAwait();
           } catch (Exception ignored) {
           }
+          events.cancel();
+        }
+      }
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void ircBackendRequestsOnlySupportedCapabilitiesOnTheWire(boolean multilineLs) throws Exception {
+    // Include tempting but invalid names: tags, experimental edits, and undrafted aliases.
+    // The expected set is independent of the production catalog so regressions cannot agree
+    // with a permissive fixture. Split LS also exercises PircBotX's continuation handling.
+    String firstOffer = "message-tags server-time echo-message batch multi-prefix";
+    String secondOffer =
+        "draft/multiline=max-bytes=4096,max-lines=10 draft/chathistory draft/read-marker"
+            + " draft/message-redaction reply draft/reply react draft/react unreact draft/unreact"
+            + " typing draft/typing msgid channel-context draft/channel-context monitor sts=duration=0"
+            + " message-edit draft/message-edit multiline chathistory read-marker message-redaction";
+    List<String> offers =
+        multilineLs ? List.of(firstOffer, secondOffer) : List.of(firstOffer + " " + secondOffer);
+    Set<String> expected =
+        Set.of(
+            "message-tags",
+            "server-time",
+            "echo-message",
+            "batch",
+            "multi-prefix",
+            "draft/multiline",
+            "draft/chathistory",
+            "draft/read-marker",
+            "draft/message-redaction");
+    try (ScriptedLargeRosterIrcServer server = new ScriptedLargeRosterIrcServer(1, offers)) {
+      RuntimeIrcConfig cfg =
+          new RuntimeIrcConfig(
+              "cap-wire-it",
+              InetAddress.getLoopbackAddress().getHostAddress(),
+              server.port(),
+              "",
+              "ircafe-it",
+              "ircafe-it",
+              "IRCafe CAP IT");
+      try (ServiceFixture fixture = newService(cfg, false)) {
+        TestSubscriber<ServerIrcEvent> events = fixture.service().events().test();
+        try {
+          fixture.service().connect(cfg.serverId()).blockingAwait();
+          awaitNextEvent(
+              events, cfg.serverId(), IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
+          List<String> requests = List.copyOf(server.requestedCapabilities);
+          assertEquals("CAP LS 302", server.capLsRequest);
+          assertEquals(expected, Set.copyOf(requests), "actual CAP REQ tokens");
+          assertEquals(
+              expected.size(), requests.size(), "capabilities must not be requested twice");
+          assertTrue(fixture.service().isMessageTagsAvailable(cfg.serverId()));
+          assertTrue(fixture.service().isMessageRedactionAvailable(cfg.serverId()));
+          assertTrue(fixture.service().isMonitorAvailable(cfg.serverId()));
+          server.assertHealthy();
+        } finally {
           events.cancel();
         }
       }
@@ -1931,11 +1991,20 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     private final ServerSocket serverSocket;
     private final Thread serverThread;
     private final int rosterSize;
+    private final List<String> capabilityOffers;
+    private final List<String> requestedCapabilities = new CopyOnWriteArrayList<>();
+    private volatile String capLsRequest;
     private final AtomicReference<Throwable> failure = new AtomicReference<>();
     private volatile Socket clientSocket;
 
     private ScriptedLargeRosterIrcServer(int rosterSize) throws IOException {
+      this(rosterSize, List.of("multi-prefix"));
+    }
+
+    private ScriptedLargeRosterIrcServer(int rosterSize, List<String> capabilityOffers)
+        throws IOException {
       this.rosterSize = rosterSize;
+      this.capabilityOffers = List.copyOf(capabilityOffers);
       this.serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
       this.serverThread = Thread.startVirtualThread(this::serve);
     }
@@ -1965,9 +2034,17 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           } else if (line.startsWith("USER ")) {
             userSeen = true;
           } else if (line.startsWith("CAP LS")) {
-            sendLine(writer, ":" + SERVER_NAME + " CAP * LS :multi-prefix");
+            capLsRequest = line;
+            for (int i = 0; i < capabilityOffers.size(); i++) {
+              String continuation = i + 1 < capabilityOffers.size() ? "* " : "";
+              sendLine(
+                  writer,
+                  ":" + SERVER_NAME + " CAP * LS " + continuation + ":" + capabilityOffers.get(i));
+            }
           } else if (line.startsWith("CAP REQ")) {
             String requested = line.substring("CAP REQ".length()).trim();
+            String tokens = requested.startsWith(":") ? requested.substring(1) : requested;
+            requestedCapabilities.addAll(List.of(tokens.split(" +")));
             sendLine(writer, ":" + SERVER_NAME + " CAP " + nick + " ACK " + requested);
           } else if (line.equals("CAP END")) {
             capEnded = true;
@@ -1995,8 +2072,12 @@ class PircbotxContainerNetworkE2eIntegrationTest {
       sendLine(writer, ":" + SERVER_NAME + " 001 " + nick + " :Welcome to the test network");
       sendLine(
           writer,
-          ":" + SERVER_NAME + " 005 " + nick + " PREFIX=(qaohv)~&@%+ CHANTYPES=# :are supported");
-      sendLine(writer, ":" + SERVER_NAME + " 376 " + nick + " :End of MOTD");
+          ":"
+              + SERVER_NAME
+              + " 005 "
+              + nick
+              + " PREFIX=(qaohv)~&@%+ CHANTYPES=# MONITOR=100 :are supported");
+      sendLine(writer, ":" + SERVER_NAME + " 422 " + nick + " :MOTD File is missing");
     }
 
     private void sendRoster(BufferedWriter writer, String nick) throws IOException {
