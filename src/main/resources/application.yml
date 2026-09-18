@@ -295,6 +295,13 @@ irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"
 
+    # Native IRC: enabled by default, with per-connection pacing and conservative warm-up.
+    # Also editable in Preferences > Network > Flood protection; reconnect to apply.
+    floodProtection:
+      enabled: true
+      commandIntervalMs: 1500
+      autoJoinDelayMs: 5000
+
     # Auto-reconnect policy (client-side). These defaults are safe for most setups.
     reconnect:
       enabled: true

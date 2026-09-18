@@ -29,6 +29,7 @@ final class NetworkConnectionPanelSupport {
   static NetworkConnectionPanelControls buildControls(
       IrcProperties.Proxy proxySettings,
       IrcProperties.Heartbeat heartbeatSettings,
+      IrcProperties.FloodProtection floodSettings,
       List<AutoCloseable> closeables,
       boolean trustAllTlsCertificatesSelected,
       boolean preferLoginHintDefault,
@@ -273,6 +274,34 @@ final class NetworkConnectionPanelSupport {
     bouncerTab.add(genericBouncerLoginTemplate, MigConstraints.growXMinWidth0());
     bouncerTab.add(genericBouncerTemplateHelp, MigConstraints.span2GrowXMinWidth0Wrap());
 
+    JPanel floodTab = new JPanel(MigLayouts.twoColumnForm(12, MigLayouts.rows(2, 6)));
+    floodTab.setOpaque(false);
+    JTextArea floodBlurb = PreferencesUiSupport.subtleInfoText();
+    floodBlurb.setText(MESSAGES.text("preferences.network.flood.blurb"));
+    floodTab.add(floodBlurb, MigConstraints.span2GrowXMinWidth0Wrap());
+    JCheckBox floodEnabled = new JCheckBox(MESSAGES.text("preferences.network.flood.enabled"));
+    floodEnabled.setName("ircRateLimitingEnabled");
+    floodEnabled.setSelected(floodSettings.enabled());
+    floodEnabled.setOpaque(false);
+    floodTab.add(floodEnabled, MigConstraints.span2GrowXMinWidth0Wrap());
+    JSpinner commandIntervalMs =
+        PreferencesUiSupport.numberSpinner(
+            (int) floodSettings.commandIntervalMs(), 100, 10_000, 100, closeables);
+    commandIntervalMs.setName("ircCommandIntervalMs");
+    commandIntervalMs.setEnabled(floodEnabled.isSelected());
+    floodEnabled.addItemListener(e -> commandIntervalMs.setEnabled(floodEnabled.isSelected()));
+    JSpinner autoJoinDelaySeconds =
+        PreferencesUiSupport.numberSpinner(
+            (int) (floodSettings.autoJoinDelayMs() / 1000), 0, 120, 1, closeables);
+    autoJoinDelaySeconds.setName("ircAutoJoinDelaySeconds");
+    floodTab.add(new JLabel(MESSAGES.text("preferences.network.flood.commandInterval")));
+    floodTab.add(commandIntervalMs, MigConstraints.width(110));
+    floodTab.add(new JLabel(MESSAGES.text("preferences.network.flood.autoJoinDelay")));
+    floodTab.add(autoJoinDelaySeconds, MigConstraints.width(110));
+    JTextArea floodReconnect = PreferencesUiSupport.subtleInfoText();
+    floodReconnect.setText(MESSAGES.text("preferences.network.flood.reconnect"));
+    floodTab.add(floodReconnect, MigConstraints.span2GrowXMinWidth0Wrap());
+
     JTabbedPane networkTabs = new JTabbedPane();
     networkTabs.addTab(
         MESSAGES.text("preferences.network.tab.proxy"), PreferencesUiSupport.padSubTab(proxyTab));
@@ -281,6 +310,8 @@ final class NetworkConnectionPanelSupport {
     networkTabs.addTab(
         MESSAGES.text("preferences.network.tab.heartbeat"),
         PreferencesUiSupport.padSubTab(heartbeatTab));
+    networkTabs.addTab(
+        MESSAGES.text("preferences.network.tab.flood"), PreferencesUiSupport.padSubTab(floodTab));
     networkTabs.addTab(
         MESSAGES.text("preferences.network.tab.bouncer"),
         PreferencesUiSupport.padSubTab(bouncerTab));
@@ -320,6 +351,11 @@ final class NetworkConnectionPanelSupport {
         new BouncerControls(genericBouncerPreferLoginHint, genericBouncerLoginTemplate);
 
     return new NetworkConnectionPanelControls(
-        proxyControls, heartbeatControls, bouncerControls, trustAllTlsCertificates, networkPanel);
+        proxyControls,
+        heartbeatControls,
+        new FloodProtectionControls(floodEnabled, commandIntervalMs, autoJoinDelaySeconds),
+        bouncerControls,
+        trustAllTlsCertificates,
+        networkPanel);
   }
 }

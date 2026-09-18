@@ -35,12 +35,14 @@ class RuntimeConfigNetworkSettingsAdapterTest {
 
     adapter.rememberClientProxy(proxy);
     adapter.rememberClientHeartbeat(heartbeat);
+    adapter.rememberClientFloodProtection(IrcProperties.FloodProtection.defaults());
     adapter.rememberGenericBouncerPreferLoginHint(false);
     adapter.rememberGenericBouncerLoginTemplate("{account}@{network}");
     adapter.rememberClientTlsTrustAllCertificates(true);
 
     verify(runtimeConfig).rememberClientProxy(proxy);
     verify(runtimeConfig).rememberClientHeartbeat(heartbeat);
+    verify(runtimeConfig).rememberClientFloodProtection(IrcProperties.FloodProtection.defaults());
     verify(runtimeConfig).rememberGenericBouncerPreferLoginHint(false);
     verify(runtimeConfig).rememberGenericBouncerLoginTemplate("{account}@{network}");
     verify(runtimeConfig).rememberClientTlsTrustAllCertificates(true);

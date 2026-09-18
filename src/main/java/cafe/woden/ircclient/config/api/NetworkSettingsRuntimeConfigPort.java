@@ -17,6 +17,8 @@ public interface NetworkSettingsRuntimeConfigPort {
 
   void rememberClientHeartbeat(IrcProperties.Heartbeat heartbeat);
 
+  void rememberClientFloodProtection(IrcProperties.FloodProtection floodProtection);
+
   void rememberGenericBouncerPreferLoginHint(boolean enabled);
 
   void rememberGenericBouncerLoginTemplate(String template);

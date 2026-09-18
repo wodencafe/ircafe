@@ -9,6 +9,7 @@ public record NetworkAdvancedControls(
     UserhostControls userhost,
     UserInfoEnrichmentControls enrichment,
     HeartbeatControls heartbeat,
+    FloodProtectionControls floodProtection,
     BouncerControls bouncer,
     JSpinner monitorIsonPollIntervalSeconds,
     JCheckBox trustAllTlsCertificates,

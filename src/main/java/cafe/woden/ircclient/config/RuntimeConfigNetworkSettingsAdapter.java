@@ -38,6 +38,11 @@ public final class RuntimeConfigNetworkSettingsAdapter implements NetworkSetting
   }
 
   @Override
+  public void rememberClientFloodProtection(IrcProperties.FloodProtection floodProtection) {
+    runtimeConfig.rememberClientFloodProtection(floodProtection);
+  }
+
+  @Override
   public void rememberGenericBouncerPreferLoginHint(boolean enabled) {
     runtimeConfig.rememberGenericBouncerPreferLoginHint(enabled);
   }

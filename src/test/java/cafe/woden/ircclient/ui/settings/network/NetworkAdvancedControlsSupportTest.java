@@ -101,6 +101,7 @@ class NetworkAdvancedControlsSupportTest {
     NetworkAdvancedControlsSupport.NetworkSettings settings =
         NetworkAdvancedControlsSupport.readSettings(controls);
 
+    assertEquals(new IrcProperties.FloodProtection(1500, 5000), settings.floodProtection());
     assertTrue(settings.bouncer().preferLoginHint());
     assertEquals("{base}/{network}", settings.bouncer().loginTemplate());
     assertTrue(settings.trustAllTlsCertificates());
@@ -118,6 +119,7 @@ class NetworkAdvancedControlsSupportTest {
         new NetworkAdvancedControlsSupport.NetworkSettings(
             proxy,
             heartbeat,
+            new IrcProperties.FloodProtection(2000, 7000),
             new NetworkAdvancedControlsSupport.BouncerSettings(true, "{base}/{network}"),
             true);
 
@@ -125,6 +127,9 @@ class NetworkAdvancedControlsSupportTest {
 
     verify(runtimeConfig).rememberClientProxy(proxy);
     verify(runtimeConfig).rememberClientHeartbeat(heartbeat);
+    verify(runtimeConfig)
+        .rememberClientFloodProtection(new IrcProperties.FloodProtection(2000, 7000));
+    cafe.woden.ircclient.net.NetFloodProtectionContext.configure(null);
     verify(heartbeatMaintenance).rescheduleActiveHeartbeats();
     verify(runtimeConfig).rememberGenericBouncerPreferLoginHint(true);
     verify(runtimeConfig).rememberGenericBouncerLoginTemplate("{base}/{network}");
@@ -182,7 +187,16 @@ class NetworkAdvancedControlsSupportTest {
     JCheckBox trustAllTlsCertificatesBox = new JCheckBox();
     trustAllTlsCertificatesBox.setSelected(trustAllTlsCertificates);
     return new NetworkAdvancedControls(
-        proxy, null, null, heartbeat, bouncer, null, trustAllTlsCertificatesBox, null, null);
+        proxy,
+        null,
+        null,
+        heartbeat,
+        new FloodProtectionControls(new JCheckBox("", true), spinner(1500), spinner(5)),
+        bouncer,
+        null,
+        trustAllTlsCertificatesBox,
+        null,
+        null);
   }
 
   private static JSpinner spinner(int value) {

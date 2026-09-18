@@ -12,18 +12,16 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.capability.*;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.net.DeferredConnectSocksSocketFactory;
+import cafe.woden.ircclient.net.NetFloodProtectionContext;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +42,7 @@ import org.pircbotx.hooks.events.PingEvent;
 import org.pircbotx.hooks.events.TimeEvent;
 import org.pircbotx.hooks.events.VersionEvent;
 import org.pircbotx.hooks.managers.ThreadedListenerManager;
+import org.pircbotx.output.OutputRaw;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -52,7 +51,6 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class PircbotxBotFactory {
 
-  private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
   private static final long LISTENER_THREAD_KEEP_ALIVE_SECONDS = 30L;
   private static final AtomicInteger LISTENER_THREAD_SEQ = new AtomicInteger();
 
@@ -117,6 +115,7 @@ public class PircbotxBotFactory {
               : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
     }
 
+    IrcProperties.FloodProtection flood = NetFloodProtectionContext.settings();
     Configuration.Builder builder =
         new Configuration.Builder()
             .setName(s.nick())
@@ -137,15 +136,23 @@ public class PircbotxBotFactory {
     // Keep core behavior (PING, NickServ flows, etc.) but disable automatic CTCP replies.
     builder.replaceCoreHooksListener(new NoAutoCtcpCoreHooks());
     configureCapHandlers(builder);
-    applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
+    builder.setMessageDelay(() -> flood.enabled() ? flood.commandIntervalMs() : 0);
+    builder.setBotFactory(
+        new Configuration.BotFactory() {
+          @Override
+          public OutputRaw createOutputRaw(PircBotX bot) {
+            return new PircbotxPacedOutput(bot, flood);
+          }
+        });
 
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       builder.setServerPassword(s.serverPassword());
     }
+    List<String> autoJoinChannels = new ArrayList<>();
     for (String chan : s.autoJoin()) {
       String ch = chan == null ? "" : chan.trim();
       if (AutoJoinEntryCodec.isPrivateMessageEntry(ch)) continue;
-      if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
+      if (!ch.isEmpty() && !autoJoinChannels.contains(ch)) autoJoinChannels.add(ch);
     }
     boolean saslEnabled = s.sasl() != null && s.sasl().enabled();
     boolean nickservEnabled = s.nickserv() != null && s.nickserv().enabled();
@@ -202,7 +209,10 @@ public class PircbotxBotFactory {
               user, secret, mech, s.sasl().disconnectOnFailure(), saslRuntimeSupport));
     }
 
-    return new PircbotxLagAwareBot(builder.buildConfiguration());
+    PircbotxAutoJoinSupport autoJoin =
+        new PircbotxAutoJoinSupport(s.id(), autoJoinChannels, flood.autoJoinDelayMs());
+    builder.addListener(autoJoin);
+    return new PircbotxLagAwareBot(builder.buildConfiguration(), autoJoin);
   }
 
   private static ThreadedListenerManager createOrderedListenerManager(String serverId) {
@@ -240,76 +250,6 @@ public class PircbotxBotFactory {
     } catch (Exception ignored) {
       return true;
     }
-  }
-
-  private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {
-    try {
-      Method m = builder.getClass().getMethod("setMessageDelay", long.class);
-      m.invoke(builder, delayMs);
-      return;
-    } catch (ReflectiveOperationException ignored) {
-    }
-    try {
-      Class<?> delayIface = Class.forName("org.pircbotx.delay.Delay");
-      Method m = builder.getClass().getMethod("setMessageDelay", delayIface);
-      Object delayObj;
-      if (delayIface.isInterface()) {
-        delayObj =
-            java.lang.reflect.Proxy.newProxyInstance(
-                delayIface.getClassLoader(),
-                new Class<?>[] {delayIface},
-                constantDelayHandler(delayMs));
-      } else {
-        delayObj = tryConstructDelay(delayMs, delayIface);
-      }
-
-      if (delayObj != null) m.invoke(builder, delayObj);
-    } catch (ReflectiveOperationException ignored) {
-    }
-  }
-
-  private static InvocationHandler constantDelayHandler(long delayMs) {
-    return (proxy, method, args) -> {
-      if (method.getDeclaringClass() == Object.class) {
-        return switch (method.getName()) {
-          case "toString" -> "ConstantDelay(" + delayMs + "ms)";
-          case "hashCode" -> System.identityHashCode(proxy);
-          case "equals" -> proxy == (args != null && args.length > 0 ? args[0] : null);
-          default -> null;
-        };
-      }
-
-      Class<?> rt = method.getReturnType();
-      if (rt == long.class || rt == Long.class) return delayMs;
-      if (rt == int.class || rt == Integer.class) return (int) Math.min(Integer.MAX_VALUE, delayMs);
-      if (rt == Duration.class) return Duration.ofMillis(delayMs);
-      return null;
-    };
-  }
-
-  private static Object tryConstructDelay(long delayMs, Class<?> delayType) {
-    try {
-      return delayType.getConstructor(long.class).newInstance(delayMs);
-    } catch (ReflectiveOperationException ignored) {
-    }
-    try {
-      return delayType
-          .getConstructor(int.class)
-          .newInstance((int) Math.min(Integer.MAX_VALUE, delayMs));
-    } catch (ReflectiveOperationException ignored) {
-    }
-    try {
-      return delayType.getConstructor(Duration.class).newInstance(Duration.ofMillis(delayMs));
-    } catch (ReflectiveOperationException ignored) {
-    }
-    for (String name : new String[] {"ofMillis", "millis", "fixed", "constant"}) {
-      try {
-        Method m = delayType.getMethod(name, long.class);
-        return m.invoke(null, delayMs);
-      } catch (ReflectiveOperationException ignored) {
-      }
-    }
-    return null;
   }
 
   private static final class NoAutoCtcpCoreHooks extends CoreHooks {

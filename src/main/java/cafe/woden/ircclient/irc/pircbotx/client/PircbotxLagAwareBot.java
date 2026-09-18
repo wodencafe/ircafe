@@ -18,9 +18,33 @@ public class PircbotxLagAwareBot extends PircBotX {
       Pattern.compile("^PING\\s+:?([^\\s]+)\\s*$", Pattern.CASE_INSENSITIVE);
 
   private volatile ObjLongConsumer<String> lagProbeObserver = NO_OP_OBSERVER;
+  private final PircbotxAutoJoinSupport autoJoin;
 
   public PircbotxLagAwareBot(Configuration configuration) {
+    this(configuration, null);
+  }
+
+  PircbotxLagAwareBot(Configuration configuration, PircbotxAutoJoinSupport autoJoin) {
     super(configuration);
+    this.autoJoin = autoJoin;
+  }
+
+  @Override
+  protected void setNickservIdentified(boolean identified) {
+    super.setNickservIdentified(identified);
+    if (identified && autoJoin != null) autoJoin.maybeStart(this);
+  }
+
+  @Override
+  public void close() {
+    if (autoJoin != null) autoJoin.close();
+    super.close();
+  }
+
+  @Override
+  protected void shutdown() {
+    if (autoJoin != null) autoJoin.close();
+    super.shutdown();
   }
 
   void setLagProbeObserver(ObjLongConsumer<String> observer) {
