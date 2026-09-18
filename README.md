@@ -47,8 +47,11 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 ### IRCv3 and Bouncer Support
 
 - Capability negotiation with per-capability runtime toggles.
-- Broad IRCv3 coverage including `message-tags`, `server-time`, `echo-message`, `standard-replies`, `labeled-response`, `typing`, `read-marker`, `multiline`, `batch`, `chathistory`, `znc.in/playback`, plus compose-related capabilities (`draft/reply`, `draft/react`, `message-edit`, `message-redaction`).
-- IRCv3 `sts` policy learning and persistence, with automatic TLS/port upgrades on later connects.
+- IRCv3 capability negotiation includes `message-tags`, `server-time`, `echo-message`, `standard-replies`, `labeled-response`, `batch`, `draft/read-marker`, `draft/multiline`, `draft/chathistory`, and `draft/message-redaction`, alongside `znc.in/playback`.
+- Replies (`+reply`), reactions (`+draft/react`, `+draft/unreact`), and typing (`+typing`) use client-only tags over `message-tags`; these tag names are not requested as capabilities. Message editing remains experimental and is excluded from capability negotiation.
+- See the [IRCv3 review evidence guide](IRCV3_REVIEW.md) for protocol checks and reproducible screenshots.
+- See the [IRCv3 specification comparison](IRCV3_SPEC_AUDIT.md) for supported protocol names, coverage, and known conformance gaps.
+- Partial IRCv3 `sts` support: secure-connection policy learning and persistence with later TLS/port upgrades; immediate plaintext-to-TLS upgrade is not implemented.
 - Message reply/reaction/edit/redaction flows in chat UI and command layer.
 - Typing indicators (send + receive) and read-marker updates.
 - ZNC and soju network discovery with ephemeral server entries, per-network auto-connect preferences, and optional save of discovered entries to the main server list.
