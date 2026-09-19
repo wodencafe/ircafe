@@ -1,5 +1,8 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
+import cafe.woden.ircclient.ui.util.EmojiImageSupport;
+import cafe.woden.ircclient.ui.util.EmojiShortcodeSupport;
+import cafe.woden.ircclient.ui.util.EmojiTextSupport;
 import cafe.woden.ircclient.ui.util.UiColorKeys;
 import cafe.woden.ircclient.ui.util.UiFontKeys;
 import java.awt.Color;
@@ -9,6 +12,7 @@ import java.awt.Font;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -19,8 +23,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 
 /**
@@ -30,8 +36,11 @@ import javax.swing.UIManager;
  */
 public final class MessageReactionsComponent extends JPanel {
 
+  public static final String REACTION_TOKEN_PROPERTY = "ircafe.reactionToken";
+
   private final Map<String, ChipState> chipsByReaction = new LinkedHashMap<>();
   private Font transcriptBaseFont;
+  private SwingWorker<List<ChipImage>, Void> imageWorker;
   private Consumer<String> onReactRequested = reaction -> {};
   private Consumer<String> onUnreactRequested = reaction -> {};
 
@@ -89,6 +98,7 @@ public final class MessageReactionsComponent extends JPanel {
     }
     revalidate();
     repaint();
+    refreshChipImages();
   }
 
   private void refreshChipFonts() {
@@ -99,10 +109,90 @@ public final class MessageReactionsComponent extends JPanel {
     }
     revalidate();
     repaint();
+    refreshChipImages();
   }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    refreshChipImages();
+  }
+
+  @Override
+  public void removeNotify() {
+    cancelImageWorker();
+    super.removeNotify();
+  }
+
+  private void cancelImageWorker() {
+    if (imageWorker != null) {
+      imageWorker.cancel(true);
+      imageWorker = null;
+    }
+  }
+
+  private void refreshChipImages() {
+    cancelImageWorker();
+    if (!isDisplayable() || chipsByReaction.isEmpty()) return;
+    List<ChipImageRequest> requests = new ArrayList<>();
+    for (ChipState st : chipsByReaction.values()) {
+      JLabel label = st.label;
+      int size = Math.clamp(label.getFontMetrics(label.getFont()).getHeight(), 12, 48);
+      requests.add(new ChipImageRequest(label, st.reaction, st.nicks.size(), size));
+    }
+    imageWorker =
+        new SwingWorker<>() {
+          @Override
+          protected List<ChipImage> doInBackground() {
+            List<ChipImage> images = new ArrayList<>();
+            for (ChipImageRequest request : requests) {
+              if (isCancelled()) break;
+              String emoji = EmojiShortcodeSupport.resolve(request.token());
+              BufferedImage image =
+                  EmojiTextSupport.containsEmoji(emoji)
+                      ? EmojiImageSupport.imageFor(emoji, request.size())
+                      : null;
+              images.add(new ChipImage(request, emoji, image));
+            }
+            return images;
+          }
+
+          @Override
+          protected void done() {
+            if (isCancelled() || imageWorker != this) return;
+            try {
+              for (ChipImage result : get()) {
+                ChipImageRequest request = result.request();
+                JLabel label = request.label();
+                label.setIcon(result.image() == null ? null : new ImageIcon(result.image()));
+                String count = request.count() > 1 ? Integer.toString(request.count()) : "";
+                label.setText(
+                    result.image() == null
+                        ? result.emoji() + (count.isEmpty() ? "" : " " + count)
+                        : count);
+              }
+              revalidate();
+              repaint();
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            } catch (java.util.concurrent.ExecutionException e) {
+              // Keep the original text if an asset cannot be rendered.
+            } finally {
+              imageWorker = null;
+            }
+          }
+        };
+    imageWorker.execute();
+  }
+
+  private record ChipImageRequest(JLabel label, String token, int count, int size) {}
+
+  private record ChipImage(ChipImageRequest request, String emoji, BufferedImage image) {}
 
   private JLabel buildChip(ChipState st) {
     JLabel l = new JLabel(labelText(st));
+    l.putClientProperty("html.disable", Boolean.TRUE);
+    l.putClientProperty(REACTION_TOKEN_PROPERTY, st.reaction);
     l.setOpaque(true);
     applyChipFont(l);
     l.setForeground(resolveChipForeground());
@@ -113,6 +203,7 @@ public final class MessageReactionsComponent extends JPanel {
             BorderFactory.createLineBorder(resolveChipBorderColor()),
             BorderFactory.createEmptyBorder(1, 6, 1, 6)));
     l.setToolTipText(tooltip(st));
+    l.getAccessibleContext().setAccessibleName(tooltip(st));
     l.addMouseListener(
         new MouseAdapter() {
           @Override
