@@ -586,7 +586,11 @@ class Ircv3ErgoShowcaseFunctionalTest {
     LinkedHashSet<String> tokens = new LinkedHashSet<>();
     for (Component child : component.getComponents()) {
       if (child instanceof JLabel label && label.isVisible()) {
-        tokens.add(Objects.toString(label.getText(), "").trim());
+        if (label.getIcon() != null) {
+          tokens.add(
+              Objects.toString(
+                  label.getClientProperty(MessageReactionsComponent.REACTION_TOKEN_PROPERTY), ""));
+        }
       }
     }
     return Set.copyOf(tokens);
