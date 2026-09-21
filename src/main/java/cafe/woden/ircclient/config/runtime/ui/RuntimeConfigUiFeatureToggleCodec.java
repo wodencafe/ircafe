@@ -8,7 +8,8 @@ final class RuntimeConfigUiFeatureToggleCodec {
   enum Setting {
     INVITE_AUTO_JOIN("invites", "autoJoinOnInvite", "invites.autoJoinOnInvite"),
     UPDATE_NOTIFIER("updateNotifier", "enabled", "ui.updateNotifier.enabled"),
-    LAG_INDICATOR("lagIndicator", "enabled", "ui.lagIndicator.enabled");
+    LAG_INDICATOR("lagIndicator", "enabled", "ui.lagIndicator.enabled"),
+    FIRST_RUN_SETUP_DISMISSED("setup", "dismissed", "ui.setup.dismissed");
 
     private final String section;
     private final String key;

@@ -148,11 +148,29 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 - Monitor and Notifications nodes per server for quick operational actions.
 - Runtime diagnostics surfaces under `Application` (Unhandled Errors, AssertJ Swing, jHiccup, Inbound Dedup, JFR, Spring, Terminal), including bounded event feeds plus clear/export actions.
 
+## Optional first-launch setup
+
+New profiles are offered a short wizard for an IRC server/nickname, an existing
+account's SASL login, and channels to join when connecting. Every page has
+**Skip this step**, and **Skip setup** is available throughout. Closing the wizard
+or pressing Escape also skips setup entirely. Skipping the server page keeps the
+default connection; skipping account or channels leaves those choices empty.
+
+Choices are saved only with **Save and finish** (or by skipping the final page).
+Skipping setup entirely discards all wizard edits and preserves the default settings.
+IRCafe stays disconnected after the wizard so you can choose when to connect.
+Settings can be changed later in **Servers**.
+
+Completion or dismissal is remembered in the user's runtime config. Existing
+profiles, including upgrades from versions without this wizard, do not see it.
+The wizard works with all distribution formats, including the Windows MSI and ZIP.
+
 ## Requirements
 
 - Java 25 for local run/build tasks (`./gradlew bootRun`, `./gradlew test`, `./gradlew jpackage`, `java -jar ...`).
 - GNU Make + Docker only if using the optional Makefile Docker shortcuts.
 - Flatpak + `flatpak-builder` only if building Flatpak bundles on Linux.
+- Windows + WiX Toolset on `PATH` only if building the Windows MSI installer.
 
 ## Project layout
 
@@ -271,6 +289,34 @@ To install just the desktop entry for the current user on Linux:
 ./gradlew installLinuxDesktopEntry
 ```
 
+## Build a Windows MSI installer
+
+On Windows, install JDK 25 and WiX Toolset (CI uses WiX 3.14). For WiX 3,
+add its `bin` directory, containing `candle.exe` and `light.exe`, to `PATH`.
+Then run in PowerShell:
+
+```powershell
+.\gradlew.bat clean jpackageMsi
+```
+
+The build uses IRCafe's Git-derived project version automatically. Tagged release
+CI supplies the release tag's version; use `-Pversion=<release-version>` only when
+explicitly building a particular release locally. Output is
+`build/installer/IRCafe-<version>.msi`; the portable app image remains in
+`build/dist/IRCafe/`. The MSI bundles Java, so users do not need to install a JRE.
+It installs for all users (requires administrator approval), offers a destination
+directory chooser and shortcut options, and supports removal through Windows Settings.
+A fixed upgrade UUID lets newer release versions replace an existing installation.
+Windows Installer versions must be numeric `major.minor.patch`, with major/minor
+at most 255 and patch at most 65535. Snapshot/prerelease suffixes are stripped;
+builds sharing the same numeric version are not distinct upgrades.
+
+MSIs must be built on Windows; `jpackage` does not cross-compile installers.
+Tagged releases publish `ircafe-<version>-windows-x64.msi` alongside the portable ZIP.
+The **Manual Test Build** workflow's `windows` target also uploads both formats.
+Both workflows run an install/uninstall smoke test on the Windows runner before
+uploading the MSI. The installer is currently unsigned.
+
 ## Build a Flatpak bundle (Linux)
 
 Install tooling (example for Debian/Ubuntu):
@@ -321,6 +367,14 @@ Targeted suites:
 
 # Swing UI functional tests from src/functionalTest (classes ending with FunctionalTest)
 ./gradlew functionalTest
+```
+
+Functional tests default to headless mode, which skips tests requiring a dialog.
+Use `-PfunctionalTestHeadless=false` with a display to exercise those interactions.
+For example, the optional setup wizard can be verified on Linux with:
+
+```bash
+xvfb-run -a ./gradlew :functionalTest -PfunctionalTestHeadless=false --tests '*FirstRunSetupDialogFunctionalTest'
 ```
 
 Quassel support integration matrix:

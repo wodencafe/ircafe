@@ -66,6 +66,14 @@ public class RuntimeConfigStore {
     return stores.documentStore.fileExistedOnStartup();
   }
 
+  public synchronized boolean readFirstRunSetupDismissed() {
+    return stores.uiStores.uiFeatureToggleStore.readFirstRunSetupDismissed();
+  }
+
+  public synchronized void rememberFirstRunSetupDismissed() {
+    stores.uiStores.uiFeatureToggleStore.rememberFirstRunSetupDismissed();
+  }
+
   /**
    * Reads {@code ircafe.ui.tray.closeToTray} only if it is explicitly present in the runtime config
    * file.
