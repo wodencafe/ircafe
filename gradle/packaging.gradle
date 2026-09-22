@@ -129,6 +129,42 @@ def isMac = OperatingSystem.current().isMacOsX()
 def appName = "IRCafe"
 def macCodeSignIdentity = providers.gradleProperty("macCodeSignIdentity").getOrElse("-")
 def appImageDir = layout.buildDirectory.dir("dist/${appName}")
+
+// Reuse the portable image (including its runtime) without replacing build/dist.
+// The plugin clears its destination before packaging, so MSI output must be separate.
+def jpackageTaskClass = tasks.named("jpackage").get().class.classLoader
+    .loadClass("org.panteleyev.jpackage.JPackageTask")
+tasks.register("jpackageMsi", jpackageTaskClass) { installer ->
+    group = "distribution"
+    description = "Builds a Windows MSI installer with a bundled Java runtime (requires Windows and WiX)."
+    if (OperatingSystem.current().isWindows()) {
+        dependsOn tasks.named("jpackage")
+    }
+
+    type = appImageType.class.enumConstants.find { it.name() == "MSI" }
+    appImage = appImageDir.map { it.asFile.absolutePath }
+    destination = layout.buildDirectory.dir("installer")
+    installer.appName = appName
+    vendor = tasks.named("jpackage").get().vendor
+    appDescription = tasks.named("jpackage").get().appDescription
+    appVersion = tasks.named("jpackage").get().appVersion
+    icon = layout.projectDirectory.file("packaging/ircafe.ico")
+    winMenu = true
+    winMenuGroup = "IRCafe"
+    winShortcut = true
+    winShortcutPrompt = true
+    winDirChooser = true
+    // Keep this stable across releases so Windows upgrades the existing installation.
+    winUpgradeUuid = "54f713ec-4562-47d4-985b-f19d7d17bcdb"
+    verbose = true
+
+    doFirst {
+        if (!OperatingSystem.current().isWindows()) {
+            throw new GradleException("jpackageMsi requires Windows with JDK 25 and WiX on PATH; cross-compilation is not supported.")
+        }
+    }
+}
+
 def desktopFileName = "${appName}.desktop"
 def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
 def flatpakMetainfoOutput = layout.buildDirectory.file("flatpak/cafe.woden.IRCafe.metainfo.xml")

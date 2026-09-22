@@ -50,6 +50,14 @@ public class RuntimeConfigUiFeatureToggleStore {
         .orElse(defaultValue);
   }
 
+  public synchronized boolean readFirstRunSetupDismissed() {
+    return readBoolean(Setting.FIRST_RUN_SETUP_DISMISSED, false);
+  }
+
+  public synchronized void rememberFirstRunSetupDismissed() {
+    rememberBoolean(Setting.FIRST_RUN_SETUP_DISMISSED, true);
+  }
+
   private void rememberBoolean(Setting setting, boolean enabled) {
     uiSection.putValue(setting.description(), enabled, setting.section(), setting.key());
   }

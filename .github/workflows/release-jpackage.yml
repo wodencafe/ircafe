@@ -130,6 +130,33 @@ jobs:
           set -euo pipefail
           ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
 
+      - name: Add WiX to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not $env:WIX) { throw 'WiX Toolset is not installed on this runner' }
+          $wixBin = Join-Path $env:WIX 'bin'
+          foreach ($tool in @('candle.exe', 'light.exe')) {
+            if (-not (Test-Path (Join-Path $wixBin $tool))) { throw "Missing WiX tool: $tool" }
+          }
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build Windows MSI
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon jpackageMsi -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Verify and stage Windows MSI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem build/installer -Filter *.msi)
+          if ($installers.Count -ne 1) { throw "Expected one MSI, found $($installers.Count)" }
+          ./packaging/windows/test-msi.ps1 -MsiPath $installers[0].FullName
+          Copy-Item $installers[0].FullName ("ircafe-{0}-${{ matrix.suffix }}.msi" -f $env:RELEASE_LABEL)
+
       - name: Verify Alerter bundle (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -180,6 +207,7 @@ jobs:
           path: |
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.msi
 
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -188,6 +216,7 @@ jobs:
           files: |
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.msi
 
   flatpak:
     runs-on: ubuntu-latest

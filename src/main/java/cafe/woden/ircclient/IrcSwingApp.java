@@ -11,6 +11,7 @@ import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.UiProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.FirstRunSetupCoordinator;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.settings.theme.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
@@ -73,6 +74,7 @@ public class IrcSwingApp {
       UiSettingsBus settingsBus,
       UiSettingsRuntimeConfigPort runtimeConfig,
       TrayService trayService,
+      FirstRunSetupCoordinator firstRunSetup,
       UiPort ui) {
     return args -> {
       String startupTheme = determineStartupTheme(settingsBus, runtimeConfig);
@@ -97,12 +99,14 @@ public class IrcSwingApp {
               // Show the window before any optional native integrations that may block.
               frame.setVisible(true);
 
+              boolean setupShown = firstRunSetup.showIfNeeded(frame);
+
               boolean startMinimizedRequested =
-                  trayService.isEnabled() && trayService.startMinimized();
+                  !setupShown && trayService.isEnabled() && trayService.startMinimized();
               installTrayAsync(frame, trayService, startMinimizedRequested);
 
               MediatorControlPort mediator = mediatorProvider.getObject();
-              if (settingsBus.get().autoConnectOnStart()) {
+              if (!setupShown && settingsBus.get().autoConnectOnStart()) {
                 mediator.connectAutoConnectOnStartServers();
               }
               startupCompleted = true;

@@ -129,6 +129,8 @@ tasks.register('architectureTest', Test) {
 tasks.register('functionalTest', Test) {
     group = 'verification'
     description = 'Runs Swing functional smoke tests.'
+    // Explicit opt-in for real dialog tests under a desktop session or xvfb-run.
+    systemProperty 'java.awt.headless', providers.gradleProperty('functionalTestHeadless').getOrElse('true')
     testClassesDirs = sourceSets.functionalTest.output.classesDirs
     classpath = sourceSets.functionalTest.runtimeClasspath
     useJUnitPlatform()
