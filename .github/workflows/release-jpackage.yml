@@ -78,7 +78,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             suffix: linux-x64
           - os: ubuntu-24.04-arm
             suffix: linux-arm64
@@ -129,6 +129,40 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg-dev rpm
+
+      - name: Build Linux DEB and RPM packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash packaging/linux/build-native-packages.sh "${RELEASE_VERSION}"
+
+      - name: Verify and stage Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for format in deb rpm; do
+            packages=(build/installer/"${format}"/*."${format}")
+            if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
+              echo "::error::Expected exactly one ${format} package"
+              exit 1
+            fi
+            image=ubuntu:24.04
+            if [[ "$format" == rpm ]]; then image=fedora:43; fi
+            docker run --rm \
+              -v "$PWD/build:/packages:ro" \
+              -v "$PWD/packaging/linux:/checks:ro" \
+              "$image" bash /checks/test-native-package.sh \
+              "/packages/installer/${format}/$(basename "${packages[0]}")" \
+              "/packages/installer-test/previous.${format}"
+            cp "${packages[0]}" "ircafe-${RELEASE_LABEL}-${{ matrix.suffix }}.${format}"
+          done
 
       - name: Add WiX to PATH (Windows)
         if: runner.os == 'Windows'
@@ -208,6 +242,8 @@ jobs:
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.msi
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.deb
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.rpm
 
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -217,6 +253,8 @@ jobs:
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
             ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.msi
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.deb
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.rpm
 
   flatpak:
     runs-on: ubuntu-latest

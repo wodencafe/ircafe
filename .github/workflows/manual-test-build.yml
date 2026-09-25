@@ -24,7 +24,7 @@ permissions:
 jobs:
   build:
     name: Build ${{ inputs.target }}
-    runs-on: ${{ inputs.target == 'windows' && 'windows-latest' || inputs.target == 'mac' && 'macos-15' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.target == 'windows' && 'windows-latest' || inputs.target == 'mac' && 'macos-15' || inputs.target == 'linux' && 'ubuntu-24.04' || 'ubuntu-latest' }}
 
     steps:
       - name: Checkout selected ref
@@ -111,6 +111,40 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Install Linux packaging tools
+        if: inputs.target == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg-dev rpm
+
+      - name: Build Linux DEB and RPM packages
+        if: inputs.target == 'linux'
+        shell: bash
+        run: bash packaging/linux/build-native-packages.sh "${RELEASE_VERSION}"
+
+      - name: Verify and stage Linux packages
+        if: inputs.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for format in deb rpm; do
+            packages=(build/installer/"${format}"/*."${format}")
+            if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
+              echo "::error::Expected exactly one ${format} package"
+              exit 1
+            fi
+            image=ubuntu:24.04
+            if [[ "$format" == rpm ]]; then image=fedora:43; fi
+            docker run --rm \
+              -v "$PWD/build:/packages:ro" \
+              -v "$PWD/packaging/linux:/checks:ro" \
+              "$image" bash /checks/test-native-package.sh \
+              "/packages/installer/${format}/$(basename "${packages[0]}")" \
+              "/packages/installer-test/previous.${format}"
+            cp "${packages[0]}" "ircafe-${BUILD_LABEL}-linux-x64.${format}"
+          done
 
       - name: Add WiX to PATH (Windows)
         if: inputs.target == 'windows'
@@ -224,6 +258,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: ${{ env.ARTIFACT_PATH }}
+
+      - name: Upload Linux installers
+        if: inputs.target == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-installers
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ircafe-${{ env.BUILD_LABEL }}-linux-x64.deb
+            ircafe-${{ env.BUILD_LABEL }}-linux-x64.rpm
 
       - name: Upload Windows MSI
         if: inputs.target == 'windows'
