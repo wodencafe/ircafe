@@ -228,6 +228,30 @@ tasks.register("jpackageLinux") {
     dependsOn("jpackageDeb", "jpackageRpm")
 }
 
+// A jpackage app-image is a directory; AppImage adds a self-mounting, single-file runtime.
+def appImageArch = [amd64: "x86_64", x86_64: "x86_64", aarch64: "aarch64"][System.getProperty("os.arch")]
+def appImageVersion = tasks.named("jpackage").get().appVersion
+tasks.register("jpackageAppImage", Exec) {
+    group = "distribution"
+    description = "Builds a single-file Linux AppImage with a bundled Java runtime."
+    if (isLinux) dependsOn prepareLinuxPackageImage
+    def output = layout.buildDirectory.file("installer/appimage/IRCafe-${appImageVersion.get()}-${appImageArch}.AppImage")
+    inputs.dir(linuxPackageImageDir)
+    inputs.dir("packaging/appimage")
+    inputs.file("LICENSE")
+    inputs.property("appVersion", appImageVersion)
+    outputs.file(output)
+    commandLine("bash", "packaging/appimage/build-appimage.sh",
+        linuxPackageImageDir.get().asFile.absolutePath,
+        layout.buildDirectory.dir("appimage").get().asFile.absolutePath,
+        output.get().asFile.absolutePath, appImageVersion.get())
+    doFirst {
+        if (!isLinux || appImageArch == null) {
+            throw new GradleException("jpackageAppImage requires Linux x86_64 or aarch64; cross-compilation is not supported.")
+        }
+    }
+}
+
 def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
 def flatpakMetainfoOutput = layout.buildDirectory.file("flatpak/cafe.woden.IRCafe.metainfo.xml")
 

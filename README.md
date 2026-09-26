@@ -172,6 +172,7 @@ The wizard works with all distribution formats, including the Windows MSI and ZI
 - Flatpak + `flatpak-builder` only if building Flatpak bundles on Linux.
 - Windows + WiX Toolset on `PATH` only if building the Windows MSI installer.
 - Linux + `fakeroot`, `dpkg-dev`, and `rpm` only if building both native Linux packages.
+- Linux + `curl` and `file` only if building a single-file AppImage (the build downloads pinned packaging tools).
 
 ## Project layout
 
@@ -271,6 +272,7 @@ make jpackage
 ```
 
 Output is written under `build/dist/` using the platform's app-image layout.
+This is a directory bundle; use `jpackageAppImage` below for a single `.AppImage` file.
 
 On Linux, the generated app image also includes:
 
@@ -354,7 +356,7 @@ Native packages must be built on Linux for the target architecture.
 
 Tagged releases attach `.deb` and `.rpm` files alongside the portable archives for
 both `linux-x64` and `linux-arm64`. The **Manual Test Build** workflow's `linux`
-target uploads all three formats for x64. CI builds on Ubuntu 24.04 and checks
+target uploads these formats plus AppImage for x64. CI builds on Ubuntu 24.04 and checks
 installation, upgrade, GUI startup with the bundled runtime, and removal in
 disposable Ubuntu 24.04 and Fedora 43 containers before uploading the packages.
 Other distributions and older releases have not been verified.
@@ -366,6 +368,47 @@ packages. Run `bash packaging/linux/test-native-package.sh CURRENT_PACKAGE PREVI
 as root **only inside a disposable container**, with the packages mounted read-only;
 the script installs system dependencies and creates a test user. The Linux steps
 in `.github/workflows/release-jpackage.yml` show the complete container commands.
+
+## Build a single-file AppImage (Linux)
+
+```bash
+./gradlew jpackageAppImage
+```
+
+This wraps the bundled Java runtime and application in an executable AppImage.
+Output is `build/installer/appimage/IRCafe-<version>-<architecture>.AppImage`, using
+the existing Git-derived numeric packaging version and the build machine's
+`x86_64` or `aarch64` architecture. Build on Linux with Temurin JDK 25 (as in CI)
+and the `curl` and `file` utilities; distro-provided JDKs can introduce additional
+system-library dependencies.
+The build downloads version-pinned, SHA-256-verified `appimagetool` and runtime
+releases into `build/appimage/tools/`; it does not require FUSE or root privileges.
+
+To run a downloaded release:
+
+```bash
+chmod +x ircafe-VERSION-linux-x64.AppImage
+./ircafe-VERSION-linux-x64.AppImage
+```
+
+No separate Java installation or package-manager installation is needed. The
+host still needs a graphical desktop and its usual X11, fontconfig, and ALSA
+libraries. Configuration and history use the same user profile as other IRCafe
+distributions, including the optional first-launch setup wizard. Replace the file
+to upgrade; removing it leaves your profile intact. Menu integration depends on
+the desktop's AppImage integration tools.
+
+If FUSE is unavailable, run with `--appimage-extract-and-run`. This extracts to a
+temporary directory for that run and requires additional free disk space.
+
+Release CI builds AppImages for x64 and ARM64 and attaches them to GitHub releases.
+The manual `linux` target also uploads an x64 AppImage. Before upload, both
+workflows test extraction, desktop metadata, the bundled runtime, and launching
+the actual file from a path containing spaces in disposable Ubuntu 24.04 and
+Fedora 43 containers. Those tests use extract-and-run mode because containers
+lack `/dev/fuse`; FUSE mounting and desktop integration are not exercised by CI.
+The test script is `packaging/appimage/test-appimage.sh` and is intended only for
+disposable containers. Older distributions have not been verified.
 
 ## Build a Flatpak bundle (Linux)
 

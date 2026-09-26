@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=IRCafe
+Comment=IRC Client in modern Java
+Exec=IRCafe
+Icon=IRCafe
+Categories=Network;IRCClient;
+Terminal=false
+StartupWMClass=IRCafe

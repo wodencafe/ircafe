@@ -117,7 +117,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y fakeroot dpkg-dev rpm
+          sudo apt-get install -y fakeroot dpkg-dev rpm curl file
 
       - name: Build Linux DEB and RPM packages
         if: inputs.target == 'linux'
@@ -145,6 +145,25 @@ jobs:
               "/packages/installer-test/previous.${format}"
             cp "${packages[0]}" "ircafe-${BUILD_LABEL}-linux-x64.${format}"
           done
+
+      - name: Build and verify Linux AppImage
+        if: inputs.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon jpackageAppImage -Pversion="${RELEASE_VERSION}" -x test
+          images=(build/installer/appimage/*.AppImage)
+          if [[ ${#images[@]} -ne 1 || ! -f "${images[0]}" ]]; then
+            echo "::error::Expected exactly one AppImage"
+            exit 1
+          fi
+          for system in ubuntu:24.04 fedora:43; do
+            docker run --rm \
+              -v "$PWD/build/installer/appimage:/packages:ro" \
+              -v "$PWD/packaging/appimage:/checks:ro" \
+              "$system" bash /checks/test-appimage.sh "/packages/$(basename "${images[0]}")"
+          done
+          cp "${images[0]}" "ircafe-${BUILD_LABEL}-linux-x64.AppImage"
 
       - name: Add WiX to PATH (Windows)
         if: inputs.target == 'windows'
@@ -269,6 +288,7 @@ jobs:
           path: |
             ircafe-${{ env.BUILD_LABEL }}-linux-x64.deb
             ircafe-${{ env.BUILD_LABEL }}-linux-x64.rpm
+            ircafe-${{ env.BUILD_LABEL }}-linux-x64.AppImage
 
       - name: Upload Windows MSI
         if: inputs.target == 'windows'
