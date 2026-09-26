@@ -1,6 +1,6 @@
 @ApplicationModule(
     displayName = "Networking",
-    allowedDependencies = {"config"})
+    allowedDependencies = {"config", "config::servers"})
 package cafe.woden.ircclient.net;
 
 import org.springframework.modulith.ApplicationModule;

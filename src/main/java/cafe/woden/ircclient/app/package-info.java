@@ -2,6 +2,9 @@
     displayName = "Application Services",
     allowedDependencies = {
       "config",
+      "config::execution",
+      "config::properties",
+      "config::servers",
       "config::api",
       "dcc::api",
       "ignore::api",

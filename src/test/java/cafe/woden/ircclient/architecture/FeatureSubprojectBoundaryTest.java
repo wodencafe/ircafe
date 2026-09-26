@@ -9,11 +9,14 @@ import cafe.woden.ircclient.irc.pircbotx.client.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.pircbotx.listener.PircbotxBridgeListenerFactory;
 import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.quassel.QuasselIrcv3RuntimeSupport;
+import com.tngtech.archunit.core.domain.JavaClasses;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -88,31 +91,21 @@ class FeatureSubprojectBoundaryTest {
   }
 
   @Test
-  void featureSubprojectsDoNotImportRootImplementationTypes() throws IOException {
-    Set<String> violations = new TreeSet<>();
-    Set<String> featureClassNames = featureClassNames();
-
-    for (Path sourceRoot : featureSourceRoots()) {
-      try (Stream<Path> files = Files.walk(sourceRoot)) {
-        for (Path file :
-            files.filter(path -> path.toString().endsWith(".java")).sorted().toList()) {
-          Matcher matcher = IMPORT_PATTERN.matcher(Files.readString(file));
-          while (matcher.find()) {
-            String dependency = matcher.group(1);
-            if (isRootImplementationImport(dependency, featureClassNames)) {
-              violations.add(file + " -> " + dependency);
-            }
-          }
-        }
-      }
+  void featureSubprojectsDoNotDependOnRootImplementationTypes() throws IOException {
+    Map<String, JavaClasses> features = new LinkedHashMap<>();
+    Set<String> allowedTypes =
+        new TreeSet<>(
+            CompiledSubprojects.names(CompiledSubprojects.importProject("ircafe-plugin-api")));
+    for (String projectName : featureProjectNames()) {
+      JavaClasses classes = CompiledSubprojects.importProject(projectName);
+      features.put(projectName, classes);
+      allowedTypes.addAll(CompiledSubprojects.names(classes));
     }
-
-    assertTrue(
-        violations.isEmpty(),
-        () ->
-            "Feature subprojects should not depend on root implementation packages directly. "
-                + "Extract a narrow shared API/port first. Violations:\n  "
-                + String.join("\n  ", violations));
+    for (var feature : features.entrySet()) {
+      CompiledBoundaryRules.featureDependencies(allowedTypes)
+          .as(feature.getKey() + " must not depend on root implementation types")
+          .check(feature.getValue());
+    }
   }
 
   @Test
@@ -3315,37 +3308,6 @@ class FeatureSubprojectBoundaryTest {
                 + String.join("\n  ", violations));
   }
 
-  private static Set<Path> featureSourceRoots() throws IOException {
-    Set<Path> sourceRoots = new TreeSet<>();
-    for (Path projectDir : featureProjectDirs()) {
-      Path sourceRoot = projectDir.resolve("src/main/java");
-      if (Files.isDirectory(sourceRoot)) {
-        sourceRoots.add(sourceRoot);
-      }
-    }
-    return sourceRoots;
-  }
-
-  private static Set<String> featureClassNames() throws IOException {
-    Set<String> classNames = new TreeSet<>();
-    for (Path sourceRoot : featureSourceRoots()) {
-      try (Stream<Path> files = Files.walk(sourceRoot)) {
-        files
-            .filter(path -> path.toString().endsWith(".java"))
-            .sorted()
-            .map(sourceRoot::relativize)
-            .map(FeatureSubprojectBoundaryTest::javaClassName)
-            .forEach(classNames::add);
-      }
-    }
-    return classNames;
-  }
-
-  private static String javaClassName(Path relativeSourcePath) {
-    String className = relativeSourcePath.toString().replace('/', '.').replace('\\', '.');
-    return className.substring(0, className.length() - ".java".length());
-  }
-
   private static Set<Path> featureProjectDirs() throws IOException {
     Set<Path> projectDirs = new TreeSet<>();
     for (String projectName : featureProjectNames()) {
@@ -3368,21 +3330,8 @@ class FeatureSubprojectBoundaryTest {
     return projectNames;
   }
 
-  private static boolean isRootImplementationImport(
-      String dependency, Set<String> featureClassNames) {
-    return dependency.startsWith("cafe.woden.ircclient.")
-        && !dependency.contains(".spi.")
-        && !isFeatureClassImport(dependency, featureClassNames);
-  }
-
   private static boolean isAppCommandsPackage(String packageName) {
     return packageName.equals("cafe.woden.ircclient.app.commands")
         || packageName.startsWith("cafe.woden.ircclient.app.commands.");
-  }
-
-  private static boolean isFeatureClassImport(String dependency, Set<String> featureClassNames) {
-    return featureClassNames.stream()
-        .anyMatch(
-            className -> dependency.equals(className) || dependency.startsWith(className + "."));
   }
 }

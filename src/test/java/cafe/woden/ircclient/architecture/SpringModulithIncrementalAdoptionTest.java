@@ -560,6 +560,9 @@ class SpringModulithIncrementalAdoptionTest {
         .containsExactlyInAnyOrder(
             "config",
             "config::api",
+            "config::execution",
+            "config::properties",
+            "config::servers",
             "dcc::api",
             "ignore::api",
             "irc",
@@ -588,6 +591,9 @@ class SpringModulithIncrementalAdoptionTest {
             "bouncer",
             "config",
             "config::api",
+            "config::execution",
+            "config::properties",
+            "config::servers",
             "dcc::api",
             "diagnostics",
             "ignore",
@@ -756,6 +762,42 @@ class SpringModulithIncrementalAdoptionTest {
   @Test
   void moduleVerificationPassesWithCurrentBoundaries() {
     ApplicationModules.of(IrcSwingApp.class).verify();
+  }
+
+  @Test
+  void configIsClosedAndExportsOnlyItsIntendedSubpackageInterfaces() {
+    ApplicationModules modules = ApplicationModules.of(IrcSwingApp.class);
+    ApplicationModule config = moduleFor(modules, RuntimeConfigStore.class);
+
+    assertThat(config.isOpen()).isFalse();
+    assertThat(
+            config.getNamedInterfaces().stream()
+                .filter(NamedInterface::isNamed)
+                .map(NamedInterface::getName))
+        .containsExactlyInAnyOrder("api", "execution", "properties", "servers");
+    assertNamedInterfaceContains(
+        config,
+        "servers",
+        cafe.woden.ircclient.config.servers.ServerCatalog.class,
+        cafe.woden.ircclient.config.servers.ServerRegistry.class,
+        cafe.woden.ircclient.config.servers.EphemeralServerRegistry.class);
+    assertNamedInterfaceContains(
+        config,
+        "properties",
+        cafe.woden.ircclient.config.properties.UiProperties.class,
+        cafe.woden.ircclient.config.properties.PushyProperties.class,
+        cafe.woden.ircclient.config.properties.LogProperties.class);
+    assertNamedInterfaceContains(
+        config, "execution", cafe.woden.ircclient.config.execution.ExecutorConfig.class);
+
+    assertThat(config.isExposed(cafe.woden.ircclient.config.yaml.RuntimeConfigDocumentStore.class))
+        .isFalse();
+    assertThat(
+            config.isExposed(
+                cafe.woden.ircclient.config.runtime.client.RuntimeConfigClientSettingsStore.class))
+        .isFalse();
+    assertThat(config.isExposed(cafe.woden.ircclient.config.plugins.InstalledPluginServices.class))
+        .isFalse();
   }
 
   private static ApplicationModule moduleFor(ApplicationModules modules, Class<?> type) {
