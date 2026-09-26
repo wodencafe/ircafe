@@ -166,6 +166,92 @@ tasks.register("jpackageMsi", jpackageTaskClass) { installer ->
 }
 
 def desktopFileName = "${appName}.desktop"
+
+// Native packages own installation/removal; do not ship the portable image's install helpers.
+def linuxPackageImageDir = layout.buildDirectory.dir("jpackage/linux-package-image")
+def prepareLinuxPackageImage = tasks.register("prepareLinuxPackageImage", Sync) {
+    onlyIf { isLinux }
+    if (isLinux) dependsOn("jpackage", "copyLinuxAppImageIconToLib")
+    from(appImageDir)
+    into(linuxPackageImageDir)
+    exclude("install.sh", "uninstall.sh", desktopFileName)
+    // The bundled JDK contains read-only legal files; replace the staging tree on rebuild.
+    doFirst { delete(linuxPackageImageDir) }
+}
+
+[Deb: "DEB", Rpm: "RPM"].each { suffix, imageType ->
+    tasks.register("jpackage${suffix}", jpackageTaskClass) { installer ->
+        group = "distribution"
+        description = "Builds a Linux ${imageType} package with a bundled Java runtime."
+        if (isLinux) dependsOn prepareLinuxPackageImage
+        type = appImageType.class.enumConstants.find { it.name() == imageType }
+        appImage = linuxPackageImageDir.map { it.asFile.absolutePath }
+        // Each plugin task clears its destination, so the two formats must not share one.
+        destination = layout.buildDirectory.dir("installer/${imageType.toLowerCase(Locale.ROOT)}")
+        installer.appName = appName
+        vendor = tasks.named("jpackage").get().vendor
+        appDescription = tasks.named("jpackage").get().appDescription
+        appVersion = tasks.named("jpackage").get().appVersion
+        icon = layout.projectDirectory.file("src/main/resources/icons/ircafe_512.png")
+        licenseFile = layout.projectDirectory.file("LICENSE")
+        aboutUrl = "https://github.com/wodencafe/ircafe"
+        // jpackage appends linuxPackageName to this installation prefix.
+        installDir = "/opt"
+        linuxPackageName = "ircafe"
+        // Font discovery uses dlopen, so jpackage's ELF dependency scan misses it.
+        linuxPackageDeps = "fontconfig"
+        linuxAppRelease = providers.gradleProperty("linuxPackageRelease").getOrElse("1")
+        linuxShortcut = true
+        linuxMenuGroup = "Network;IRCClient;"
+        if (imageType == "DEB") {
+            linuxAppCategory = "net"
+            linuxDebMaintainer = providers.gradleProperty("linuxDebMaintainer").getOrElse("wodencafe@gmail.com")
+        } else {
+            linuxAppCategory = "Applications/Internet"
+            linuxRpmLicenseType = "GPL-3.0-only"
+            // Ubuntu builders have no RPM ownership database for jpackage's dependency scan.
+            linuxPackageDeps = "fontconfig, alsa-lib, glibc, libX11, libXext, libXi, libXrender, libXtst"
+        }
+        verbose = true
+
+        doFirst {
+            if (!isLinux) {
+                throw new GradleException("${name} requires Linux with JDK 25 and native packaging tools; cross-compilation is not supported.")
+            }
+        }
+    }
+}
+
+tasks.register("jpackageLinux") {
+    group = "distribution"
+    description = "Builds both DEB and RPM installers for the current Linux architecture."
+    dependsOn("jpackageDeb", "jpackageRpm")
+}
+
+// A jpackage app-image is a directory; AppImage adds a self-mounting, single-file runtime.
+def appImageArch = [amd64: "x86_64", x86_64: "x86_64", aarch64: "aarch64"][System.getProperty("os.arch")]
+def appImageVersion = tasks.named("jpackage").get().appVersion
+tasks.register("jpackageAppImage", Exec) {
+    group = "distribution"
+    description = "Builds a single-file Linux AppImage with a bundled Java runtime."
+    if (isLinux) dependsOn prepareLinuxPackageImage
+    def output = layout.buildDirectory.file("installer/appimage/IRCafe-${appImageVersion.get()}-${appImageArch}.AppImage")
+    inputs.dir(linuxPackageImageDir)
+    inputs.dir("packaging/appimage")
+    inputs.file("LICENSE")
+    inputs.property("appVersion", appImageVersion)
+    outputs.file(output)
+    commandLine("bash", "packaging/appimage/build-appimage.sh",
+        linuxPackageImageDir.get().asFile.absolutePath,
+        layout.buildDirectory.dir("appimage").get().asFile.absolutePath,
+        output.get().asFile.absolutePath, appImageVersion.get())
+    doFirst {
+        if (!isLinux || appImageArch == null) {
+            throw new GradleException("jpackageAppImage requires Linux x86_64 or aarch64; cross-compilation is not supported.")
+        }
+    }
+}
+
 def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
 def flatpakMetainfoOutput = layout.buildDirectory.file("flatpak/cafe.woden.IRCafe.metainfo.xml")
 
