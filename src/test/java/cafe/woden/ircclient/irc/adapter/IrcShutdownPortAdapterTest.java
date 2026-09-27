@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcShutdownPort;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class IrcShutdownPortAdapterTest {
@@ -28,5 +30,27 @@ class IrcShutdownPortAdapterTest {
 
           verify(irc).shutdownNow();
         });
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void delegatesShutdownNow(boolean nativePort) {
+    IrcClientService irc = nativePort ? mock(NativeClient.class) : mock(IrcClientService.class);
+    IrcShutdownPort port = new IrcShutdownPortAdapter(irc);
+
+    port.shutdownNow();
+
+    verify(irc).shutdownNow();
+  }
+
+  @Test
+  void nullClientIsSafeNoop() {
+    IrcShutdownPort port = new IrcShutdownPortAdapter(null);
+    port.shutdownNow();
+  }
+
+  private interface NativeClient extends IrcClientService, IrcShutdownPort {
+    @Override
+    void shutdownNow();
   }
 }

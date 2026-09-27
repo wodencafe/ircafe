@@ -1,8 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcShutdownPort;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,14 +13,14 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcShutdownPortAdapter implements IrcShutdownPort {
 
-  private final IrcShutdownPort delegate;
+  private final IrcClientService irc;
 
   public IrcShutdownPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcShutdownPort.from(irc);
+    this.irc = irc;
   }
 
   @Override
   public void shutdownNow() {
-    delegate.shutdownNow();
+    if (irc != null) irc.shutdownNow();
   }
 }

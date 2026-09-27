@@ -336,16 +336,15 @@ class ArchitectureGuardrailsTest {
               "logging module should expose adapters through app::api and avoid coupling to app internals or peer feature modules");
 
   @ArchTest
-  static final ArchRule lifecycle_port_should_not_depend_on_broad_irc_client =
+  static final ArchRule refactored_irc_ports_should_not_depend_on_broad_irc_client =
       noClasses()
           .that()
           .haveNameMatching(
-              "cafe\\.woden\\.ircclient\\.irc\\.port\\.IrcConnectionLifecyclePort(\\$.*)?")
+              "cafe\\.woden\\.ircclient\\.irc\\.port\\.Irc(ConnectionLifecycle|CurrentNick|LagProbe|Shutdown)Port(\\$.*)?")
           .should()
           .dependOnClassesThat()
           .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcClientService")
-          .because(
-              "lifecycle adaptation belongs in the IRC adapter, not in its narrow port contract");
+          .because("client adaptation belongs in the IRC adapters, not in narrow port contracts");
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_pircbotx_service_directly =

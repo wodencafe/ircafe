@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -26,11 +27,16 @@ import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.dcc.api.DccTransferCommandPort;
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcLagProbePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcShutdownPortAdapter;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.playback.*;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.net.ServerProxyResolver;
@@ -84,7 +90,8 @@ import org.testcontainers.utility.MountableFile;
 /**
  * Containerized IRC E2E coverage for the direct IRC backend path (Pircbotx + real ircd).
  *
- * <p>Disabled by default. Enable explicitly with:
+ * <p>Scripted loopback tests run by default. Container tests are disabled by default; enable them
+ * explicitly with:
  *
  * <pre>
  * ./gradlew integrationTest --tests '*PircbotxContainerNetworkE2eIntegrationTest' \
@@ -223,6 +230,47 @@ class PircbotxContainerNetworkE2eIntegrationTest {
   }
 
   @Test
+  void nicknameAndLagPortsWorkAgainstScriptedServer() throws Exception {
+    try (ScriptedLargeRosterIrcServer server = new ScriptedLargeRosterIrcServer(1)) {
+      RuntimeIrcConfig cfg =
+          new RuntimeIrcConfig(
+              "lookup-ports-it",
+              InetAddress.getLoopbackAddress().getHostAddress(),
+              server.port(),
+              "",
+              "ircafe-it",
+              "ircafe-it",
+              "IRCafe port IT");
+      try (ServiceFixture fixture = newService(cfg, false)) {
+        PircbotxIrcClientService service = fixture.service();
+        IrcCurrentNickPort nickname = new IrcCurrentNickPortAdapter(service);
+        IrcLagProbePort lagProbe = new IrcLagProbePortAdapter(service);
+        TestSubscriber<ServerIrcEvent> events = service.events().test();
+        try {
+          assertFalse(lagProbe.isLagProbeReady(cfg.serverId()));
+          assertTrue(lagProbe.lastMeasuredLagMs(cfg.serverId()).isEmpty());
+
+          service.connect(cfg.serverId()).blockingAwait();
+          awaitNextEvent(
+              events, cfg.serverId(), IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
+
+          assertEquals(cfg.nick(), nickname.currentNick(" " + cfg.serverId() + " ").orElseThrow());
+          assertEquals(cfg.nick(), lagProbe.currentNick(" " + cfg.serverId() + " ").orElseThrow());
+          assertTrue(lagProbe.isLagProbeReady(cfg.serverId()));
+          assertFalse(lagProbe.shouldRequestLagProbe(cfg.serverId()));
+          lagProbe.requestLagProbe(cfg.serverId()).blockingAwait();
+          OptionalLong lag = awaitLagSample(lagProbe, cfg.serverId(), LAG_TIMEOUT);
+          assertTrue(lag.isPresent(), "expected a lag sample after the scripted PONG");
+          assertTrue(lag.orElseThrow() >= 0L);
+          server.assertHealthy();
+        } finally {
+          events.cancel();
+        }
+      }
+    }
+  }
+
+  @Test
   void ircBackendCanConnectJoinExchangeMessagesAndReconnectAgainstContainerIrcd() throws Exception {
     E2eConfig cfg = E2eConfig.fromSystem();
     Assumptions.assumeTrue(
@@ -260,7 +308,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           service.connect(sid).blockingAwait();
           awaitNextEvent(events, sid, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
           assertTrue(
-              service.currentNick(sid).isPresent(), "currentNick should be set after connect");
+              new IrcCurrentNickPortAdapter(service).currentNick(sid).isPresent(),
+              "currentNick should be set after connect");
 
           int joinedCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
           service.joinChannel(sid, cfg.channel()).blockingAwait();
@@ -285,8 +334,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           service.sendToChannel(sid, cfg.channel(), cfg.appMessage()).blockingAwait();
           bot.awaitChannelPrivmsg(cfg.channel(), cfg.appMessage(), MESSAGE_TIMEOUT);
 
-          service.requestLagProbe(sid).blockingAwait();
-          OptionalLong lag = awaitLagSample(service, sid, LAG_TIMEOUT);
+          IrcLagProbePort lagProbe = new IrcLagProbePortAdapter(service);
+          lagProbe.requestLagProbe(sid).blockingAwait();
+          OptionalLong lag = awaitLagSample(lagProbe, sid, LAG_TIMEOUT);
           assertTrue(lag.isPresent(), "expected lag sample after explicit lag probe");
           assertTrue(lag.orElseThrow() >= 0L);
 
@@ -1579,11 +1629,10 @@ class PircbotxContainerNetworkE2eIntegrationTest {
   }
 
   private static OptionalLong awaitLagSample(
-      PircbotxIrcClientService service, String serverId, Duration timeout)
-      throws InterruptedException {
+      IrcLagProbePort lagProbe, String serverId, Duration timeout) throws InterruptedException {
     long deadlineNs = System.nanoTime() + timeout.toNanos();
     while (System.nanoTime() < deadlineNs) {
-      OptionalLong lag = service.lastMeasuredLagMs(serverId);
+      OptionalLong lag = lagProbe.lastMeasuredLagMs(serverId);
       if (lag.isPresent()) return lag;
       Thread.sleep(POLL_INTERVAL_MS);
     }
@@ -1769,7 +1818,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     public void close() {
       if (service != null) {
         try {
-          service.shutdownNow();
+          new IrcShutdownPortAdapter(service).shutdownNow();
         } catch (Exception ignored) {
         }
       }
@@ -2049,7 +2098,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           } else if (line.equals("CAP END")) {
             capEnded = true;
           } else if (line.startsWith("PING ")) {
-            sendLine(writer, "PONG " + line.substring(5));
+            sendLine(writer, ":" + SERVER_NAME + " PONG " + SERVER_NAME + " " + line.substring(5));
           }
 
           if (!welcomed && userSeen && capEnded) {
