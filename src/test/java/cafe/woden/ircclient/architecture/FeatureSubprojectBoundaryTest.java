@@ -3177,7 +3177,7 @@ class FeatureSubprojectBoundaryTest {
         Path.of(
             "src/main/java/cafe/woden/ircclient/app/outbound/chathistory/"
                 + "OutboundChatHistoryCommandService.java"),
-        "public OutboundChatHistoryCommandService(IrcClientService irc, TargetCoordinator targetCoordinator, Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport, OutboundChatHistoryRequestSupport chatHistoryRequestSupport, Ircv3ChatHistoryRuntimeSupport chatHistoryRuntimeSupport)");
+        "public OutboundChatHistoryCommandService(IrcChatHistoryPort irc, TargetCoordinator targetCoordinator, Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport, OutboundChatHistoryRequestSupport chatHistoryRequestSupport, Ircv3ChatHistoryRuntimeSupport chatHistoryRuntimeSupport)");
     assertExplicitRuntimeSupportInjection(
         Path.of(
             "src/main/java/cafe/woden/ircclient/app/outbound/monitor/"

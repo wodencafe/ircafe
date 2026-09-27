@@ -21,7 +21,9 @@ import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationService;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcEchoCapabilityPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMessagingPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
@@ -62,7 +64,8 @@ class OutboundSayQuoteCommandServiceTest {
       new OutboundRawCommandSupport(rawLineCorrelationService);
   private final OutboundMessagingCommandService outboundMessagingCommandService =
       new OutboundMessagingCommandService(
-          irc,
+          new IrcMessagingPortAdapter(irc),
+          new IrcCurrentNickPortAdapter(irc),
           new IrcEchoCapabilityPortAdapter(irc),
           outboundMultilineMessageSupport,
           outboundConnectionStatusSupport,

@@ -12,7 +12,9 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcEchoCapabilityPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMessagingPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -41,7 +43,8 @@ class OutboundMessagingCommandServiceTest {
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final OutboundMessagingCommandService service =
       new OutboundMessagingCommandService(
-          irc,
+          new IrcMessagingPortAdapter(irc),
+          new IrcCurrentNickPortAdapter(irc),
           new IrcEchoCapabilityPortAdapter(irc),
           outboundMultilineMessageSupport,
           outboundConnectionStatusSupport,

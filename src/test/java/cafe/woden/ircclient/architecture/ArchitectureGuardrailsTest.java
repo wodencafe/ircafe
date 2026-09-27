@@ -11,8 +11,7 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.spi.BouncerBackendDiscoveryHandler;
 import cafe.woden.ircclient.bouncer.spi.BouncerNetworkMappingStrategy;
-import cafe.woden.ircclient.irc.pircbotx.client.*;
-import cafe.woden.ircclient.irc.pircbotx.client.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -346,15 +345,14 @@ class ArchitectureGuardrailsTest {
           .because("client adaptation belongs in the IRC adapters, not in narrow port contracts");
 
   @ArchTest
-  static final ArchRule app_should_not_depend_on_pircbotx_service_directly =
+  static final ArchRule app_should_not_depend_on_broad_irc_client =
       noClasses()
           .that()
           .resideInAPackage("cafe.woden.ircclient.app..")
           .should()
           .dependOnClassesThat()
-          .areAssignableTo(PircbotxIrcClientService.class)
-          .because(
-              "application code should depend on IrcClientService, not transport-specific adapters");
+          .areAssignableTo(IrcClientService.class)
+          .because("application services should declare only the IRC operations they need");
 
   @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =

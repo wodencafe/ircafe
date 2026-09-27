@@ -11,18 +11,26 @@ import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.adapter.BouncerIrcConnectionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcChatHistoryPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcIdentityPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMessagingPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMonitorPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcReadMarkerPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcShutdownPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcShutdownPort;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
@@ -184,6 +192,26 @@ class IrcModuleIntegrationTest {
 
   @Test
   void exposesIrcModuleBeansAndPorts() {
+    assertEquals(1, applicationContext.getBeansOfType(IrcMonitorPort.class).size());
+    assertEquals(
+        IrcMonitorPortAdapter.class,
+        AopUtils.getTargetClass(
+            applicationContext.getBean("ircMonitorPort", IrcMonitorPort.class)));
+    assertEquals(1, applicationContext.getBeansOfType(IrcChatHistoryPort.class).size());
+    assertEquals(
+        IrcChatHistoryPortAdapter.class,
+        AopUtils.getTargetClass(
+            applicationContext.getBean("ircChatHistoryPort", IrcChatHistoryPort.class)));
+    assertEquals(1, applicationContext.getBeansOfType(IrcMessagingPort.class).size());
+    assertEquals(
+        IrcMessagingPortAdapter.class,
+        AopUtils.getTargetClass(
+            applicationContext.getBean("ircMessagingPort", IrcMessagingPort.class)));
+    assertEquals(1, applicationContext.getBeansOfType(IrcIdentityPort.class).size());
+    assertEquals(
+        IrcIdentityPortAdapter.class,
+        AopUtils.getTargetClass(
+            applicationContext.getBean("ircIdentityPort", IrcIdentityPort.class)));
     assertEquals(1, applicationContext.getBeansOfType(BackendRoutingIrcClientService.class).size());
     assertEquals(3, applicationContext.getBeansOfType(IrcBackendRuntimeClientService.class).size());
     assertEquals(1, applicationContext.getBeansOfType(IrcConnectionLifecyclePort.class).size());

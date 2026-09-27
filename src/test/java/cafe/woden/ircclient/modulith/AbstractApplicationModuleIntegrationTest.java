@@ -30,10 +30,14 @@ import cafe.woden.ircclient.irc.ircv3.Ircv3MessageMutationRuntimeCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3MessageMutationRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3MonitorCommandRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3OutboundCommandRuntimeCatalog;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcShutdownPort;
@@ -157,6 +161,18 @@ public abstract class AbstractApplicationModuleIntegrationTest {
     when(swingUiEventPort.clearLogRequests()).thenReturn(Flowable.empty());
     when(swingUiEventPort.ircv3CapabilityToggleRequests()).thenReturn(Flowable.empty());
   }
+
+  @MockitoBean(name = "ircIdentityPort")
+  IrcIdentityPort ircIdentityPort;
+
+  @MockitoBean(name = "ircMessagingPort")
+  IrcMessagingPort ircMessagingPort;
+
+  @MockitoBean(name = "ircChatHistoryPort")
+  IrcChatHistoryPort ircChatHistoryPort;
+
+  @MockitoBean(name = "ircMonitorPort")
+  IrcMonitorPort ircMonitorPort;
 
   @MockitoBean(name = "ircShutdownPort")
   IrcShutdownPort ircShutdownPort;

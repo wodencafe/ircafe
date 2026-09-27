@@ -3,7 +3,7 @@ package cafe.woden.ircclient.app.outbound.identity;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 final class AwayCommandSupport {
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcIdentityPort irc;
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;

@@ -16,6 +16,7 @@ import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendFeatureRegistry;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcMonitorPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3MonitorCommandRuntimeSupport;
@@ -57,7 +58,7 @@ class OutboundMonitorCommandServiceTest {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final OutboundMonitorCommandSupport monitorCommandSupport =
       new OutboundMonitorCommandSupport(
-          irc,
+          new IrcMonitorPortAdapter(irc),
           ui,
           targetCoordinator,
           connectionCoordinator,

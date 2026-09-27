@@ -5,7 +5,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 final class OutboundMonitorCommandSupport {
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcMonitorPort irc;
   @NonNull private final UiPort ui;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
