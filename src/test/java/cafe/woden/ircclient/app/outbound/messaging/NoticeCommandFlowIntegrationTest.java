@@ -20,9 +20,9 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.irc.adapter.IrcEchoCapabilityPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
@@ -42,11 +42,11 @@ class NoticeCommandFlowIntegrationTest {
         mock(OutboundBackendCapabilityPolicy.class);
     Ircv3MultilineFeatureSupport multilineFeatureSupport =
         new Ircv3MultilineFeatureSupport(
-            backendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc));
+            backendCapabilityPolicy, new IrcNegotiatedFeaturePortAdapter(irc));
     OutboundMessagingCommandService messaging =
         new OutboundMessagingCommandService(
             irc,
-            IrcEchoCapabilityPort.from(irc),
+            new IrcEchoCapabilityPortAdapter(irc),
             new OutboundMultilineMessageSupport(multilineFeatureSupport, ui),
             new OutboundConnectionStatusSupport(ui, connectionCoordinator),
             ui,

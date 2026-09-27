@@ -340,7 +340,7 @@ class ArchitectureGuardrailsTest {
       noClasses()
           .that()
           .haveNameMatching(
-              "cafe\\.woden\\.ircclient\\.irc\\.port\\.Irc(ConnectionLifecycle|CurrentNick|LagProbe|Shutdown)Port(\\$.*)?")
+              "cafe\\.woden\\.ircclient\\.irc\\.port\\.Irc(ConnectionLifecycle|CurrentNick|LagProbe|Shutdown|EchoCapability|ReadMarker|NegotiatedFeature)Port(\\$.*)?")
           .should()
           .dependOnClassesThat()
           .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcClientService")

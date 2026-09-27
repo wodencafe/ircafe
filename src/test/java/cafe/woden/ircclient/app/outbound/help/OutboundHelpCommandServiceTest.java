@@ -29,9 +29,9 @@ import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.config.plugins.InstalledPluginServices;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcReadMarkerPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
-import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.util.CompiledPluginJarSupport;
 import java.nio.file.Files;
@@ -62,7 +62,7 @@ class OutboundHelpCommandServiceTest {
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
-          IrcNegotiatedFeaturePort.from(irc),
+          new IrcNegotiatedFeaturePortAdapter(irc),
           irc,
           cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
@@ -71,7 +71,7 @@ class OutboundHelpCommandServiceTest {
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport =
       new Ircv3ReadMarkerFeatureSupport(
-          IrcReadMarkerPort.from(irc),
+          new IrcReadMarkerPortAdapter(irc),
           outboundBackendCapabilityPolicy,
           new Ircv3CapabilityNameResolverPort() {});
   private final OutboundUploadCommandService outboundUploadCommandService =

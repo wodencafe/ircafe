@@ -12,9 +12,9 @@ import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -32,7 +32,7 @@ class OutboundBackendCapabilityPolicyTest {
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
-          IrcNegotiatedFeaturePort.from(irc),
+          new IrcNegotiatedFeaturePortAdapter(irc),
           backendAvailability,
           AvailableBackendIdsPort.builtInsOnly());
 
@@ -104,7 +104,7 @@ class OutboundBackendCapabilityPolicyTest {
         new OutboundBackendCapabilityPolicy(
             commandTargetPolicy,
             registry,
-            IrcNegotiatedFeaturePort.from(irc),
+            new IrcNegotiatedFeaturePortAdapter(irc),
             backendAvailability,
             AvailableBackendIdsPort.builtInsOnly());
 
@@ -124,7 +124,7 @@ class OutboundBackendCapabilityPolicyTest {
         new OutboundBackendCapabilityPolicy(
             commandTargetPolicy,
             outboundBackendFeatureRegistry,
-            IrcNegotiatedFeaturePort.from(irc),
+            new IrcNegotiatedFeaturePortAdapter(irc),
             backendAvailability,
             backendMetadata);
 
