@@ -38,6 +38,32 @@ class ThemeAppearanceServiceTest {
       UIManager.getLookAndFeel() != null ? UIManager.getLookAndFeel().getClass().getName() : null;
 
   @Test
+  void nimbusDensityReachesPasswordFieldsCreatedAfterAThemeSwitch() throws Exception {
+    onEdt(
+        () -> {
+          for (ThemeTweakSettings.ThemeDensity density :
+              new ThemeTweakSettings.ThemeDensity[] {
+                ThemeTweakSettings.ThemeDensity.COMPACT,
+                ThemeTweakSettings.ThemeDensity.SPACIOUS,
+                ThemeTweakSettings.ThemeDensity.AUTO
+              }) {
+            try {
+              UIManager.setLookAndFeel(new javax.swing.plaf.nimbus.NimbusLookAndFeel());
+            } catch (Exception e) {
+              throw new IllegalStateException(e);
+            }
+            // Installing a theme can compile the defaults before preferences creates its fields.
+            new JTextField().getPreferredSize();
+            service.applyCommonTweaks(new ThemeTweakSettings(density, 10));
+            assertEquals(
+                UIManager.getInsets(UiDefaultKeys.PASSWORD_FIELD_CONTENT_MARGINS),
+                new javax.swing.JPasswordField().getInsets(),
+                density.name());
+          }
+        });
+  }
+
+  @Test
   void disablingAccentRestoresPreviousUiDefaults() throws Exception {
     onEdt(
         () -> {

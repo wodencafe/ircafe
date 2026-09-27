@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.settings;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,9 @@ import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
 import cafe.woden.ircclient.ui.settings.theme.spi.ThemeOption;
 import java.awt.Color;
 import java.lang.reflect.InvocationTargetException;
+import javax.swing.JComboBox;
+import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
@@ -63,12 +67,56 @@ class ThemeSwitchingFunctionalTest {
     }
   }
 
+  @Test
+  void orangeThemeSwitchingRefreshesExistingFieldsAndPopupSelections() throws Exception {
+    onEdt(
+        () -> {
+          themeManager.installLookAndFeel("nimbus-dark-orange");
+          JPanel panel = new JPanel();
+          JTextField field = new JTextField("Selected input", 20);
+          JComboBox<String> combo = new JComboBox<>(new String[] {"Orange", "Blue"});
+          panel.add(field);
+          panel.add(combo);
+          for (String theme :
+              new String[] {
+                "nimbus-orange",
+                "nimbus-dark-blue",
+                "nimbus-amber",
+                "nimbus-dark-orange",
+                "nimbus-orange"
+              }) {
+            themeManager.installLookAndFeel(theme);
+            SwingUtilities.updateComponentTreeUI(panel);
+            assertEquals(UIManager.getColor("TextField.background"), field.getBackground(), theme);
+            field.selectAll();
+            assertTrue(
+                SettingsColorSupport.contrastRatio(
+                        field.getSelectedTextColor(), field.getSelectionColor())
+                    >= 4.5,
+                theme + " selected input");
+            JList<String> popup = new JList<>(new String[] {"Orange", "Blue"});
+            var selected =
+                combo.getRenderer().getListCellRendererComponent(popup, "Orange", 0, true, false);
+            assertTrue(
+                SettingsColorSupport.contrastRatio(
+                        selected.getForeground(), selected.getBackground())
+                    >= 4.5,
+                theme
+                    + " popup selection: "
+                    + selected.getForeground()
+                    + " on "
+                    + selected.getBackground());
+          }
+        });
+  }
+
   @AfterAll
   void restoreLookAndFeel() throws Exception {
     if (initialLookAndFeelClassName == null || initialLookAndFeelClassName.isBlank()) return;
     onEdt(
         () -> {
           try {
+            themeManager.installLookAndFeel("nimbus");
             UIManager.setLookAndFeel(initialLookAndFeelClassName);
           } catch (Exception ignored) {
           }

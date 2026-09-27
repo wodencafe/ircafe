@@ -43,23 +43,208 @@ class NimbusThemeOverrideService {
     }
   }
 
-  private record NimbusComboArrowPainter(Color color) implements Painter<JComponent> {
+  private record NimbusArrowPainter(Color color, int direction) implements Painter<JComponent> {
     @Override
     public void paint(Graphics2D g, JComponent object, int width, int height) {
-      if (width <= 0 || height <= 0) return;
       int cx = width / 2;
       int cy = height / 2;
-      int halfWidth = Math.max(4, Math.min(6, width / 4));
-      int halfHeight = Math.max(3, Math.min(5, height / 5));
+      int radius = Math.min(4, Math.min(width, height) / 3);
       g.setColor(color);
-      g.fillPolygon(
-          new int[] {cx - halfWidth, cx + halfWidth, cx},
-          new int[] {cy - halfHeight / 2, cy - halfHeight / 2, cy + halfHeight},
-          3);
+      if (direction == javax.swing.SwingConstants.WEST) {
+        // Nimbus rotates the canonical west-facing glyph for combos and scrollbars.
+        g.fillPolygon(
+            new int[] {cx + radius, cx + radius, cx - radius},
+            new int[] {cy - radius, cy + radius, cy},
+            3);
+      } else {
+        int sign = direction == javax.swing.SwingConstants.NORTH ? -1 : 1;
+        g.fillPolygon(
+            new int[] {cx - radius, cx + radius, cx},
+            new int[] {cy - sign * radius / 2, cy - sign * radius / 2, cy + sign * radius},
+            3);
+      }
+    }
+  }
+
+  private record NimbusThumbPainter(Color color) implements Painter<JComponent> {
+    @Override
+    public void paint(Graphics2D g, JComponent object, int width, int height) {
+      g.setColor(color);
+      g.fillRoundRect(3, 3, Math.max(0, width - 6), Math.max(0, height - 6), 6, 6);
+    }
+  }
+
+  private static final String[] SPINNER_BUTTON_PREFIXES = {
+    "Spinner:\"Spinner.nextButton\"", "Spinner:\"Spinner.previousButton\""
+  };
+  private static final String[] BUTTON_STATES = {
+    "Enabled", "Disabled", "Focused", "MouseOver", "Pressed", "Focused+MouseOver", "Focused+Pressed"
+  };
+  private static final String[] SCROLLBAR_STATES = {"Enabled", "Disabled", "MouseOver", "Pressed"};
+
+  private static void applyAuxiliaryPainters() {
+    Color panel = UIManager.getColor(UiColorKeys.PANEL_BACKGROUND);
+    Color field = UIManager.getColor(UiColorKeys.TEXT_FIELD_BACKGROUND);
+    Color text = UIManager.getColor(UiColorKeys.TEXT_FIELD_FOREGROUND);
+    Color border = UIManager.getColor(UiColorKeys.NIMBUS_BORDER);
+    Color focus = UIManager.getColor(UiColorKeys.NIMBUS_FOCUS);
+    Color disabled = UIManager.getColor(UiColorKeys.NIMBUS_DISABLED_TEXT);
+    for (String prefix : SPINNER_BUTTON_PREFIXES) {
+      int direction =
+          prefix.contains("nextButton")
+              ? javax.swing.SwingConstants.NORTH
+              : javax.swing.SwingConstants.SOUTH;
+      for (String state : BUTTON_STATES) {
+        boolean inactive = state.equals("Disabled");
+        Color bg = inactive ? mix(field, panel, 0.7) : field;
+        if (state.contains("MouseOver")) bg = mix(bg, focus, 0.18);
+        if (state.contains("Pressed")) bg = mix(bg, panel, 0.3);
+        String key = prefix + "[" + state + "]";
+        UIManager.put(
+            key + ".backgroundPainter",
+            new NimbusInputPainter(bg, state.contains("Focused") ? focus : border));
+        UIManager.put(
+            key + ".foregroundPainter",
+            new NimbusArrowPainter(
+                ThemeColorUtils.ensureContrastAgainstBackground(
+                    inactive ? disabled : text, bg, 4.5),
+                direction));
+      }
+    }
+    Color thumb =
+        ThemeColorUtils.ensureContrastAgainstBackground(mix(panel, text, 0.35), panel, 3.0);
+    for (String state : SCROLLBAR_STATES) {
+      String suffix = "[" + state + "]";
+      Color thumbColor = state.equals("MouseOver") || state.equals("Pressed") ? focus : thumb;
+      UIManager.put(
+          "ScrollBar:ScrollBarThumb" + suffix + ".backgroundPainter",
+          new NimbusThumbPainter(thumbColor));
+      UIManager.put(
+          "ScrollBar:ScrollBarTrack" + suffix + ".backgroundPainter",
+          new NimbusSurfacePainter(panel, panel, panel));
+      UIManager.put(
+          "ScrollBar:\"ScrollBar.button\"" + suffix + ".foregroundPainter",
+          new NimbusArrowPainter(
+              state.equals("Disabled") ? disabled : text, javax.swing.SwingConstants.WEST));
+    }
+  }
+
+  private static Set<String> auxiliaryPainterKeys() {
+    Set<String> keys = new HashSet<>();
+    for (String prefix : SPINNER_BUTTON_PREFIXES) {
+      for (String state : BUTTON_STATES) {
+        keys.add(prefix + "[" + state + "].backgroundPainter");
+        keys.add(prefix + "[" + state + "].foregroundPainter");
+      }
+    }
+    for (String state : SCROLLBAR_STATES) {
+      keys.add("ScrollBar:ScrollBarThumb[" + state + "].backgroundPainter");
+      keys.add("ScrollBar:ScrollBarTrack[" + state + "].backgroundPainter");
+      keys.add("ScrollBar:\"ScrollBar.button\"[" + state + "].foregroundPainter");
+    }
+    return keys;
+  }
+
+  private static final String SPINNER_EDITOR = "Spinner:Panel:\"Spinner.formattedTextField\"";
+  private static final String[] INPUT_PREFIXES = {
+    "TextField", "PasswordField", "FormattedTextField", SPINNER_EDITOR
+  };
+  private static final String[] INPUT_STATES = {
+    "Enabled", "Disabled", "Selected", "Focused", "Focused+Selected"
+  };
+  private static final String[] INPUT_PROPERTIES = {
+    "background", "textForeground", "backgroundPainter", "borderPainter"
+  };
+
+  private record NimbusInputPainter(Color background, Color border) implements Painter<JComponent> {
+    @Override
+    public void paint(Graphics2D g, JComponent object, int width, int height) {
+      if (width <= 2 || height <= 2) return;
+      g.setColor(background);
+      g.fillRect(1, 1, width - 2, height - 2);
+      g.setColor(border);
+      g.drawRect(0, 0, width - 1, height - 1);
+    }
+  }
+
+  private static void applyInputStates() {
+    Color background = UIManager.getColor(UiColorKeys.TEXT_FIELD_BACKGROUND);
+    Color foreground = UIManager.getColor(UiColorKeys.TEXT_FIELD_FOREGROUND);
+    Color panel = UIManager.getColor(UiColorKeys.PANEL_BACKGROUND);
+    Color border = UIManager.getColor(UiColorKeys.NIMBUS_BORDER);
+    Color disabledBackground = toUiResource(mix(background, panel, 0.7));
+    Color disabledForeground =
+        toUiResource(
+            ThemeColorUtils.ensureContrastAgainstBackground(
+                UIManager.getColor(UiColorKeys.NIMBUS_DISABLED_TEXT), disabledBackground, 4.5));
+    Painter<JComponent> noBorder = (g, c, w, h) -> {};
+    for (String prefix : INPUT_PREFIXES) {
+      for (String state : INPUT_STATES) {
+        boolean disabled = state.equals("Disabled");
+        Color bg = disabled ? disabledBackground : background;
+        String key = prefix + "[" + state + "]";
+        UIManager.put(key + ".background", bg);
+        UIManager.put(
+            key + ".textForeground",
+            disabled
+                ? disabledForeground
+                : state.contains("Selected")
+                    ? UIManager.getColor(UiColorKeys.NIMBUS_SELECTED_TEXT)
+                    : foreground);
+        UIManager.put(
+            key + ".backgroundPainter",
+            new NimbusInputPainter(
+                bg,
+                state.contains("Focused") ? UIManager.getColor(UiColorKeys.NIMBUS_FOCUS) : border));
+        UIManager.put(key + ".borderPainter", noBorder);
+      }
+    }
+  }
+
+  private static Set<String> inputOverrideKeys() {
+    Set<String> keys = new HashSet<>();
+    for (String prefix : INPUT_PREFIXES) {
+      for (String state : INPUT_STATES) {
+        for (String property : INPUT_PROPERTIES) {
+          keys.add(prefix + "[" + state + "]." + property);
+        }
+      }
+    }
+    return keys;
+  }
+
+  private static final String[] TEXT_SURFACE_PREFIXES = {
+    "TextField", "PasswordField", "FormattedTextField", "TextArea", "TextPane", "EditorPane"
+  };
+
+  private static final String[] SELECTION_STATE_PREFIXES = {
+    "List[Selected]", "List:\"List.cellRenderer\"[Selected]", "Table[Enabled+Selected]"
+  };
+
+  private static void applyTextSurfaceStates() {
+    for (String prefix : SELECTION_STATE_PREFIXES) {
+      UIManager.put(
+          prefix + ".textForeground", UIManager.getColor(UiColorKeys.NIMBUS_SELECTED_TEXT));
+      UIManager.put(
+          prefix + ".textBackground", UIManager.getColor(UiColorKeys.NIMBUS_SELECTION_BACKGROUND));
+    }
+    // Synth resolves state colors before component colors. Keep newly created editors in
+    // sync with the palette used by existing windows during a theme switch.
+    for (String prefix : TEXT_SURFACE_PREFIXES) {
+      UIManager.put(prefix + "[Enabled].background", UIManager.getColor(prefix + ".background"));
+      UIManager.put(
+          prefix + "[Enabled].textForeground", UIManager.getColor(prefix + ".foreground"));
+      UIManager.put(
+          prefix + "[Selected].textForeground",
+          UIManager.getColor(UiColorKeys.NIMBUS_SELECTED_TEXT));
+      UIManager.put(
+          prefix + "[Selected].textBackground",
+          UIManager.getColor(UiColorKeys.NIMBUS_SELECTION_BACKGROUND));
     }
   }
 
   private static final String[] NIMBUS_DARK_OVERRIDE_KEYS = {
+    UiColorKeys.TEXT_COMPONENT_BACKGROUND,
     UiColorKeys.CONTROL,
     UiColorKeys.INFO,
     UiColorKeys.NIMBUS_BASE,
@@ -460,8 +645,42 @@ class NimbusThemeOverrideService {
     NimbusVariantSpec spec = NIMBUS_VARIANTS.get(themeIdLower.toLowerCase(Locale.ROOT));
     if (spec == null) return false;
     spec.applyOverrides().run();
+    applyTextSurfaceStates();
+    applyInputStates();
+    applyAuxiliaryPainters();
     logNimbusSnapshot("applyVariant", themeIdLower);
     return true;
+  }
+
+  void synchronizeLookAndFeelDefaults() {
+    // Nimbus compiles styles by iterating MultiUIDefaults.entrySet(), which can contain
+    // both the original LAF entry and its developer override. Mirror our values into the
+    // new LAF table so iteration order cannot resurrect stock colors or painters.
+    Set<String> keys = new HashSet<>(java.util.List.of(NIMBUS_DARK_OVERRIDE_KEYS));
+    keys.addAll(java.util.List.of(NIMBUS_TINT_OVERRIDE_KEYS));
+    keys.addAll(inputOverrideKeys());
+    keys.addAll(auxiliaryPainterKeys());
+    for (String prefix : TEXT_SURFACE_PREFIXES) {
+      keys.add(prefix + "[Enabled].background");
+      keys.add(prefix + "[Enabled].textForeground");
+      keys.add(prefix + "[Selected].textForeground");
+      keys.add(prefix + "[Selected].textBackground");
+    }
+    for (String prefix : SELECTION_STATE_PREFIXES) {
+      keys.add(prefix + ".textForeground");
+      keys.add(prefix + ".textBackground");
+    }
+    var defaults = UIManager.getLookAndFeelDefaults();
+    for (String key : keys) {
+      Object value = UIManager.get(key);
+      if (value != null) {
+        defaults.put(key, value);
+        // The new LAF may already have compiled a prefix during installation. Force a
+        // change event even when the developer override equals the previous value.
+        UIManager.put(key, null);
+        UIManager.put(key, value);
+      }
+    }
   }
 
   void clearDarkOverrides() {
@@ -803,7 +1022,8 @@ class NimbusThemeOverrideService {
 
     // Tint the dark neutral surfaces for each Nimbus dark accent variant.
     // Without this, all dark variants inherit the same gray base from applyNimbusDarkOverrides().
-    ColorUIResource control = new ColorUIResource(mix(nimbusBlueGrey, nimbusBase, 0.35));
+    ColorUIResource control =
+        toUiResource(mix(uiColor(0x27, 0x2B, 0x30), mix(nimbusBlueGrey, nimbusBase, 0.35), 0.45));
     ColorUIResource bg = new ColorUIResource(darken(control, 0.10));
     ColorUIResource menuBg = new ColorUIResource(darken(control, 0.05));
     ColorUIResource border = new ColorUIResource(lighten(control, 0.10));
@@ -983,14 +1203,16 @@ class NimbusThemeOverrideService {
     Color fieldTint = mix(mix(nimbusBase, focus, 0.56), nimbusBlueGrey, 0.22);
     Color fieldBase = mix(bg, fieldTint, 0.62);
     Color fieldSurface =
-        ThemeColorUtils.ensureContrastAgainstBackground(lighten(fieldBase, 0.19), panelBase, 1.22);
-    ColorUIResource fieldBg = toUiResource(fieldSurface);
+        ThemeColorUtils.ensureContrastAgainstBackground(lighten(fieldBase, 0.07), panelBase, 1.22);
+    ColorUIResource fieldBg =
+        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(fieldSurface, text, 5.0));
 
     Color areaTint = mix(mix(nimbusBlueGrey, focus, 0.46), nimbusBase, 0.18);
     Color areaBase = mix(bg, areaTint, 0.52);
     Color areaSurface =
-        ThemeColorUtils.ensureContrastAgainstBackground(lighten(areaBase, 0.16), panelBase, 1.16);
-    ColorUIResource areaBg = toUiResource(areaSurface);
+        ThemeColorUtils.ensureContrastAgainstBackground(lighten(areaBase, 0.05), panelBase, 1.16);
+    ColorUIResource areaBg =
+        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(areaSurface, text, 5.0));
 
     ColorUIResource listBg = toUiResource(darken(bg, 0.015));
     ColorUIResource tableBg = toUiResource(darken(bg, 0.02));
@@ -1081,7 +1303,7 @@ class NimbusThemeOverrideService {
     UIManager.put(UiColorKeys.COMBO_BOX_TEXT_FIELD_SELECTED_TEXT_FOREGROUND, selectionFg);
     UIManager.put(UiColorKeys.COMBO_BOX_ARROW_BUTTON_BACKGROUND, comboArrowBg);
     UIManager.put(UiColorKeys.COMBO_BOX_ARROW_BUTTON_FOREGROUND, text);
-    applyNimbusDarkComboBox(
+    applyNimbusComboBox(
         fieldBg,
         comboArrowBg,
         panelBg,
@@ -1204,10 +1426,10 @@ class NimbusThemeOverrideService {
     UIManager.put(UiColorKeys.TOOL_TIP_FOREGROUND, text);
     UIManager.put(UiColorKeys.TABBED_PANE_FOCUS, focus);
 
-    applyNimbusDarkTabbedPane(panelBg, text, disabledText, selectionBg, selectionFg, focus, border);
+    applyNimbusTabbedPane(panelBg, text, disabledText, selectionBg, selectionFg, focus, border);
   }
 
-  private static void applyNimbusDarkComboBox(
+  private static void applyNimbusComboBox(
       Color fieldBg,
       Color arrowBg,
       Color panelBg,
@@ -1219,13 +1441,14 @@ class NimbusThemeOverrideService {
       Color border) {
     Color enabledTop = lighten(fieldBg, 0.05);
     Color enabledBottom = darken(fieldBg, 0.04);
-    Color hoverTop = lighten(fieldBg, 0.11);
+    Color hoverTop =
+        ThemeColorUtils.ensureContrastAgainstBackground(lighten(fieldBg, 0.08), text, 4.5);
     Color hoverBottom = lighten(fieldBg, 0.02);
     Color pressedTop = darken(fieldBg, 0.03);
     Color pressedBottom = darken(fieldBg, 0.10);
     Color focusedTop = lighten(mix(fieldBg, focus, 0.16), 0.06);
     Color focusedBottom = darken(mix(fieldBg, focus, 0.12), 0.04);
-    Color selectedTop = lighten(mix(selectionBg, focus, 0.16), 0.08);
+    Color selectedTop = selectionBg;
     Color selectedBottom = darken(selectionBg, 0.04);
     Color disabledTop = mix(fieldBg, panelBg, 0.64);
     Color disabledBottom = mix(fieldBg, panelBg, 0.78);
@@ -1240,13 +1463,13 @@ class NimbusThemeOverrideService {
     Color arrowSelectedBottom = darken(selectionBg, 0.07);
 
     ColorUIResource readableText =
-        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(text, fieldBg, 3.0));
+        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(text, fieldBg, 4.5));
     ColorUIResource readableDisabledText =
         toUiResource(
             ThemeColorUtils.ensureContrastAgainstBackground(disabledText, disabledBottom, 2.0));
     ColorUIResource readableSelectionText =
         toUiResource(
-            ThemeColorUtils.ensureContrastAgainstBackground(selectionFg, selectionBg, 3.0));
+            ThemeColorUtils.ensureContrastAgainstBackground(selectionFg, selectionBg, 4.5));
 
     Painter<JComponent> enabledPainter =
         new NimbusSurfacePainter(enabledTop, enabledBottom, border);
@@ -1270,9 +1493,12 @@ class NimbusThemeOverrideService {
     Painter<JComponent> arrowDisabledPainter =
         new NimbusSurfacePainter(disabledTop, disabledBottom, darken(border, 0.10));
 
-    Painter<JComponent> arrowGlyph = new NimbusComboArrowPainter(readableText);
-    Painter<JComponent> arrowGlyphSelected = new NimbusComboArrowPainter(readableSelectionText);
-    Painter<JComponent> arrowGlyphDisabled = new NimbusComboArrowPainter(readableDisabledText);
+    Painter<JComponent> arrowGlyph =
+        new NimbusArrowPainter(readableText, javax.swing.SwingConstants.WEST);
+    Painter<JComponent> arrowGlyphSelected =
+        new NimbusArrowPainter(readableSelectionText, javax.swing.SwingConstants.WEST);
+    Painter<JComponent> arrowGlyphDisabled =
+        new NimbusArrowPainter(readableDisabledText, javax.swing.SwingConstants.WEST);
 
     UIManager.put(UiColorKeys.COMBO_BOX_FOREGROUND, readableText);
     UIManager.put(UiColorKeys.COMBO_BOX_DISABLED_TEXT, readableDisabledText);
@@ -1324,7 +1550,7 @@ class NimbusThemeOverrideService {
     UIManager.put(UiDefaultKeys.COMBO_BOX_TEXT_FIELD_SELECTED_BACKGROUND_PAINTER, selectedPainter);
   }
 
-  private static void applyNimbusDarkTabbedPane(
+  private static void applyNimbusTabbedPane(
       Color panelBg,
       Color text,
       Color disabledText,
@@ -1334,12 +1560,12 @@ class NimbusThemeOverrideService {
       Color border) {
     ColorUIResource tabArea = toUiResource(darken(panelBg, 0.06));
     ColorUIResource inactiveFg =
-        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(text, tabArea, 3.0));
+        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(text, tabArea, 4.5));
     ColorUIResource disabledFg =
         toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(disabledText, tabArea, 2.0));
     ColorUIResource selectedFg =
         toUiResource(
-            ThemeColorUtils.ensureContrastAgainstBackground(selectionFg, selectionBg, 3.0));
+            ThemeColorUtils.ensureContrastAgainstBackground(selectionFg, selectionBg, 4.5));
 
     Color inactiveTop = lighten(panelBg, 0.04);
     Color inactiveBottom = darken(panelBg, 0.04);
@@ -1347,7 +1573,7 @@ class NimbusThemeOverrideService {
     Color hoverBottom = lighten(panelBg, 0.02);
     Color pressedTop = darken(panelBg, 0.03);
     Color pressedBottom = darken(panelBg, 0.09);
-    Color selectedTop = lighten(mix(selectionBg, focus, 0.18), 0.08);
+    Color selectedTop = selectionBg;
     Color selectedBottom = darken(selectionBg, 0.04);
     Color selectedPressedTop = darken(selectedTop, 0.05);
     Color selectedPressedBottom = darken(selectedBottom, 0.08);
@@ -1567,6 +1793,19 @@ class NimbusThemeOverrideService {
       ColorUIResource nimbusRed,
       ColorUIResource nimbusGreen,
       ColorUIResource disabledText) {
+    // Keep large surfaces quiet; reserve the saturated hue for focus and selection.
+    control = toUiResource(lighten(control, 0.62));
+    bg = toUiResource(lighten(bg, 0.78));
+    menuBg = control;
+    nimbusBlueGrey = toUiResource(mix(control, border, 0.18));
+    selectionFg = uiColor(0xFF, 0xFF, 0xFF);
+    selectionBg =
+        toUiResource(
+            ThemeColorUtils.ensureContrastAgainstBackground(selectionBg, selectionFg, 5.0));
+    menuSelectionBg = selectionBg;
+    disabledText =
+        toUiResource(ThemeColorUtils.ensureContrastAgainstBackground(disabledText, control, 3.0));
+
     UIManager.put(UiColorKeys.CONTROL, control);
     UIManager.put(UiColorKeys.INFO, bg);
     UIManager.put(UiColorKeys.NIMBUS_BASE, nimbusBase);
@@ -1649,6 +1888,58 @@ class NimbusThemeOverrideService {
     UIManager.put(UiColorKeys.BUTTON_SELECT, selectionBg);
     UIManager.put(UiColorKeys.TOGGLE_BUTTON_SELECT, selectionBg);
     UIManager.put(UiColorKeys.TABBED_PANE_FOCUS, focus);
+    applyNimbusLightSurfaces(
+        control, bg, text, disabledText, border, focus, selectionBg, selectionFg);
+  }
+
+  private static void applyNimbusLightSurfaces(
+      ColorUIResource control,
+      ColorUIResource bg,
+      ColorUIResource text,
+      ColorUIResource disabledText,
+      ColorUIResource border,
+      ColorUIResource focus,
+      ColorUIResource selectionBg,
+      ColorUIResource selectionFg) {
+    UIManager.put(UiColorKeys.TEXT_COMPONENT_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.PASSWORD_FIELD_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.PASSWORD_FIELD_FOREGROUND, text);
+    UIManager.put(UiColorKeys.FORMATTED_TEXT_FIELD_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.FORMATTED_TEXT_FIELD_FOREGROUND, text);
+    UIManager.put(UiColorKeys.TEXT_PANE_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.TEXT_PANE_FOREGROUND, text);
+    UIManager.put(UiColorKeys.EDITOR_PANE_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.EDITOR_PANE_FOREGROUND, text);
+    UIManager.put(UiColorKeys.TREE_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.VIEWPORT_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.VIEWPORT_FOREGROUND, text);
+    UIManager.put(UiColorKeys.TABLE_HEADER_BACKGROUND, control);
+    UIManager.put(UiColorKeys.TABLE_HEADER_FOREGROUND, text);
+    UIManager.put(UiColorKeys.TABLE_HEADER_RENDERER_BACKGROUND, control);
+    UIManager.put(UiColorKeys.TABLE_HEADER_RENDERER_FOREGROUND, text);
+    UIManager.put(UiColorKeys.TABLE_GRID_COLOR, border);
+    UIManager.put(UiColorKeys.COMPONENT_BORDER_COLOR, border);
+    UIManager.put(UiColorKeys.SCROLL_PANE_BORDER_COLOR, border);
+    UIManager.put(UiColorKeys.SEPARATOR_FOREGROUND, border);
+    UIManager.put(UiColorKeys.TOOL_TIP_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.TOOL_TIP_FOREGROUND, text);
+    UIManager.put(UiColorKeys.COMBO_BOX_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.COMBO_BOX_LIST_RENDERER_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.COMBO_BOX_LIST_RENDERER_TEXT_FOREGROUND, text);
+    UIManager.put(UiColorKeys.COMBO_BOX_LIST_RENDERER_SELECTED_BACKGROUND, selectionBg);
+    UIManager.put(UiColorKeys.COMBO_BOX_LIST_RENDERER_SELECTED_TEXT_FOREGROUND, selectionFg);
+    UIManager.put(UiColorKeys.COMBO_BOX_RENDERER_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.COMBO_BOX_RENDERER_TEXT_FOREGROUND, text);
+    UIManager.put(UiColorKeys.COMBO_BOX_RENDERER_SELECTED_BACKGROUND, selectionBg);
+    UIManager.put(UiColorKeys.COMBO_BOX_RENDERER_SELECTED_TEXT_FOREGROUND, selectionFg);
+    UIManager.put(UiColorKeys.COMBO_BOX_RENDERER_DISABLED_TEXT_FOREGROUND, disabledText);
+    UIManager.put(UiColorKeys.SPINNER_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.SPINNER_FOREGROUND, text);
+    UIManager.put(UiColorKeys.SPINNER_FORMATTED_TEXT_FIELD_BACKGROUND, bg);
+    UIManager.put(UiColorKeys.SPINNER_FORMATTED_TEXT_FIELD_FOREGROUND, text);
+    applyNimbusComboBox(
+        bg, control, control, text, disabledText, selectionBg, selectionFg, focus, border);
+    applyNimbusTabbedPane(control, text, disabledText, selectionBg, selectionFg, focus, border);
   }
 
   private static ColorUIResource uiColor(int r, int g, int b) {
@@ -1711,6 +2002,18 @@ class NimbusThemeOverrideService {
   }
 
   private static void clearNimbusDarkOverrides() {
+    for (String key : inputOverrideKeys()) UIManager.put(key, null);
+    for (String key : auxiliaryPainterKeys()) UIManager.put(key, null);
+    for (String prefix : SELECTION_STATE_PREFIXES) {
+      UIManager.put(prefix + ".textForeground", null);
+      UIManager.put(prefix + ".textBackground", null);
+    }
+    for (String prefix : TEXT_SURFACE_PREFIXES) {
+      UIManager.put(prefix + "[Enabled].background", null);
+      UIManager.put(prefix + "[Enabled].textForeground", null);
+      UIManager.put(prefix + "[Selected].textForeground", null);
+      UIManager.put(prefix + "[Selected].textBackground", null);
+    }
     for (String key : NIMBUS_DARK_OVERRIDE_KEYS) {
       try {
         UIManager.put(key, null);

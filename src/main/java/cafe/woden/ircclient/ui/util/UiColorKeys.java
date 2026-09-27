@@ -277,9 +277,9 @@ public final class UiColorKeys {
   public static final String SPINNER_BACKGROUND = "Spinner.background";
   public static final String SPINNER_FOREGROUND = "Spinner.foreground";
   public static final String SPINNER_FORMATTED_TEXT_FIELD_BACKGROUND =
-      "Spinner:\"Spinner.formattedTextField\".background";
+      "Spinner:Panel:\"Spinner.formattedTextField\".background";
   public static final String SPINNER_FORMATTED_TEXT_FIELD_FOREGROUND =
-      "Spinner:\"Spinner.formattedTextField\".foreground";
+      "Spinner:Panel:\"Spinner.formattedTextField\".foreground";
   public static final String TOOL_TIP_BACKGROUND = "ToolTip.background";
   public static final String TOOL_TIP_FOREGROUND = "ToolTip.foreground";
   public static final String TABBED_PANE_BACKGROUND = "TabbedPane.background";

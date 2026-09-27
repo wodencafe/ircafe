@@ -123,14 +123,17 @@ class ThemeTextComponentPaletteSyncService {
 
   private static void applyPalette(
       JTextComponent c, Color bg, Color fg, Color selectionBg, Color selectionFg) {
-    if (bg != null) c.setBackground(bg);
+    // Non-focusable read-only text is used as a wrapping label in preferences.
+    // Preserve its intentional transparency across theme changes.
+    boolean transparentLabel = !c.isEditable() && !c.isFocusable() && !c.isOpaque();
+    if (bg != null && !transparentLabel) c.setBackground(bg);
     if (fg != null) {
       c.setForeground(fg);
       c.setCaretColor(fg);
     }
     if (selectionBg != null) c.setSelectionColor(selectionBg);
     if (selectionFg != null) c.setSelectedTextColor(selectionFg);
-    c.setOpaque(true);
+    if (!transparentLabel) c.setOpaque(true);
   }
 
   private static Color firstUiColor(String... keys) {
