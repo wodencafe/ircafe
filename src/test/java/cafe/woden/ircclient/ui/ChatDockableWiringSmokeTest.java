@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,6 +23,7 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -61,6 +63,25 @@ import javax.swing.text.DefaultStyledDocument;
 import org.junit.jupiter.api.Test;
 
 class ChatDockableWiringSmokeTest {
+
+  @Test
+  void targetSelectionUsesInjectedTypingPort() throws Exception {
+    Fixture fixture = createFixture();
+    try {
+      TargetRef target = new TargetRef("libera", "#ircafe");
+      when(fixture.transcripts.document(target)).thenReturn(new DefaultStyledDocument());
+      when(fixture.transcripts.readMarkerJumpOffset(target)).thenReturn(-1);
+      when(fixture.typingPort.isTypingAvailable("libera")).thenReturn(true);
+
+      onEdt(() -> fixture.chat.setActiveTarget(target));
+      flushEdt();
+
+      verify(fixture.typingPort, atLeastOnce()).isTypingAvailable("libera");
+      verify(fixture.irc, never()).isTypingAvailable(anyString());
+    } finally {
+      fixture.shutdown();
+    }
+  }
 
   @Test
   void setActiveTargetRoutesUiOnlyAndTranscriptViews() throws Exception {
@@ -223,6 +244,7 @@ class ChatDockableWiringSmokeTest {
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
+    IrcTypingPort typingPort = mock(IrcTypingPort.class);
     ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
     ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
@@ -266,6 +288,7 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    typingPort,
                     mock(Ircv3ReadMarkerFeatureSupport.class),
                     modeRoutingState,
                     serverIsupportState,
@@ -303,6 +326,8 @@ class ChatDockableWiringSmokeTest {
 
     return new Fixture(
         holder.get(),
+        irc,
+        typingPort,
         transcripts,
         serverTree,
         activationBus,
@@ -404,6 +429,8 @@ class ChatDockableWiringSmokeTest {
 
   private record Fixture(
       ChatDockable chat,
+      IrcClientService irc,
+      IrcTypingPort typingPort,
       ChatTranscriptStore transcripts,
       ServerTreeDockable serverTree,
       TargetActivationBus activationBus,

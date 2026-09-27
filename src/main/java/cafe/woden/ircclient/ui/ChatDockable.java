@@ -238,6 +238,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      @Qualifier("ircTypingPort") IrcTypingPort typingPort,
       Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ModeRoutingPort modeRoutingState,
       ServerIsupportStatePort serverIsupportState,
@@ -376,7 +377,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     InputCoordinatorBundle inputBundle =
         createInputCoordinatorBundle(
             transcripts,
-            irc,
+            typingPort,
             readMarkerFeatureSupport,
             chatHistoryService,
             activationBus,
@@ -747,7 +748,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private InputCoordinatorBundle createInputCoordinatorBundle(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
       Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
@@ -755,7 +756,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       BackendUiProfileProvider backendUiProfileProvider) {
     ChatTypingCoordinator typingCoordinator =
-        createTypingCoordinator(irc, messageActionCapabilityPolicy);
+        createTypingCoordinator(typingPort, messageActionCapabilityPolicy);
     ChatHistoryActionCoordinator historyActionCoordinator =
         createHistoryActionCoordinator(
             messageActionCapabilityPolicy, chatHistoryService, activationBus, outboundBus);
@@ -779,10 +780,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private ChatTypingCoordinator createTypingCoordinator(
-      IrcClientService irc, MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
+      IrcTypingPort typingPort, MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
     return new ChatTypingCoordinator(
         inputPanel,
-        IrcTypingPort.from(irc),
+        typingPort,
         messageActionCapabilityPolicy,
         () -> activeTarget,
         this::isTranscriptAtBottom,

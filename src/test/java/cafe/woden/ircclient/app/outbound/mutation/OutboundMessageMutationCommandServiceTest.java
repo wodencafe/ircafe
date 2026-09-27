@@ -20,8 +20,8 @@ import cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationServi
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.irc.adapter.IrcEchoCapabilityPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -67,7 +67,7 @@ class OutboundMessageMutationCommandServiceTest {
           .builtInMessageMutationOutboundCommandsRouter();
   private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
       new OutboundMessageMutationSendSupport(
-          IrcTargetMembershipPort.from(irc),
+          new IrcTargetMembershipPortAdapter(irc),
           new IrcEchoCapabilityPortAdapter(irc),
           outboundBackendCapabilityPolicy,
           messageMutationOutboundCommandsRouter,

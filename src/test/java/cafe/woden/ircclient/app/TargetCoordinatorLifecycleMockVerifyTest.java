@@ -20,9 +20,9 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -276,7 +276,7 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     return new TargetCoordinator(
         ui,
         userListStore,
-        IrcTargetMembershipPort.from(irc),
+        new IrcTargetMembershipPortAdapter(irc),
         irc,
         serverRegistry,
         new RuntimeConfigServerTreeAdapter(runtimeConfig),

@@ -20,8 +20,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -66,7 +66,7 @@ class OutboundUploadCommandServiceTest {
       new OutboundRawCommandSupport(rawLineCorrelationService);
   private final OutboundUploadCommandService service =
       new OutboundUploadCommandService(
-          IrcTargetMembershipPort.from(irc),
+          new IrcTargetMembershipPortAdapter(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

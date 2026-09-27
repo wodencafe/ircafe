@@ -24,10 +24,10 @@ import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
@@ -263,7 +263,7 @@ class ChannelHistoryPreservationFunctionalTest {
         new TargetCoordinator(
             ui,
             new UserListStore(),
-            IrcTargetMembershipPort.from(irc),
+            new IrcTargetMembershipPortAdapter(irc),
             bouncerPlayback,
             serverRegistry,
             new RuntimeConfigServerTreeAdapter(runtimeConfig),

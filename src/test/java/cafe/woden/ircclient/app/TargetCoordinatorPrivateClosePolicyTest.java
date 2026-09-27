@@ -17,9 +17,9 @@ import cafe.woden.ircclient.config.RuntimeConfigServerTreeAdapter;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -113,7 +113,7 @@ class TargetCoordinatorPrivateClosePolicyTest {
     return new TargetCoordinator(
         ui,
         mock(UserListStore.class),
-        IrcTargetMembershipPort.from(irc),
+        new IrcTargetMembershipPortAdapter(irc),
         irc,
         mock(ServerRegistry.class),
         new RuntimeConfigServerTreeAdapter(mock(RuntimeConfigStore.class)),

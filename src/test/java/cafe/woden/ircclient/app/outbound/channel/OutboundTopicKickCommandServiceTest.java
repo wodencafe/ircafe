@@ -16,8 +16,8 @@ import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationService;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -48,7 +48,7 @@ class OutboundTopicKickCommandServiceTest {
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport =
       new OutboundTargetMembershipCommandSupport(
-          IrcTargetMembershipPort.from(irc),
+          new IrcTargetMembershipPortAdapter(irc),
           ui,
           outboundConnectionStatusSupport,
           targetCoordinator,

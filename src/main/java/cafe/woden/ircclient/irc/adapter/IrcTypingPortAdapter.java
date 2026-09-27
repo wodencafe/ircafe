@@ -1,8 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import io.reactivex.rxjava3.core.Completable;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
@@ -15,24 +14,30 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcTypingPortAdapter implements IrcTypingPort {
 
-  private final IrcTypingPort delegate;
+  private final IrcClientService irc;
 
   public IrcTypingPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcTypingPort.from(irc);
+    this.irc = irc;
   }
 
   @Override
   public boolean isTypingAvailable(String serverId) {
-    return delegate.isTypingAvailable(serverId);
+    return irc == null
+        ? IrcTypingPort.super.isTypingAvailable(serverId)
+        : irc.isTypingAvailable(serverId);
   }
 
   @Override
   public String typingAvailabilityReason(String serverId) {
-    return delegate.typingAvailabilityReason(serverId);
+    return irc == null
+        ? IrcTypingPort.super.typingAvailabilityReason(serverId)
+        : irc.typingAvailabilityReason(serverId);
   }
 
   @Override
   public Completable sendTyping(String serverId, String target, String state) {
-    return delegate.sendTyping(serverId, target, state);
+    return irc == null
+        ? IrcTypingPort.super.sendTyping(serverId, target, state)
+        : irc.sendTyping(serverId, target, state);
   }
 }

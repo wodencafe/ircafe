@@ -22,8 +22,8 @@ import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
@@ -63,7 +63,7 @@ class OutboundInviteCommandServiceTest {
   private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final PendingInviteCommandSupport pendingInviteCommandSupport =
       new PendingInviteCommandSupport(
-          IrcMediatorInteractionPort.from(irc),
+          new IrcMediatorInteractionPortAdapter(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,
@@ -75,7 +75,7 @@ class OutboundInviteCommandServiceTest {
           ignoreListService);
   private final OutboundInviteCommandService service =
       new OutboundInviteCommandService(
-          IrcMediatorInteractionPort.from(irc),
+          new IrcMediatorInteractionPortAdapter(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,
