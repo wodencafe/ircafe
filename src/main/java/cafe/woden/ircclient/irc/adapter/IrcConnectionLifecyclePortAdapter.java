@@ -1,50 +1,65 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.DisconnectRequestSource;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import io.reactivex.rxjava3.core.Completable;
+import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/** Spring adapter exposing connect/disconnect/currentNick via a narrow lifecycle port. */
+/** Adapts IRC clients to lifecycle operations, including optional disconnect-source support. */
 @Component("ircConnectionLifecyclePort")
 @SecondaryAdapter
 @InfrastructureLayer
 public class IrcConnectionLifecyclePortAdapter implements IrcConnectionLifecyclePort {
 
-  private final IrcConnectionLifecyclePort delegate;
+  private final IrcClientService irc;
 
   public IrcConnectionLifecyclePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcConnectionLifecyclePort.from(irc);
+    this.irc = irc;
   }
 
   @Override
   public Completable connect(String serverId) {
-    return delegate.connect(serverId);
+    return irc == null ? IrcConnectionLifecyclePort.super.connect(serverId) : irc.connect(serverId);
   }
 
   @Override
   public Completable disconnect(String serverId) {
-    return delegate.disconnect(serverId);
+    return irc == null
+        ? IrcConnectionLifecyclePort.super.disconnect(serverId)
+        : irc.disconnect(serverId);
   }
 
   @Override
   public Completable disconnect(String serverId, String reason) {
-    return delegate.disconnect(serverId, reason);
+    return irc == null
+        ? IrcConnectionLifecyclePort.super.disconnect(serverId, reason)
+        : irc.disconnect(serverId, reason);
   }
 
   @Override
   public Completable disconnect(String serverId, String reason, DisconnectRequestSource source) {
-    return delegate.disconnect(serverId, reason, source);
+    // Native lifecycle clients own their source policy, including the meaning of null.
+    if (irc instanceof IrcConnectionLifecyclePort port) {
+      return port.disconnect(serverId, reason, source);
+    }
+    if (irc instanceof IrcDisconnectWithSourcePort sourceAware) {
+      return sourceAware.disconnect(
+          serverId, reason, source == null ? DisconnectRequestSource.UNKNOWN : source);
+    }
+    return disconnect(serverId, reason);
   }
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    return delegate.currentNick(serverId);
+    String sid = Objects.toString(serverId, "").trim();
+    if (irc == null || sid.isEmpty()) return Optional.empty();
+    return irc.currentNick(sid);
   }
 }

@@ -26,9 +26,9 @@ import cafe.woden.ircclient.config.properties.LogProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
@@ -453,7 +453,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            IrcConnectionLifecyclePort.from(irc),
+            new IrcConnectionLifecyclePortAdapter(irc),
             irc,
             irc,
             ui,
@@ -954,7 +954,7 @@ class ConnectionCoordinatorTest {
       ConnectionRuntimeConfigPort runtimeConfig,
       TrayNotificationsPort trayNotificationService) {
     return new ConnectionCoordinator(
-        IrcConnectionLifecyclePort.from(irc),
+        new IrcConnectionLifecyclePortAdapter(irc),
         irc,
         irc,
         ui,

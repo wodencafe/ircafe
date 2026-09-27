@@ -18,8 +18,8 @@ import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreAuthHandshake;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreIrcClientService;
@@ -188,7 +188,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
 
       ConnectionCoordinator coordinator =
           FunctionalTestWiringSupport.newConnectionCoordinator(
-              IrcConnectionLifecyclePort.from(service),
+              new IrcConnectionLifecyclePortAdapter(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),
               ui,
@@ -354,7 +354,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
 
       ConnectionCoordinator coordinator =
           FunctionalTestWiringSupport.newConnectionCoordinator(
-              IrcConnectionLifecyclePort.from(service),
+              new IrcConnectionLifecyclePortAdapter(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),
               ui,
