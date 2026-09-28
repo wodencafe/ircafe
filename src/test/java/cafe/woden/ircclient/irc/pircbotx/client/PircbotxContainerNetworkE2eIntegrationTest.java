@@ -2,6 +2,8 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -42,6 +44,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.BufferedReader;
@@ -72,11 +75,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
@@ -109,6 +115,7 @@ import org.testcontainers.utility.MountableFile;
  */
 class PircbotxContainerNetworkE2eIntegrationTest {
   private static final String ERGO_IRC_IMAGE = "ghcr.io/ergochat/ergo:stable";
+  private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(30);
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(80);
   private static final Duration JOIN_TIMEOUT = Duration.ofSeconds(40);
   private static final Duration MESSAGE_TIMEOUT = Duration.ofSeconds(40);
@@ -120,6 +127,29 @@ class PircbotxContainerNetworkE2eIntegrationTest {
   @AfterEach
   void tearDownSchedulers() {
     RxVirtualSchedulers.shutdown();
+  }
+
+  @Test
+  @Timeout(5)
+  void commandWaitTimesOutAndDisposesUnfinishedCommand() {
+    AtomicBoolean disposed = new AtomicBoolean();
+    Completable command = Completable.never().doOnDispose(() -> disposed.set(true));
+
+    TimeoutException failure =
+        assertThrows(TimeoutException.class, () -> awaitCommand(command, Duration.ofMillis(20)));
+
+    assertTrue(failure.getMessage().contains("IRC command did not complete within PT0.02S"));
+    assertTrue(disposed.get(), "timed-out command subscription must be disposed");
+  }
+
+  @Test
+  void commandWaitPropagatesCommandFailure() {
+    IllegalStateException expected = new IllegalStateException("command failed");
+
+    IllegalStateException actual =
+        assertThrows(IllegalStateException.class, () -> awaitCommand(Completable.error(expected)));
+
+    assertSame(expected, actual);
   }
 
   @Test
@@ -139,7 +169,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         PircbotxIrcClientService service = fixture.service();
         TestSubscriber<ServerIrcEvent> events = service.events().test();
         try {
-          service.connect(runtimeCfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(runtimeCfg.serverId()));
           awaitNextEvent(
               events, runtimeCfg.serverId(), IrcEvent.Connected.class, 0, CONNECT_TIMEOUT);
 
@@ -147,7 +177,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               assertTimeout(
                   Duration.ofSeconds(5),
                   () -> {
-                    service.joinChannel(runtimeCfg.serverId(), "#linux").blockingAwait();
+                    awaitCommand(service.joinChannel(runtimeCfg.serverId(), "#linux"));
                     return awaitNextEventWhere(
                         events,
                         runtimeCfg.serverId(),
@@ -163,7 +193,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           server.assertHealthy();
         } finally {
           try {
-            service.disconnect(runtimeCfg.serverId(), "scripted roster shutdown").blockingAwait();
+            awaitCommand(service.disconnect(runtimeCfg.serverId(), "scripted roster shutdown"));
           } catch (Exception ignored) {
           }
           events.cancel();
@@ -210,7 +240,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
       try (ServiceFixture fixture = newService(cfg, false)) {
         TestSubscriber<ServerIrcEvent> events = fixture.service().events().test();
         try {
-          fixture.service().connect(cfg.serverId()).blockingAwait();
+          awaitCommand(fixture.service().connect(cfg.serverId()));
           awaitNextEvent(
               events, cfg.serverId(), IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
           List<String> requests = List.copyOf(server.requestedCapabilities);
@@ -250,7 +280,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           assertFalse(lagProbe.isLagProbeReady(cfg.serverId()));
           assertTrue(lagProbe.lastMeasuredLagMs(cfg.serverId()).isEmpty());
 
-          service.connect(cfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(cfg.serverId()));
           awaitNextEvent(
               events, cfg.serverId(), IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
 
@@ -258,7 +288,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           assertEquals(cfg.nick(), lagProbe.currentNick(" " + cfg.serverId() + " ").orElseThrow());
           assertTrue(lagProbe.isLagProbeReady(cfg.serverId()));
           assertFalse(lagProbe.shouldRequestLagProbe(cfg.serverId()));
-          lagProbe.requestLagProbe(cfg.serverId()).blockingAwait();
+          awaitCommand(lagProbe.requestLagProbe(cfg.serverId()));
           OptionalLong lag = awaitLagSample(lagProbe, cfg.serverId(), LAG_TIMEOUT);
           assertTrue(lag.isPresent(), "expected a lag sample after the scripted PONG");
           assertTrue(lag.orElseThrow() >= 0L);
@@ -305,14 +335,14 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           String sid = runtimeCfg.serverId();
 
           int readyCount = countEvents(events, sid, IrcEvent.ConnectionReady.class);
-          service.connect(sid).blockingAwait();
+          awaitCommand(service.connect(sid));
           awaitNextEvent(events, sid, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
           assertTrue(
               new IrcCurrentNickPortAdapter(service).currentNick(sid).isPresent(),
               "currentNick should be set after connect");
 
           int joinedCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sid, cfg.channel()).blockingAwait();
+          awaitCommand(service.joinChannel(sid, cfg.channel()));
           IrcEvent.JoinedChannel joined =
               awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
           assertEquals(cfg.channel(), joined.channel());
@@ -331,33 +361,31 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               inboundCount,
               MESSAGE_TIMEOUT);
 
-          service.sendToChannel(sid, cfg.channel(), cfg.appMessage()).blockingAwait();
+          awaitCommand(service.sendToChannel(sid, cfg.channel(), cfg.appMessage()));
           bot.awaitChannelPrivmsg(cfg.channel(), cfg.appMessage(), MESSAGE_TIMEOUT);
 
           IrcLagProbePort lagProbe = new IrcLagProbePortAdapter(service);
-          lagProbe.requestLagProbe(sid).blockingAwait();
+          awaitCommand(lagProbe.requestLagProbe(sid));
           OptionalLong lag = awaitLagSample(lagProbe, sid, LAG_TIMEOUT);
           assertTrue(lag.isPresent(), "expected lag sample after explicit lag probe");
           assertTrue(lag.orElseThrow() >= 0L);
 
           int disconnectedCount = countEvents(events, sid, IrcEvent.Disconnected.class);
-          service.disconnect(sid, "container ircd e2e disconnect").blockingAwait();
+          awaitCommand(service.disconnect(sid, "container ircd e2e disconnect"));
           awaitNextEvent(
               events, sid, IrcEvent.Disconnected.class, disconnectedCount, CONNECT_TIMEOUT);
 
           int reconnectReadyCount = countEvents(events, sid, IrcEvent.ConnectionReady.class);
-          service.connect(sid).blockingAwait();
+          awaitCommand(service.connect(sid));
           awaitNextEvent(
               events, sid, IrcEvent.ConnectionReady.class, reconnectReadyCount, CONNECT_TIMEOUT);
 
           int rejoinCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sid, cfg.channel()).blockingAwait();
+          awaitCommand(service.joinChannel(sid, cfg.channel()));
           awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, rejoinCount, JOIN_TIMEOUT);
         } finally {
           try {
-            service
-                .disconnect(runtimeCfg.serverId(), "container ircd e2e shutdown")
-                .blockingAwait();
+            awaitCommand(service.disconnect(runtimeCfg.serverId(), "container ircd e2e shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -396,7 +424,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         TestSubscriber<ServerIrcEvent> events = service.events().test();
         try {
           String serverId = runtimeCfg.serverId();
-          service.connect(serverId).blockingAwait();
+          awaitCommand(service.connect(serverId));
           awaitNextEvent(events, serverId, IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
 
           peer.sendLine(
@@ -457,9 +485,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           }
         } finally {
           try {
-            service
-                .disconnect(runtimeCfg.serverId(), "container ircd DCC shutdown")
-                .blockingAwait();
+            awaitCommand(service.disconnect(runtimeCfg.serverId(), "container ircd DCC shutdown"));
           } catch (Exception ignored) {
           }
           events.cancel();
@@ -523,12 +549,12 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         String peerNick = cfg.botNick();
         try {
           int readyCount = countEvents(events, serverId, IrcEvent.ConnectionReady.class);
-          service.connect(serverId).blockingAwait();
+          awaitCommand(service.connect(serverId));
           awaitNextEvent(
               events, serverId, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
 
           int joinedCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
-          service.joinChannel(serverId, channel).blockingAwait();
+          awaitCommand(service.joinChannel(serverId, channel));
           awaitNextEvent(events, serverId, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
 
           String inviteLabel = "ircafe-it-invite";
@@ -541,9 +567,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   serverId,
                   IrcEvent.LabeledResponseObserved.class,
                   e -> inviteLabel.equals(e.label()) && "341".equals(e.command()));
-          service
-              .sendRaw(serverId, "@label=" + inviteLabel + " INVITE " + peerNick + " " + channel)
-              .blockingAwait();
+          awaitCommand(
+              service.sendRaw(
+                  serverId, "@label=" + inviteLabel + " INVITE " + peerNick + " " + channel));
           awaitNextEventWhere(
               events,
               serverId,
@@ -577,9 +603,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   serverId,
                   IrcEvent.LabeledResponseObserved.class,
                   e -> modeLabel.equals(e.label()) && "MODE".equals(e.command()));
-          service
-              .sendRaw(serverId, "@label=" + modeLabel + " MODE " + channel + " +v " + peerNick)
-              .blockingAwait();
+          awaitCommand(
+              service.sendRaw(
+                  serverId, "@label=" + modeLabel + " MODE " + channel + " +v " + peerNick));
           awaitNextEventWhere(
               events,
               serverId,
@@ -608,10 +634,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           int founderModeErrorCount =
               countEventsWhere(
                   events, serverId, IrcEvent.ServerResponseLine.class, e -> e.code() == 482);
-          service
-              .sendRaw(
-                  serverId, "@label=" + founderModeLabel + " MODE " + channel + " +q " + peerNick)
-              .blockingAwait();
+          awaitCommand(
+              service.sendRaw(
+                  serverId, "@label=" + founderModeLabel + " MODE " + channel + " +q " + peerNick));
           awaitNextEventWhere(
               events,
               serverId,
@@ -644,9 +669,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   serverId,
                   IrcEvent.LabeledResponseObserved.class,
                   e -> banLabel.equals(e.label()) && "MODE".equals(e.command()));
-          service
-              .sendRaw(serverId, "@label=" + banLabel + " MODE " + channel + " +b " + banMask)
-              .blockingAwait();
+          awaitCommand(
+              service.sendRaw(
+                  serverId, "@label=" + banLabel + " MODE " + channel + " +b " + banMask));
           awaitNextEventWhere(
               events,
               serverId,
@@ -681,11 +706,10 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   serverId,
                   IrcEvent.LabeledResponseObserved.class,
                   e -> kickLabel.equals(e.label()) && "KICK".equals(e.command()));
-          service
-              .sendRaw(
+          awaitCommand(
+              service.sendRaw(
                   serverId,
-                  "@label=" + kickLabel + " KICK " + channel + " " + peerNick + " :" + kickReason)
-              .blockingAwait();
+                  "@label=" + kickLabel + " KICK " + channel + " " + peerNick + " :" + kickReason));
           awaitNextEventWhere(
               events,
               serverId,
@@ -705,7 +729,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               MESSAGE_TIMEOUT);
         } finally {
           try {
-            service.disconnect(serverId, "labeled admin e2e shutdown").blockingAwait();
+            awaitCommand(service.disconnect(serverId, "labeled admin e2e shutdown"));
           } catch (Exception ignored) {
           }
           events.cancel();
@@ -738,11 +762,11 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         try {
           String sid = runtimeCfg.serverId();
           int readyCount = countEvents(events, sid, IrcEvent.ConnectionReady.class);
-          service.connect(sid).blockingAwait();
+          awaitCommand(service.connect(sid));
           awaitNextEvent(events, sid, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
 
           int joinedCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sid, cfg.channel()).blockingAwait();
+          awaitCommand(service.joinChannel(sid, cfg.channel()));
           awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
           bot.join(cfg.channel(), JOIN_TIMEOUT);
 
@@ -777,13 +801,12 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               RECONNECT_READY_TIMEOUT);
 
           int rejoinCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sid, cfg.channel()).blockingAwait();
+          awaitCommand(service.joinChannel(sid, cfg.channel()));
           awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, rejoinCount, JOIN_TIMEOUT);
         } finally {
           try {
-            service
-                .disconnect(runtimeCfg.serverId(), "container ircd restart test shutdown")
-                .blockingAwait();
+            awaitCommand(
+                service.disconnect(runtimeCfg.serverId(), "container ircd restart test shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -819,7 +842,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         TestSubscriber<ServerIrcEvent> events = service.events().test();
         try {
           int readyCount = countEvents(events, validCfg.serverId(), IrcEvent.ConnectionReady.class);
-          service.connect(validCfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(validCfg.serverId()));
           awaitNextEvent(
               events,
               validCfg.serverId(),
@@ -828,9 +851,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               CONNECT_TIMEOUT);
         } finally {
           try {
-            service
-                .disconnect(validCfg.serverId(), "container ircd auth baseline shutdown")
-                .blockingAwait();
+            awaitCommand(
+                service.disconnect(validCfg.serverId(), "container ircd auth baseline shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -848,7 +870,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         PircbotxIrcClientService service = fixture.service();
         TestSubscriber<ServerIrcEvent> events = service.events().test();
         try {
-          service.connect(wrongCfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(wrongCfg.serverId()));
           IrcEvent.Disconnected disconnected =
               awaitNextEvent(
                   events, wrongCfg.serverId(), IrcEvent.Disconnected.class, 0, CONNECT_TIMEOUT);
@@ -857,9 +879,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           assertTrue(!combined.isBlank(), "disconnect reason should not be blank");
         } finally {
           try {
-            service
-                .disconnect(wrongCfg.serverId(), "container ircd auth failure shutdown")
-                .blockingAwait();
+            awaitCommand(
+                service.disconnect(wrongCfg.serverId(), "container ircd auth failure shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -898,7 +919,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         try {
           int readyCount =
               countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
-          service.connect(runtimeCfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(runtimeCfg.serverId()));
           awaitNextEvent(
               events,
               runtimeCfg.serverId(),
@@ -917,9 +938,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   + "'");
         } finally {
           try {
-            service
-                .disconnect(runtimeCfg.serverId(), "container ircd nick collision shutdown")
-                .blockingAwait();
+            awaitCommand(
+                service.disconnect(
+                    runtimeCfg.serverId(), "container ircd nick collision shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -964,7 +985,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
 
           int readyCount =
               countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
-          service.connect(runtimeCfg.serverId()).blockingAwait();
+          awaitCommand(service.connect(runtimeCfg.serverId()));
           awaitNextEvent(
               events,
               runtimeCfg.serverId(),
@@ -974,7 +995,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
 
           int joinedCount =
               countEvents(events, runtimeCfg.serverId(), IrcEvent.JoinedChannel.class);
-          service.joinChannel(runtimeCfg.serverId(), cfg.channel()).blockingAwait();
+          awaitCommand(service.joinChannel(runtimeCfg.serverId(), cfg.channel()));
           awaitNextEvent(
               events,
               runtimeCfg.serverId(),
@@ -1065,9 +1086,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           assertEquals(cfg.channel(), kicked.channel());
         } finally {
           try {
-            service
-                .disconnect(runtimeCfg.serverId(), "container ircd lifecycle shutdown")
-                .blockingAwait();
+            awaitCommand(
+                service.disconnect(runtimeCfg.serverId(), "container ircd lifecycle shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -1122,19 +1142,19 @@ class PircbotxContainerNetworkE2eIntegrationTest {
 
         try {
           int readyOne = countEvents(events, sidOne, IrcEvent.ConnectionReady.class);
-          service.connect(sidOne).blockingAwait();
+          awaitCommand(service.connect(sidOne));
           awaitNextEvent(events, sidOne, IrcEvent.ConnectionReady.class, readyOne, CONNECT_TIMEOUT);
 
           int readyTwo = countEvents(events, sidTwo, IrcEvent.ConnectionReady.class);
-          service.connect(sidTwo).blockingAwait();
+          awaitCommand(service.connect(sidTwo));
           awaitNextEvent(events, sidTwo, IrcEvent.ConnectionReady.class, readyTwo, CONNECT_TIMEOUT);
 
           int joinedOne = countEvents(events, sidOne, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sidOne, channelOne).blockingAwait();
+          awaitCommand(service.joinChannel(sidOne, channelOne));
           awaitNextEvent(events, sidOne, IrcEvent.JoinedChannel.class, joinedOne, JOIN_TIMEOUT);
 
           int joinedTwo = countEvents(events, sidTwo, IrcEvent.JoinedChannel.class);
-          service.joinChannel(sidTwo, channelTwo).blockingAwait();
+          awaitCommand(service.joinChannel(sidTwo, channelTwo));
           awaitNextEvent(events, sidTwo, IrcEvent.JoinedChannel.class, joinedTwo, JOIN_TIMEOUT);
 
           botOne.join(channelOne, JOIN_TIMEOUT);
@@ -1164,18 +1184,18 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               oneAfterOnTwo,
               "server one should not receive channel message from server two");
 
-          service.sendToChannel(sidOne, channelOne, outboundOne).blockingAwait();
+          awaitCommand(service.sendToChannel(sidOne, channelOne, outboundOne));
           botOne.awaitPrivmsg(channelOne, outboundOne, MESSAGE_TIMEOUT);
 
-          service.sendToChannel(sidTwo, channelTwo, outboundTwo).blockingAwait();
+          awaitCommand(service.sendToChannel(sidTwo, channelTwo, outboundTwo));
           botTwo.awaitPrivmsg(channelTwo, outboundTwo, MESSAGE_TIMEOUT);
         } finally {
           try {
-            service.disconnect(sidOne, "multi-server isolation shutdown sid1").blockingAwait();
+            awaitCommand(service.disconnect(sidOne, "multi-server isolation shutdown sid1"));
           } catch (Exception ignored) {
           }
           try {
-            service.disconnect(sidTwo, "multi-server isolation shutdown sid2").blockingAwait();
+            awaitCommand(service.disconnect(sidTwo, "multi-server isolation shutdown sid2"));
           } catch (Exception ignored) {
           }
           try {
@@ -1231,24 +1251,24 @@ class PircbotxContainerNetworkE2eIntegrationTest {
 
         try {
           int readyCount = countEvents(events, serverId, IrcEvent.ConnectionReady.class);
-          service.connect(serverId).blockingAwait();
+          awaitCommand(service.connect(serverId));
           awaitNextEvent(
               events, serverId, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
           String appNick = service.currentNick(serverId).orElseThrow();
 
           int msgJoinCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
-          service.joinChannel(serverId, msgChannel).blockingAwait();
+          awaitCommand(service.joinChannel(serverId, msgChannel));
           awaitNextEvent(
               events, serverId, IrcEvent.JoinedChannel.class, msgJoinCount, JOIN_TIMEOUT);
 
           int partJoinCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
-          service.joinChannel(serverId, partChannel).blockingAwait();
+          awaitCommand(service.joinChannel(serverId, partChannel));
           awaitNextEvent(
               events, serverId, IrcEvent.JoinedChannel.class, partJoinCount, JOIN_TIMEOUT);
 
           opBot.join(opKickChannel, JOIN_TIMEOUT);
           int opKickJoinCount = countEvents(events, serverId, IrcEvent.JoinedChannel.class);
-          service.joinChannel(serverId, opKickChannel).blockingAwait();
+          awaitCommand(service.joinChannel(serverId, opKickChannel));
           awaitNextEvent(
               events, serverId, IrcEvent.JoinedChannel.class, opKickJoinCount, JOIN_TIMEOUT);
 
@@ -1276,7 +1296,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   MESSAGE_TIMEOUT);
           assertEquals("peerbot", pm.from());
 
-          service.sendPrivateMessage(serverId, "peerbot", outboundPm).blockingAwait();
+          awaitCommand(service.sendPrivateMessage(serverId, "peerbot", outboundPm));
           peerBot.awaitPrivmsg("peerbot", outboundPm, MESSAGE_TIMEOUT);
 
           int noticeCount =
@@ -1298,7 +1318,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               noticeCount,
               MESSAGE_TIMEOUT);
 
-          service.sendNoticePrivate(serverId, "peerbot", outboundNotice).blockingAwait();
+          awaitCommand(service.sendNoticePrivate(serverId, "peerbot", outboundNotice));
           peerBot.awaitNotice("peerbot", outboundNotice, MESSAGE_TIMEOUT);
 
           int actionCount =
@@ -1322,7 +1342,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               actionCount,
               MESSAGE_TIMEOUT);
 
-          service.sendAction(serverId, msgChannel, outboundAction).blockingAwait();
+          awaitCommand(service.sendAction(serverId, msgChannel, outboundAction));
           peerBot.awaitAction(msgChannel, outboundAction, MESSAGE_TIMEOUT);
 
           int inboundPartCount =
@@ -1359,7 +1379,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                   e ->
                       partChannel.equalsIgnoreCase(Objects.toString(e.channel(), "").trim())
                           && Objects.toString(e.reason(), "").contains(outboundPartReason));
-          service.partChannel(serverId, partChannel, outboundPartReason).blockingAwait();
+          awaitCommand(service.partChannel(serverId, partChannel, outboundPartReason));
           IrcEvent.LeftChannel outboundPart =
               awaitNextEventWhere(
                   events,
@@ -1383,9 +1403,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
                       msgChannel.equalsIgnoreCase(Objects.toString(e.channel(), "").trim())
                           && "peerbot".equalsIgnoreCase(Objects.toString(e.nick(), "").trim())
                           && Objects.toString(e.reason(), "").contains(outboundKickReason));
-          service
-              .sendRaw(serverId, "KICK " + msgChannel + " peerbot :" + outboundKickReason)
-              .blockingAwait();
+          awaitCommand(
+              service.sendRaw(serverId, "KICK " + msgChannel + " peerbot :" + outboundKickReason));
           IrcEvent.UserKickedFromChannel outboundKick =
               awaitNextEventWhere(
                   events,
@@ -1428,7 +1447,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               "expected inbound kick reason to be preserved");
         } finally {
           try {
-            service.disconnect(serverId, "message surface shutdown").blockingAwait();
+            awaitCommand(service.disconnect(serverId, "message surface shutdown"));
           } catch (Exception ignored) {
           }
           try {
@@ -1626,6 +1645,18 @@ class PircbotxContainerNetworkE2eIntegrationTest {
       thread.setDaemon(true);
       return thread;
     };
+  }
+
+  private static void awaitCommand(Completable command) throws TimeoutException {
+    awaitCommand(command, COMMAND_TIMEOUT);
+  }
+
+  private static void awaitCommand(Completable command, Duration timeout) throws TimeoutException {
+    // The timed overload disposes the subscription on timeout. Check its boolean result:
+    // ignoring false would let a stalled command look like a successful test step.
+    if (!command.blockingAwait(timeout.toNanos(), TimeUnit.NANOSECONDS)) {
+      throw new TimeoutException("IRC command did not complete within " + timeout);
+    }
   }
 
   private static OptionalLong awaitLagSample(
