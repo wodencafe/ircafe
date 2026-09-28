@@ -376,6 +376,16 @@ class ArchitectureGuardrailsTest {
           .because("presence services should use the monitor port instead of the full IRC client");
 
   @ArchTest
+  static final ArchRule perform_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.perform..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("perform automation should declare its IRC command and lifecycle ports");
+
+  @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
       noClasses()
           .that()

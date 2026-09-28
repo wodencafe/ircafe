@@ -8,11 +8,14 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.irc.DisconnectRequestSource;
-import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -52,7 +55,11 @@ public class PerformOnConnectService {
   // Keep this small; PircbotX also has its own message delay.
   private static final long DEFAULT_INTERLINE_DELAY_MS = 200L;
 
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort irc;
+  private final IrcTargetMembershipPort membership;
+  private final IrcConnectionLifecyclePort lifecycle;
+  private final IrcIdentityPort identity;
+  private final IrcMessagingPort messaging;
   private final IrcBackendAvailabilityPort backendAvailability;
   private final AvailableBackendIdsPort backendMetadata;
   private final ServerCatalog serverCatalog;
@@ -67,7 +74,11 @@ public class PerformOnConnectService {
 
   @Autowired
   public PerformOnConnectService(
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
+      IrcTargetMembershipPort membership,
+      IrcConnectionLifecyclePort lifecycle,
+      IrcIdentityPort identity,
+      IrcMessagingPort messaging,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
       ObjectProvider<AvailableBackendIdsPort> backendMetadataProvider,
       ServerCatalog serverCatalog,
@@ -75,6 +86,10 @@ public class PerformOnConnectService {
       UiPort ui) {
     this(
         irc,
+        membership,
+        lifecycle,
+        identity,
+        messaging,
         backendAvailability,
         backendMetadataProvider.getIfAvailable(),
         serverCatalog,
@@ -83,13 +98,21 @@ public class PerformOnConnectService {
   }
 
   public PerformOnConnectService(
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
+      IrcTargetMembershipPort membership,
+      IrcConnectionLifecyclePort lifecycle,
+      IrcIdentityPort identity,
+      IrcMessagingPort messaging,
       IrcBackendAvailabilityPort backendAvailability,
       AvailableBackendIdsPort backendMetadata,
       ServerCatalog serverCatalog,
       CommandParser commandParser,
       UiPort ui) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.membership = Objects.requireNonNull(membership, "membership");
+    this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
+    this.identity = Objects.requireNonNull(identity, "identity");
+    this.messaging = Objects.requireNonNull(messaging, "messaging");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.backendMetadata =
         Objects.requireNonNullElseGet(
@@ -280,7 +303,7 @@ public class PerformOnConnectService {
           yield Completable.complete();
         }
         if (key.isEmpty()) {
-          yield irc.joinChannel(serverId, chan);
+          yield membership.joinChannel(serverId, chan);
         }
         yield irc.sendRaw(serverId, "JOIN " + chan + " " + key);
       }
@@ -293,15 +316,12 @@ public class PerformOnConnectService {
               status, "(perform)", "Skipping /part (provide an explicit #channel in perform)");
           yield Completable.complete();
         }
-        yield irc.partChannel(serverId, chan, reason.isEmpty() ? null : reason);
+        yield membership.partChannel(serverId, chan, reason.isEmpty() ? null : reason);
       }
 
       case ParsedInput.Quit cmd -> {
         String reason = Objects.toString(cmd.reason(), "").trim();
-        if (irc instanceof IrcDisconnectWithSourcePort sourceAware) {
-          yield sourceAware.disconnect(serverId, reason, DisconnectRequestSource.AUTOMATION);
-        }
-        yield irc.disconnect(serverId, reason);
+        yield lifecycle.disconnect(serverId, reason, DisconnectRequestSource.AUTOMATION);
       }
 
       case ParsedInput.Nick cmd -> {
@@ -310,12 +330,12 @@ public class PerformOnConnectService {
           ui.appendStatus(status, "(perform)", "Skipping /nick (missing new nick)");
           yield Completable.complete();
         }
-        yield irc.changeNick(serverId, nn);
+        yield identity.changeNick(serverId, nn);
       }
 
       case ParsedInput.Away cmd -> {
         String msg = Objects.toString(cmd.message(), "").trim();
-        yield irc.setAway(serverId, msg.isEmpty() ? null : msg);
+        yield identity.setAway(serverId, msg.isEmpty() ? null : msg);
       }
 
       case ParsedInput.Query cmd -> {
@@ -368,7 +388,7 @@ public class PerformOnConnectService {
           ui.appendStatus(status, "(perform)", "Skipping /notice (missing target)");
           yield Completable.complete();
         }
-        yield irc.sendNotice(serverId, tgt, body);
+        yield messaging.sendNotice(serverId, tgt, body);
       }
 
       case ParsedInput.Topic cmd -> {
@@ -421,7 +441,7 @@ public class PerformOnConnectService {
         if (ch.isEmpty()) {
           yield irc.sendRaw(serverId, "NAMES");
         }
-        yield irc.requestNames(serverId, ch);
+        yield membership.requestNames(serverId, ch);
       }
 
       case ParsedInput.Who cmd -> {

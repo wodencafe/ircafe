@@ -6,6 +6,7 @@
       "config",
       "config::servers",
       "irc",
+      "irc::port",
       "irc::backend",
       "model"
     })
