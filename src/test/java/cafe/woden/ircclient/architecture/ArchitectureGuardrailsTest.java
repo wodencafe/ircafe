@@ -386,6 +386,16 @@ class ArchitectureGuardrailsTest {
           .because("perform automation should declare its IRC command and lifecycle ports");
 
   @ArchTest
+  static final ArchRule ui_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("UI components should use focused IRC ports instead of the full IRC client");
+
+  @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
       noClasses()
           .that()

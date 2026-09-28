@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.roster.UserListPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
@@ -50,7 +50,7 @@ public final class ChatChannelListCoordinator {
   private final ChannelListPanel channelListPanel;
   private final ServerTreeDockable serverTree;
   private final OutboundLineBus outboundBus;
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort irc;
   private final ModeRoutingPort modeRoutingState;
   private final UserListPort userListStore;
   private final UserListDockable usersDock;
@@ -97,7 +97,7 @@ public final class ChatChannelListCoordinator {
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
       BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup,
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
       ModeRoutingPort modeRoutingState) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
     this.serverTree = serverTree;

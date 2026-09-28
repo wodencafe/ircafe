@@ -30,6 +30,7 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
@@ -488,7 +489,7 @@ public final class FunctionalTestWiringSupport {
         notificationStore,
         activationBus,
         outboundBus,
-        irc,
+        new IrcMediatorInteractionPortAdapter(irc),
         new IrcTypingPortAdapter(irc),
         readMarkerFeatureSupport,
         modeRoutingState,

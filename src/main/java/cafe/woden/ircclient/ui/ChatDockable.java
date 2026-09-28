@@ -21,7 +21,7 @@ import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -237,7 +237,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       NotificationStorePort notificationStore,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
       @Qualifier("ircTypingPort") IrcTypingPort typingPort,
       Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
       ModeRoutingPort modeRoutingState,
@@ -585,7 +585,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       NotificationStorePort notificationStore,
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
       ModeRoutingPort modeRoutingState,
       BackendUiProfileProvider backendUiProfileProvider,
       UserListPort userListStore,
@@ -649,7 +649,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       BackendUiProfileProvider backendUiProfileProvider,
       UserListPort userListStore,
       UserListDockable usersDock,
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
       ModeRoutingPort modeRoutingState) {
     channelListPanel.setBackendUiProfile(backendUiProfileProvider.profileForServer(""));
     return new ChatChannelListCoordinator(
@@ -821,7 +821,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private void configureReactionChipActions(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
+      IrcMediatorInteractionPort irc,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
@@ -1051,7 +1051,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private void configureMemoServPanelCommandEmission(
-      TargetActivationBus activationBus, IrcClientService irc) {
+      TargetActivationBus activationBus, IrcMediatorInteractionPort irc) {
     memoServPanel.setOnEmitCommand(
         line -> {
           String cmd = Objects.toString(line, "").trim();

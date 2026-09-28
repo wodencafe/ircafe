@@ -23,7 +23,8 @@ class IrcConsumerBoundaryContractTest {
     "app.commands,irc.IrcClientService", "app.commands,irc.backend.BackendClient",
     "logging.history,irc.IrcClientService", "logging.history,irc.backend.BackendClient",
     "monitor.presence,irc.IrcClientService", "monitor.presence,irc.backend.BackendClient",
-    "perform.commands,irc.IrcClientService", "perform.commands,irc.backend.BackendClient"
+    "perform.commands,irc.IrcClientService", "perform.commands,irc.backend.BackendClient",
+    "ui.coordinator,irc.IrcClientService", "ui.coordinator,irc.backend.BackendClient"
   })
   void consumerCannotDependOnBroadClientOrBackendSubtype(String consumerPackage, String dependency)
       throws IOException {
@@ -36,13 +37,22 @@ class IrcConsumerBoundaryContractTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"app.commands", "logging.history", "monitor.presence", "perform.commands"})
+      strings = {
+        "app.commands",
+        "logging.history",
+        "monitor.presence",
+        "perform.commands",
+        "ui.coordinator"
+      })
   void consumerCanDependOnNarrowCommandPort(String consumerPackage) throws IOException {
     JavaClasses fixture = compile(consumerPackage, "irc.port.IrcChatHistoryPort");
     assertThatCode(() -> ruleFor(consumerPackage).check(fixture)).doesNotThrowAnyException();
   }
 
   private static ArchRule ruleFor(String consumerPackage) {
+    if (consumerPackage.startsWith("ui.")) {
+      return ArchitectureGuardrailsTest.ui_should_not_depend_on_broad_irc_client;
+    }
     if (consumerPackage.startsWith("perform.")) {
       return ArchitectureGuardrailsTest.perform_should_not_depend_on_broad_irc_client;
     }

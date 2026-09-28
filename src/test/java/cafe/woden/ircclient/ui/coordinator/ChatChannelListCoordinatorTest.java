@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -10,8 +12,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
@@ -25,6 +27,7 @@ import io.reactivex.rxjava3.plugins.RxJavaPlugins;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import io.reactivex.rxjava3.schedulers.TestScheduler;
+import io.reactivex.rxjava3.subjects.CompletableSubject;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -444,12 +447,13 @@ class ChatChannelListCoordinatorTest {
     UserListStore userListStore = mock(UserListStore.class);
     UserListDockable usersDock = mock(UserListDockable.class);
     OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
     ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
     FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
     when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
     when(channelListPanel.currentServerId()).thenReturn("libera");
-    when(irc.sendRaw("libera", "MODE #ircafe")).thenReturn(Completable.complete());
+    CompletableSubject pending = CompletableSubject.create();
+    when(irc.sendRaw("libera", "MODE #ircafe")).thenReturn(pending);
 
     ChatChannelListCoordinator coordinator =
         new ChatChannelListCoordinator(
@@ -474,7 +478,9 @@ class ChatChannelListCoordinatorTest {
         .putPendingModeTarget(eq("libera"), eq("#ircafe"), eq(new TargetRef("libera", "#ircafe")));
     verify(irc).sendRaw("libera", "MODE #ircafe");
     verify(outboundLineBus, never()).emit(anyString());
+    assertTrue(pending.hasObservers());
     disposables.dispose();
+    assertFalse(pending.hasObservers());
   }
 
   @Test
@@ -618,7 +624,7 @@ class ChatChannelListCoordinatorTest {
     UserListStore userListStore = mock(UserListStore.class);
     UserListDockable usersDock = mock(UserListDockable.class);
     OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
     ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
     FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
     FlowableProcessor<TargetRef> modeRefresh = PublishProcessor.<TargetRef>create().toSerialized();
@@ -696,7 +702,7 @@ class ChatChannelListCoordinatorTest {
     UserListStore userListStore = mock(UserListStore.class);
     UserListDockable usersDock = mock(UserListDockable.class);
     OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
     ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
     FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
     FlowableProcessor<ServerTreeDockable.ChannelModeSetRequest> modeSet =
