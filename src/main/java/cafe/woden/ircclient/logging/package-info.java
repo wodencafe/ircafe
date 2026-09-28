@@ -8,6 +8,7 @@
       "config::api",
       "irc",
       "irc::playback",
+      "irc::port",
       "model",
       "util"
     })

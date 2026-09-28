@@ -24,6 +24,7 @@ import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.adapter.IrcChatHistoryPortAdapter;
 import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
@@ -237,7 +238,7 @@ class ChannelHistoryPreservationFunctionalTest {
             repo,
             new LogProperties(true, true, false, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
-            irc,
+            new IrcChatHistoryPortAdapter(irc),
             bouncerPlayback,
             ingestBus,
             new Ircv3ChatHistoryFeatureSupport(

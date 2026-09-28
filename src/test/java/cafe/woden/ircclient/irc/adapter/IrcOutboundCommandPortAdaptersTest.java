@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -135,5 +136,35 @@ class IrcOutboundCommandPortAdaptersTest {
     assertEquals(0, disposals.get());
     observer.dispose();
     assertEquals(1, disposals.get());
+  }
+
+  @Test
+  void historyPreservesBackendTimestampOverloadsWithoutConvertingArguments() {
+    IrcClientService irc = mock(IrcClientService.class);
+    var port = new IrcChatHistoryPortAdapter(irc);
+    Instant cutoff = Instant.parse("2026-09-27T00:00:00.123456789Z");
+    Completable instantRequest = Completable.never();
+    Completable epochRequest = Completable.never();
+    when(irc.requestChatHistoryBefore("server", "#ircafe", cutoff, 20)).thenReturn(instantRequest);
+    when(irc.requestChatHistoryBefore("server", "#ircafe", cutoff.toEpochMilli(), 30))
+        .thenReturn(epochRequest);
+
+    assertSame(instantRequest, port.requestChatHistoryBefore("server", "#ircafe", cutoff, 20));
+    assertSame(
+        epochRequest,
+        port.requestChatHistoryBefore("server", "#ircafe", cutoff.toEpochMilli(), 30));
+  }
+
+  @Test
+  void epochHistoryRequestsRetainClientDefaultConversionAndErrors() {
+    IrcClientService irc = mock(IrcClientService.class, CALLS_REAL_METHODS);
+    var port = new IrcChatHistoryPortAdapter(irc);
+    Instant cutoff = Instant.ofEpochMilli(1234L);
+    RuntimeException failure = new RuntimeException("history unavailable");
+    when(irc.requestChatHistoryBefore("server", "alice", cutoff, 40))
+        .thenReturn(Completable.error(failure));
+
+    port.requestChatHistoryBefore("server", "alice", 1234L, 40).test().assertError(failure);
+    verify(irc).requestChatHistoryBefore("server", "alice", cutoff, 40);
   }
 }

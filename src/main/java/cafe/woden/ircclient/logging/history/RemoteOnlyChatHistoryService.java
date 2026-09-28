@@ -6,8 +6,9 @@ import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.config.execution.ExecutorConfig;
 import cafe.woden.ircclient.config.properties.ConfigPropertyKeys;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.logging.LogLine;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
@@ -68,7 +69,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcChatHistoryPort irc;
+  @NonNull private final IrcCurrentNickPort currentNickPort;
 
   @NonNull
   @Qualifier("ircClientService")
@@ -652,7 +654,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     Optional<String> myNickOpt = Optional.empty();
     try {
-      myNickOpt = irc.currentNick(sid);
+      myNickOpt = currentNickPort.currentNick(sid);
     } catch (Exception ignored) {
       myNickOpt = Optional.empty();
     }

@@ -355,6 +355,17 @@ class ArchitectureGuardrailsTest {
           .because("application services should declare only the IRC operations they need");
 
   @ArchTest
+  static final ArchRule logging_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.logging..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because(
+              "history loaders should use history and nickname ports instead of the full IRC client");
+
+  @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
       noClasses()
           .that()
