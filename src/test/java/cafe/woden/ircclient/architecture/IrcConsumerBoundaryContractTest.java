@@ -21,7 +21,8 @@ class IrcConsumerBoundaryContractTest {
   @ParameterizedTest
   @CsvSource({
     "app.commands,irc.IrcClientService", "app.commands,irc.backend.BackendClient",
-    "logging.history,irc.IrcClientService", "logging.history,irc.backend.BackendClient"
+    "logging.history,irc.IrcClientService", "logging.history,irc.backend.BackendClient",
+    "monitor.presence,irc.IrcClientService", "monitor.presence,irc.backend.BackendClient"
   })
   void consumerCannotDependOnBroadClientOrBackendSubtype(String consumerPackage, String dependency)
       throws IOException {
@@ -33,13 +34,16 @@ class IrcConsumerBoundaryContractTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"app.commands", "logging.history"})
+  @ValueSource(strings = {"app.commands", "logging.history", "monitor.presence"})
   void consumerCanDependOnNarrowCommandPort(String consumerPackage) throws IOException {
     JavaClasses fixture = compile(consumerPackage, "irc.port.IrcChatHistoryPort");
     assertThatCode(() -> ruleFor(consumerPackage).check(fixture)).doesNotThrowAnyException();
   }
 
   private static ArchRule ruleFor(String consumerPackage) {
+    if (consumerPackage.startsWith("monitor.")) {
+      return ArchitectureGuardrailsTest.monitor_should_not_depend_on_broad_irc_client;
+    }
     return consumerPackage.startsWith("logging.")
         ? ArchitectureGuardrailsTest.logging_should_not_depend_on_broad_irc_client
         : ArchitectureGuardrailsTest.app_should_not_depend_on_broad_irc_client;

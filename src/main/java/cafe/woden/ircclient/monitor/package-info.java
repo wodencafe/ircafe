@@ -6,6 +6,7 @@
       "config::execution",
       "config::api",
       "irc",
+      "irc::port",
       "irc::presence",
       "model"
     })

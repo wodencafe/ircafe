@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.monitor;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -23,14 +23,14 @@ public class MonitorSyncService {
 
   private static final int DEFAULT_MONITOR_CHUNK = 100;
 
-  private final IrcClientService irc;
+  private final IrcMonitorPort irc;
   private final MonitorListService monitorListService;
   private final CompositeDisposable sendDisposables = new CompositeDisposable();
   private final ConcurrentHashMap<String, Boolean> readyByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> syncedByServer = new ConcurrentHashMap<>();
   private final Disposable eventsSub;
 
-  public MonitorSyncService(IrcClientService irc, MonitorListService monitorListService) {
+  public MonitorSyncService(IrcMonitorPort irc, MonitorListService monitorListService) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.monitorListService = Objects.requireNonNull(monitorListService, "monitorListService");
     this.eventsSub = irc.events().subscribe(this::onEvent, this::onEventError);

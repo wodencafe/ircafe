@@ -366,6 +366,16 @@ class ArchitectureGuardrailsTest {
               "history loaders should use history and nickname ports instead of the full IRC client");
 
   @ArchTest
+  static final ArchRule monitor_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.monitor..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("presence services should use the monitor port instead of the full IRC client");
+
+  @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
       noClasses()
           .that()

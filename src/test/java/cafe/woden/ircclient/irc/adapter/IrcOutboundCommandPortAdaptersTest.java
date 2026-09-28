@@ -1,14 +1,19 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -124,6 +129,9 @@ class IrcOutboundCommandPortAdaptersTest {
   void monitorPreservesNegotiatedLimitAndDisposalReachesTransport() {
     IrcClientService irc = mock(IrcClientService.class);
     var port = new IrcMonitorPortAdapter(irc);
+    when(irc.isMonitorAvailable(" server ")).thenReturn(true, false);
+    assertTrue(port.isMonitorAvailable(" server "));
+    assertFalse(port.isMonitorAvailable(" server "));
     when(irc.negotiatedMonitorLimit("server")).thenReturn(-1);
     assertEquals(-1, port.negotiatedMonitorLimit("server"));
     AtomicInteger disposals = new AtomicInteger();
@@ -136,6 +144,29 @@ class IrcOutboundCommandPortAdaptersTest {
     assertEquals(0, disposals.get());
     observer.dispose();
     assertEquals(1, disposals.get());
+  }
+
+  @Test
+  void monitorEventsPreserveRoutedStreamErrorsAndCancellation() {
+    IrcClientService irc = mock(IrcClientService.class);
+    PublishProcessor<ServerIrcEvent> events = PublishProcessor.create();
+    when(irc.events()).thenReturn(events);
+    var port = new IrcMonitorPortAdapter(irc);
+    assertSame(events, port.events());
+    assertFalse(events.hasSubscribers());
+
+    var subscriber = port.events().test();
+    ServerIrcEvent ready =
+        new ServerIrcEvent("server", new IrcEvent.ConnectionReady(Instant.now()));
+    events.onNext(ready);
+    subscriber.assertValue(ready);
+    subscriber.cancel();
+    assertFalse(events.hasSubscribers());
+
+    var failingSubscriber = port.events().test();
+    RuntimeException failure = new RuntimeException("event stream failed");
+    events.onError(failure);
+    failingSubscriber.assertError(failure);
   }
 
   @Test

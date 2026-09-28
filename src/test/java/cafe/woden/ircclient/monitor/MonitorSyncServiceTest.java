@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.monitor;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -9,11 +11,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import io.reactivex.rxjava3.subjects.CompletableSubject;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -21,7 +24,7 @@ import org.junit.jupiter.api.Test;
 
 class MonitorSyncServiceTest {
 
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcMonitorPort irc = mock(IrcMonitorPort.class);
   private final MonitorListService monitorListService = mock(MonitorListService.class);
   private final PublishProcessor<ServerIrcEvent> events = PublishProcessor.create();
   private final MonitorSyncService service;
@@ -82,6 +85,37 @@ class MonitorSyncServiceTest {
     events.onNext(new ServerIrcEvent("libera", connectionReady()));
 
     verify(irc, never()).sendRaw(eq("libera"), anyString());
+  }
+
+  @Test
+  void featureUpdateSyncsWhenMonitorBecomesAvailableAfterReady() {
+    when(monitorListService.listNicks("libera")).thenReturn(List.of("alice"));
+    events.onNext(new ServerIrcEvent("libera", connected()));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
+    verify(irc, never()).sendRaw(eq("libera"), anyString());
+
+    when(irc.isMonitorAvailable("libera")).thenReturn(true);
+    events.onNext(new ServerIrcEvent("libera", connectionFeaturesUpdated()));
+
+    verify(irc).sendRaw("libera", "MONITOR C");
+    verify(irc).sendRaw("libera", "MONITOR +alice");
+  }
+
+  @Test
+  void shutdownDisposesEventsAndPendingSync() {
+    CompletableSubject pending = CompletableSubject.create();
+    when(irc.isMonitorAvailable("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "MONITOR C")).thenReturn(pending);
+    when(monitorListService.listNicks("libera")).thenReturn(List.of("alice"));
+    events.onNext(new ServerIrcEvent("libera", connected()));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
+    assertTrue(events.hasSubscribers());
+    assertTrue(pending.hasObservers());
+
+    service.shutdown();
+
+    assertFalse(events.hasSubscribers());
+    assertFalse(pending.hasObservers());
   }
 
   private static IrcEvent.Connected connected() {

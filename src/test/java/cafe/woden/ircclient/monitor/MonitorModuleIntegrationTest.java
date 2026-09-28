@@ -10,7 +10,7 @@ import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Answers;
@@ -33,7 +33,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class MonitorModuleIntegrationTest {
 
   @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
-  IrcClientService ircClientService;
+  IrcMonitorPort ircMonitorPort;
 
   @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
   UiPort uiPort;

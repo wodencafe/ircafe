@@ -1,15 +1,17 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Flowable;
 import java.util.Objects;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/** Adapts the routed IRC client to the monitor command port. */
+/** Adapts the routed IRC client to the monitor presence port. */
 @Component("ircMonitorPort")
 @SecondaryAdapter
 @InfrastructureLayer
@@ -18,6 +20,16 @@ public class IrcMonitorPortAdapter implements IrcMonitorPort {
 
   public IrcMonitorPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
     this.irc = Objects.requireNonNull(irc, "irc");
+  }
+
+  @Override
+  public Flowable<ServerIrcEvent> events() {
+    return irc.events();
+  }
+
+  @Override
+  public boolean isMonitorAvailable(String serverId) {
+    return irc.isMonitorAvailable(serverId);
   }
 
   @Override
