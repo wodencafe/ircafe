@@ -2,6 +2,7 @@ package cafe.woden.ircclient.architecture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import java.io.IOException;
@@ -105,6 +106,116 @@ class CompiledBoundaryRulesTest {
             () -> CompiledSubprojects.importProject("missing-fixture-project"))
         .isInstanceOf(AssertionError.class)
         .hasMessageContaining("run ./gradlew architectureTest");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "import org.pircbotx.*;, PircBotX",
+    "'', org.pircbotx.PircBotX[][]",
+    "import javax.swing.*;, JLabel",
+    "'', java.awt.Color"
+  })
+  void protocolFeaturesRejectTransportAndDesktopDependencies(String imports, String fieldType)
+      throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            imports,
+            "public " + fieldType + " value;",
+            Map.of("org/pircbotx/PircBotX.java", "package org.pircbotx; public class PircBotX {}"));
+    assertThat(
+            CompiledBoundaryRules.transportIndependentFeatures().evaluate(fixture).hasViolation())
+        .isTrue();
+  }
+
+  @Test
+  void requestStoreRejectsDependenciesHiddenBehindWildcardImports() throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            "import cafe.woden.ircclient.peer.*;",
+            "public Value[] value;",
+            Map.of(
+                "cafe/woden/ircclient/peer/Value.java",
+                "package cafe.woden.ircclient.peer; public class Value {}"));
+    assertThat(
+            CompiledBoundaryRules.jdkOnly("cafe.woden.ircclient.fixture.spi.Fixture")
+                .evaluate(fixture)
+                .hasViolation())
+        .isTrue();
+  }
+
+  @Test
+  void requestStoreAllowsItsOwnNestedTypesAndJdkCollections() throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            "",
+            "public record Entry(String key) {} "
+                + "public java.util.List<Entry> entries; public long[] deadlines;",
+            Map.of());
+    CompiledBoundaryRules.jdkOnly("cafe.woden.ircclient.fixture.spi.Fixture").check(fixture);
+    CompiledBoundaryRules.transportIndependentFeatures().check(fixture);
+  }
+
+  @Test
+  void runtimeProviderBoundaryRejectsFeatureTypesInGenericsAndArrays() throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            "",
+            "public java.util.List<cafe.woden.ircclient.peer.Value> values; "
+                + "public cafe.woden.ircclient.peer.Value[][] array;",
+            Map.of(
+                "cafe/woden/ircclient/peer/Value.java",
+                "package cafe.woden.ircclient.peer; public class Value {}"));
+    var result =
+        CompiledBoundaryRules.mustNotBypassRuntimeProviders(
+                JavaClass.Predicates.resideInAPackage("cafe.woden.ircclient.fixture.."),
+                Set.of("cafe.woden.ircclient.peer.Value"))
+            .evaluate(fixture);
+    assertThat(result.getFailureReport().getDetails())
+        .anySatisfy(detail -> assertThat(detail).contains("cafe.woden.ircclient.peer.Value"));
+  }
+
+  @Test
+  void featurePackageBoundaryRejectsClassesInAnotherModulithModule() throws IOException {
+    JavaClasses fixture = compileFixture("", "", Map.of());
+    assertThat(
+            CompiledBoundaryRules.featurePackages("cafe.woden.ircclient.app.commands..")
+                .evaluate(fixture)
+                .hasViolation())
+        .isTrue();
+    CompiledBoundaryRules.featurePackages("cafe.woden.ircclient.fixture..").check(fixture);
+  }
+
+  @Test
+  void runtimeProviderBoundaryRejectsStaticCallsWithoutImportedTypes() throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            "",
+            "public String render() { return cafe.woden.ircclient.peer.Parser.parse(); }",
+            Map.of(
+                "cafe/woden/ircclient/peer/Parser.java",
+                "package cafe.woden.ircclient.peer; public class Parser { public static String parse() { return \"\"; } }"));
+    var result =
+        CompiledBoundaryRules.mustNotBypassRuntimeProviders(
+                JavaClass.Predicates.resideInAPackage("cafe.woden.ircclient.fixture.."),
+                Set.of("cafe.woden.ircclient.peer.Parser"))
+            .evaluate(fixture);
+    assertThat(result.getFailureReport().getDetails())
+        .anySatisfy(detail -> assertThat(detail).contains("calls method", "Parser.parse()"));
+  }
+
+  @Test
+  void runtimeProviderBoundaryAllowsValuesOutsideItsImplementationSet() throws IOException {
+    JavaClasses fixture =
+        compileFixture(
+            "",
+            "public cafe.woden.ircclient.peer.Value value;",
+            Map.of(
+                "cafe/woden/ircclient/peer/Value.java",
+                "package cafe.woden.ircclient.peer; public record Value(String text) {}"));
+    CompiledBoundaryRules.mustNotBypassRuntimeProviders(
+            JavaClass.Predicates.resideInAPackage("cafe.woden.ircclient.fixture.."),
+            Set.of("cafe.woden.ircclient.peer.Parser"))
+        .check(fixture);
   }
 
   private JavaClasses hostDependentFixture() throws IOException {

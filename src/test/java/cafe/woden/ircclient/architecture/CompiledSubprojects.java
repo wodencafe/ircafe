@@ -16,6 +16,20 @@ final class CompiledSubprojects {
 
   private CompiledSubprojects() {}
 
+  static Set<String> projectNames(String prefix) {
+    String propertyPrefix = "ircafe.architecture.classes.";
+    Set<String> projects =
+        System.getProperties().stringPropertyNames().stream()
+            .filter(name -> name.startsWith(propertyPrefix + prefix))
+            .map(name -> name.substring(propertyPrefix.length()))
+            .collect(Collectors.toCollection(java.util.TreeSet::new));
+    if (projects.isEmpty()) {
+      throw new AssertionError(
+          "No compiled projects supplied for " + prefix + "; run ./gradlew architectureTest");
+    }
+    return projects;
+  }
+
   static JavaClasses importProject(String projectName) {
     String locations = System.getProperty("ircafe.architecture.classes." + projectName, "");
     if (locations.isBlank()) {

@@ -138,6 +138,7 @@ tasks.register('architectureTest', Test) {
     inputs.files(boundaryOutputs).withPropertyName('boundaryClasses')
         .withPathSensitivity(PathSensitivity.RELATIVE)
     doFirst {
+        systemProperty 'ircafe.architecture.classes.root', sourceSets.main.output.classesDirs.asPath
         boundaryProjects.get().each { boundaryProject ->
             systemProperty "ircafe.architecture.classes.${boundaryProject.name}",
                 boundaryProject.sourceSets.main.output.classesDirs.asPath

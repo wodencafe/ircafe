@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -11,6 +12,55 @@ import java.util.Set;
 final class CompiledBoundaryRules {
 
   private CompiledBoundaryRules() {}
+
+  static ArchRule transportIndependentFeatures() {
+    return noClasses()
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage("org.pircbotx..", "java.awt..", "javax.swing..")
+        .because("feature policy must remain independent of transports and desktop widgets");
+  }
+
+  static ArchRule featurePackages(String... packages) {
+    return classes()
+        .should()
+        .resideInAnyPackage(packages)
+        .because("feature artifacts must stay within their existing Modulith boundaries");
+  }
+
+  static ArchRule jdkOnly(String className) {
+    return classes()
+        .that()
+        .haveNameMatching(java.util.regex.Pattern.quote(className) + "(\\$.*)?")
+        .should()
+        .onlyDependOnClassesThat(
+            new DescribedPredicate<>("own types or JDK types") {
+              @Override
+              public boolean test(JavaClass type) {
+                JavaClass component = type.getBaseComponentType();
+                String name = component.getName();
+                return component.isPrimitive()
+                    || name.startsWith("java.")
+                    || name.equals(className)
+                    || name.startsWith(className + "$");
+              }
+            });
+  }
+
+  static ArchRule mustNotBypassRuntimeProviders(
+      DescribedPredicate<JavaClass> consumers, Set<String> featureTypes) {
+    return noClasses()
+        .that(consumers)
+        .should()
+        .dependOnClassesThat(
+            new DescribedPredicate<>("feature implementation types") {
+              @Override
+              public boolean test(JavaClass type) {
+                return featureTypes.contains(type.getBaseComponentType().getName());
+              }
+            })
+        .because("runtime adapters must resolve protocol policy through installed providers");
+  }
 
   static ArchRule pluginApiDependencies(Set<String> apiClassNames) {
     return classes()
