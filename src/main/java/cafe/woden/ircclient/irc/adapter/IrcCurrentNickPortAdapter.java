@@ -18,7 +18,7 @@ public class IrcCurrentNickPortAdapter implements IrcCurrentNickPort {
   private final IrcClientService irc;
 
   public IrcCurrentNickPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
@@ -26,7 +26,7 @@ public class IrcCurrentNickPortAdapter implements IrcCurrentNickPort {
     // A client implementing the narrow port owns its identifier normalization.
     if (irc instanceof IrcCurrentNickPort port) return port.currentNick(serverId);
     String sid = Objects.toString(serverId, "").trim();
-    if (irc == null || sid.isEmpty()) return Optional.empty();
+    if (sid.isEmpty()) return Optional.empty();
     return irc.currentNick(sid);
   }
 }

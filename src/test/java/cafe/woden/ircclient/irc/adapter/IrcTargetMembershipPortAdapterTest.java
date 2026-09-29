@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,15 +42,8 @@ class IrcTargetMembershipPortAdapterTest {
   }
 
   @Test
-  void nullClientIsSafeNoop() {
-    IrcTargetMembershipPort port = new IrcTargetMembershipPortAdapter(null);
-
-    port.joinChannel("libera", "#ircafe").blockingAwait();
-    port.partChannel("libera", "#ircafe").blockingAwait();
-    port.partChannel("libera", "#ircafe", "bye").blockingAwait();
-    port.requestNames("libera", "#ircafe").blockingAwait();
-    port.sendRaw("libera", "DETACH #ircafe").blockingAwait();
-    assertTrue(port.currentNick("libera").isEmpty());
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcTargetMembershipPortAdapter(null));
   }
 
   @Test

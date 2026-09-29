@@ -10,6 +10,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.CommandParser;
@@ -20,7 +21,10 @@ import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
@@ -34,7 +38,9 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Answers;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
@@ -44,6 +50,34 @@ import org.springframework.test.util.AopTestUtils;
 
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.STANDALONE)
 class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest {
+
+  @MockitoBean(name = "ircIdentityPort")
+  IrcIdentityPort ircIdentityPort;
+
+  @MockitoBean(name = "ircMessagingPort")
+  IrcMessagingPort ircMessagingPort;
+
+  @MockitoBean(name = "ircTargetMembershipPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcTargetMembershipPort ircTargetMembershipPort;
+
+  @MockitoBean(name = "ircMediatorInteractionPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcMediatorInteractionPort ircMediatorInteractionPort;
+
+  @MockitoBean(name = "ircConnectionLifecyclePort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcConnectionLifecyclePort ircConnectionLifecyclePort;
+
+  @MockitoBean(name = "swingUiPort", answers = Answers.RETURNS_DEEP_STUBS)
+  UiPort swingUiPort;
+
+  @MockitoBean(name = "ircClientService")
+  IrcBackendAvailabilityPort backendAvailabilityDouble;
+
+  @BeforeEach
+  void resetBackendAvailability() {
+    when(backendAvailabilityDouble.backendAvailabilityReason(
+            org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn("");
+  }
 
   @MockitoBean CommandParser commandParser;
   @MockitoBean ServerCatalog serverCatalog;

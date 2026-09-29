@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -44,9 +45,8 @@ class IrcShutdownPortAdapterTest {
   }
 
   @Test
-  void nullClientIsSafeNoop() {
-    IrcShutdownPort port = new IrcShutdownPortAdapter(null);
-    port.shutdownNow();
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcShutdownPortAdapter(null));
   }
 
   private interface NativeClient extends IrcClientService, IrcShutdownPort {

@@ -14,9 +14,9 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
 import cafe.woden.ircclient.config.api.ServerRegistryConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;

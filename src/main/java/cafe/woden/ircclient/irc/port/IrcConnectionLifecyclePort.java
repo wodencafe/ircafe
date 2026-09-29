@@ -11,13 +11,9 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcConnectionLifecyclePort {
 
-  default Completable connect(String serverId) {
-    return Completable.complete();
-  }
+  Completable connect(String serverId);
 
-  default Completable disconnect(String serverId) {
-    return Completable.complete();
-  }
+  Completable disconnect(String serverId);
 
   default Completable disconnect(String serverId, String reason) {
     return disconnect(serverId);
@@ -27,7 +23,5 @@ public interface IrcConnectionLifecyclePort {
     return disconnect(serverId, reason);
   }
 
-  default Optional<String> currentNick(String serverId) {
-    return Optional.empty();
-  }
+  Optional<String> currentNick(String serverId);
 }

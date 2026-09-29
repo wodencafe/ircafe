@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.NotificationRule;
 import cafe.woden.ircclient.config.api.NotificationRuntimeConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.util.List;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;

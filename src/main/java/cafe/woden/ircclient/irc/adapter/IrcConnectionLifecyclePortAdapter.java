@@ -21,26 +21,22 @@ public class IrcConnectionLifecyclePortAdapter implements IrcConnectionLifecycle
   private final IrcClientService irc;
 
   public IrcConnectionLifecyclePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Completable connect(String serverId) {
-    return irc == null ? IrcConnectionLifecyclePort.super.connect(serverId) : irc.connect(serverId);
+    return irc.connect(serverId);
   }
 
   @Override
   public Completable disconnect(String serverId) {
-    return irc == null
-        ? IrcConnectionLifecyclePort.super.disconnect(serverId)
-        : irc.disconnect(serverId);
+    return irc.disconnect(serverId);
   }
 
   @Override
   public Completable disconnect(String serverId, String reason) {
-    return irc == null
-        ? IrcConnectionLifecyclePort.super.disconnect(serverId, reason)
-        : irc.disconnect(serverId, reason);
+    return irc.disconnect(serverId, reason);
   }
 
   @Override
@@ -59,7 +55,7 @@ public class IrcConnectionLifecyclePortAdapter implements IrcConnectionLifecycle
   @Override
   public Optional<String> currentNick(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
-    if (irc == null || sid.isEmpty()) return Optional.empty();
+    if (sid.isEmpty()) return Optional.empty();
     return irc.currentNick(sid);
   }
 }

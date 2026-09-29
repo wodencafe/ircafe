@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.EmbedPreviewRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.EmbedPreviewRuntimeConfigPort.EmbedPreviewSnapshot;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;

@@ -5,6 +5,7 @@ import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.ServerRegistryConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Path;
 import java.util.List;
 

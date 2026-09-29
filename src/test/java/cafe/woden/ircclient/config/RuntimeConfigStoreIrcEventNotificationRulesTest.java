@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import static cafe.woden.ircclient.notifications.IrcEventNotificationRuleTestFixtures.rule;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.nio.file.Files;
 import java.nio.file.Path;

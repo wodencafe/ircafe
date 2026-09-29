@@ -1,5 +1,6 @@
-package cafe.woden.ircclient.config;
+package cafe.woden.ircclient.config.runtime;
 
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
@@ -12,7 +13,6 @@ import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTr
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.config.properties.PushyProperties;
-import cafe.woden.ircclient.config.runtime.RuntimeConfigStoreDelegates;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -25,14 +25,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
-import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 @SecondaryAdapter
-@ApplicationLayer
+@InfrastructureLayer
 public class RuntimeConfigStore {
 
   public static final String DEFAULT_QUIT_MESSAGE =

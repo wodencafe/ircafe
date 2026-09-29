@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.adapter;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcShutdownPort;
+import java.util.Objects;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,11 +17,11 @@ public class IrcShutdownPortAdapter implements IrcShutdownPort {
   private final IrcClientService irc;
 
   public IrcShutdownPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public void shutdownNow() {
-    if (irc != null) irc.shutdownNow();
+    irc.shutdownNow();
   }
 }

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import java.util.List;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;

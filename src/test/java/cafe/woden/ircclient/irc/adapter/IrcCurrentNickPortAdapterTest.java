@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -29,10 +30,8 @@ class IrcCurrentNickPortAdapterTest {
   }
 
   @Test
-  void nullClientIsSafeNoop() {
-    IrcCurrentNickPort port = new IrcCurrentNickPortAdapter(null);
-
-    assertTrue(port.currentNick("libera").isEmpty());
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcCurrentNickPortAdapter(null));
   }
 
   @ParameterizedTest

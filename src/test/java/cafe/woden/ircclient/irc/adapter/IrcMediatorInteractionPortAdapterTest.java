@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -55,17 +56,8 @@ class IrcMediatorInteractionPortAdapterTest {
   }
 
   @Test
-  void nullClientIsSafeNoop() {
-    IrcMediatorInteractionPort port = new IrcMediatorInteractionPortAdapter(null);
-
-    port.events().test().assertComplete().assertNoValues();
-    port.whois("libera", "alice").blockingAwait();
-    port.whowas("libera", "alice", 5).blockingAwait();
-    port.sendPrivateMessage("libera", "alice", "hi").blockingAwait();
-    port.sendRaw("libera", "MODE #ircafe +o alice").blockingAwait();
-    port.setIrcv3CapabilityEnabled("libera", "message-tags", true).blockingAwait();
-    port.joinChannel("libera", "#ircafe").blockingAwait();
-    assertTrue(port.currentNick("libera").isEmpty());
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcMediatorInteractionPortAdapter(null));
   }
 
   @Test

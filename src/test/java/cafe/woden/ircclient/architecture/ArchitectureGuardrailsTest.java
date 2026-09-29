@@ -11,6 +11,7 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.spi.BouncerBackendDiscoveryHandler;
 import cafe.woden.ircclient.bouncer.spi.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
@@ -51,9 +52,9 @@ class ArchitectureGuardrailsTest {
       new DescribedPredicate<>("RuntimeConfigStore types") {
         @Override
         public boolean test(JavaClass input) {
-          String name = input.getName();
-          return name.equals("cafe.woden.ircclient.config.RuntimeConfigStore")
-              || name.startsWith("cafe.woden.ircclient.config.RuntimeConfigStore$");
+          String name = input.getBaseComponentType().getName();
+          String storeType = RuntimeConfigStore.class.getName();
+          return name.equals(storeType) || name.startsWith(storeType + "$");
         }
       };
 

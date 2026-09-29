@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,14 +59,8 @@ class IrcConnectionLifecyclePortAdapterTest {
   }
 
   @Test
-  void nullClientRetainsNoopDefaultsForEveryLifecycleOperation() {
-    IrcConnectionLifecyclePort port = new IrcConnectionLifecyclePortAdapter(null);
-
-    port.connect("libera").test().assertComplete();
-    port.disconnect("libera").test().assertComplete();
-    port.disconnect("libera", "bye").test().assertComplete();
-    port.disconnect("libera", "bye", DisconnectRequestSource.RECONNECT).test().assertComplete();
-    assertTrue(port.currentNick("libera").isEmpty());
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcConnectionLifecyclePortAdapter(null));
   }
 
   @ParameterizedTest

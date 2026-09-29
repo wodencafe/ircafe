@@ -7,10 +7,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.RuntimeConfigChatLoggingAdapter;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
 import cafe.woden.ircclient.config.api.ChatLoggingRuntimeConfigPort;
 import cafe.woden.ircclient.config.properties.LogProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;

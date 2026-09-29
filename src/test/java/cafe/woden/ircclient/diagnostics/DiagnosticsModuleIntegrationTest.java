@@ -10,16 +10,26 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.mockito.Answers;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.modulith.test.ApplicationModuleTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.STANDALONE)
 class DiagnosticsModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest {
+
+  @MockitoBean(name = "swingUiPort", answers = Answers.RETURNS_DEEP_STUBS)
+  UiPort swingUiPortDouble;
+
+  @MockitoBean TrayNotificationsPort trayNotificationsPort;
+
+  @MockitoBean JfrSnapshotSummarizer jfrSnapshotSummarizerDouble;
 
   private final ApplicationContext applicationContext;
   private final ApplicationDiagnosticsService diagnosticsService;

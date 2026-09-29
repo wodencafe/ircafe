@@ -8,5 +8,5 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcShutdownPort {
 
-  default void shutdownNow() {}
+  void shutdownNow();
 }

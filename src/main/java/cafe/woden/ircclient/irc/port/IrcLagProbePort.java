@@ -11,13 +11,9 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcLagProbePort {
 
-  default Optional<String> currentNick(String serverId) {
-    return Optional.empty();
-  }
+  Optional<String> currentNick(String serverId);
 
-  default Completable requestLagProbe(String serverId) {
-    return Completable.complete();
-  }
+  Completable requestLagProbe(String serverId);
 
   default boolean shouldRequestLagProbe(String serverId) {
     return true;
@@ -27,7 +23,5 @@ public interface IrcLagProbePort {
     return currentNick(serverId).isPresent();
   }
 
-  default OptionalLong lastMeasuredLagMs(String serverId) {
-    return OptionalLong.empty();
-  }
+  OptionalLong lastMeasuredLagMs(String serverId);
 }

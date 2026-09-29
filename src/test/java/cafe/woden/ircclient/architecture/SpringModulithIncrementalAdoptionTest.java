@@ -40,7 +40,6 @@ import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.bouncer.spi.BouncerNetworkMappingStrategy;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.api.ApplicationRootVisibilityConfigPort;
 import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import cafe.woden.ircclient.config.api.ChatAppearanceRuntimeConfigPort;
@@ -72,6 +71,7 @@ import cafe.woden.ircclient.config.api.ThemeAppearanceRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.TrayCloseHintRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.dcc.api.DccTransferCommandPort;
 import cafe.woden.ircclient.dcc.api.DccTransferQueryPort;
@@ -770,6 +770,7 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule config = moduleFor(modules, RuntimeConfigStore.class);
 
     assertThat(config.isOpen()).isFalse();
+    assertThat(config.isExposed(RuntimeConfigStore.class)).isFalse();
     assertThat(
             config.getNamedInterfaces().stream()
                 .filter(NamedInterface::isNamed)

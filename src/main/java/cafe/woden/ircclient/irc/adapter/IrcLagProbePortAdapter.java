@@ -20,7 +20,7 @@ public class IrcLagProbePortAdapter implements IrcLagProbePort {
   private final IrcClientService irc;
 
   public IrcLagProbePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
@@ -28,35 +28,27 @@ public class IrcLagProbePortAdapter implements IrcLagProbePort {
     // A client implementing the narrow port owns its identifier normalization.
     if (irc instanceof IrcLagProbePort port) return port.currentNick(serverId);
     String sid = Objects.toString(serverId, "").trim();
-    if (irc == null || sid.isEmpty()) return Optional.empty();
+    if (sid.isEmpty()) return Optional.empty();
     return irc.currentNick(sid);
   }
 
   @Override
   public Completable requestLagProbe(String serverId) {
-    return irc == null
-        ? IrcLagProbePort.super.requestLagProbe(serverId)
-        : irc.requestLagProbe(serverId);
+    return irc.requestLagProbe(serverId);
   }
 
   @Override
   public boolean shouldRequestLagProbe(String serverId) {
-    return irc == null
-        ? IrcLagProbePort.super.shouldRequestLagProbe(serverId)
-        : irc.shouldRequestLagProbe(serverId);
+    return irc.shouldRequestLagProbe(serverId);
   }
 
   @Override
   public boolean isLagProbeReady(String serverId) {
-    return irc == null
-        ? IrcLagProbePort.super.isLagProbeReady(serverId)
-        : irc.isLagProbeReady(serverId);
+    return irc.isLagProbeReady(serverId);
   }
 
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
-    return irc == null
-        ? IrcLagProbePort.super.lastMeasuredLagMs(serverId)
-        : irc.lastMeasuredLagMs(serverId);
+    return irc.lastMeasuredLagMs(serverId);
   }
 }

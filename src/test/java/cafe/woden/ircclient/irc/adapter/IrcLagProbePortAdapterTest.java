@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -39,14 +40,8 @@ class IrcLagProbePortAdapterTest {
   }
 
   @Test
-  void nullClientIsSafeNoop() {
-    IrcLagProbePort port = new IrcLagProbePortAdapter(null);
-
-    assertTrue(port.currentNick("libera").isEmpty());
-    port.requestLagProbe("libera").blockingAwait();
-    assertFalse(port.isLagProbeReady("libera"));
-    assertTrue(port.shouldRequestLagProbe("libera"));
-    assertTrue(port.lastMeasuredLagMs("libera").isEmpty());
+  void rejectsMissingClient() {
+    assertThrows(NullPointerException.class, () -> new IrcLagProbePortAdapter(null));
   }
 
   @ParameterizedTest

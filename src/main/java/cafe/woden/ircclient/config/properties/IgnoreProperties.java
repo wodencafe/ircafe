@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Ignore configuration.
  *
  * <p>Stored under {@code ircafe.ignore}. Runtime changes are persisted to the runtime YAML via
- * {@link cafe.woden.ircclient.config.RuntimeConfigStore}.
+ * {@link cafe.woden.ircclient.config.runtime.RuntimeConfigStore}.
  */
 @ConfigurationProperties(prefix = ConfigPropertyKeys.IRCAFE_IGNORE_PREFIX)
 @InfrastructureLayer

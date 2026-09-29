@@ -12,35 +12,19 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcMediatorInteractionPort {
 
-  default Flowable<ServerIrcEvent> events() {
-    return Flowable.empty();
-  }
+  Flowable<ServerIrcEvent> events();
 
-  default Completable whois(String serverId, String nick) {
-    return Completable.complete();
-  }
+  Completable whois(String serverId, String nick);
 
-  default Completable whowas(String serverId, String nick, int count) {
-    return Completable.complete();
-  }
+  Completable whowas(String serverId, String nick, int count);
 
-  default Completable sendPrivateMessage(String serverId, String target, String message) {
-    return Completable.complete();
-  }
+  Completable sendPrivateMessage(String serverId, String target, String message);
 
-  default Completable sendRaw(String serverId, String line) {
-    return Completable.complete();
-  }
+  Completable sendRaw(String serverId, String line);
 
-  default Completable setIrcv3CapabilityEnabled(String serverId, String capability, boolean value) {
-    return Completable.complete();
-  }
+  Completable setIrcv3CapabilityEnabled(String serverId, String capability, boolean value);
 
-  default Completable joinChannel(String serverId, String channel) {
-    return Completable.complete();
-  }
+  Completable joinChannel(String serverId, String channel);
 
-  default Optional<String> currentNick(String serverId) {
-    return Optional.empty();
-  }
+  Optional<String> currentNick(String serverId);
 }

@@ -3,9 +3,9 @@ package cafe.woden.ircclient.irc.soju;
 import static cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures.bouncerDiscoveryPort;
 import static org.junit.jupiter.api.Assertions.*;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
 import cafe.woden.ircclient.config.properties.SojuProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 

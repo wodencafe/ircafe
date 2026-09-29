@@ -21,54 +21,42 @@ public class IrcMediatorInteractionPortAdapter implements IrcMediatorInteraction
   private final IrcClientService irc;
 
   public IrcMediatorInteractionPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Flowable<ServerIrcEvent> events() {
-    return irc == null ? IrcMediatorInteractionPort.super.events() : irc.events();
+    return irc.events();
   }
 
   @Override
   public Completable whois(String serverId, String nick) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.whois(serverId, nick)
-        : irc.whois(serverId, nick);
+    return irc.whois(serverId, nick);
   }
 
   @Override
   public Completable whowas(String serverId, String nick, int count) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.whowas(serverId, nick, count)
-        : irc.whowas(serverId, nick, count);
+    return irc.whowas(serverId, nick, count);
   }
 
   @Override
   public Completable sendPrivateMessage(String serverId, String target, String message) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.sendPrivateMessage(serverId, target, message)
-        : irc.sendPrivateMessage(serverId, target, message);
+    return irc.sendPrivateMessage(serverId, target, message);
   }
 
   @Override
   public Completable sendRaw(String serverId, String line) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.sendRaw(serverId, line)
-        : irc.sendRaw(serverId, line);
+    return irc.sendRaw(serverId, line);
   }
 
   @Override
   public Completable setIrcv3CapabilityEnabled(String serverId, String capability, boolean value) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.setIrcv3CapabilityEnabled(serverId, capability, value)
-        : irc.setIrcv3CapabilityEnabled(serverId, capability, value);
+    return irc.setIrcv3CapabilityEnabled(serverId, capability, value);
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
-    return irc == null
-        ? IrcMediatorInteractionPort.super.joinChannel(serverId, channel)
-        : irc.joinChannel(serverId, channel);
+    return irc.joinChannel(serverId, channel);
   }
 
   @Override
@@ -77,7 +65,7 @@ public class IrcMediatorInteractionPortAdapter implements IrcMediatorInteraction
       return port.currentNick(serverId);
     }
     String sid = Objects.toString(serverId, "").trim();
-    if (irc == null || sid.isEmpty()) return Optional.empty();
+    if (sid.isEmpty()) return Optional.empty();
     return irc.currentNick(sid);
   }
 }

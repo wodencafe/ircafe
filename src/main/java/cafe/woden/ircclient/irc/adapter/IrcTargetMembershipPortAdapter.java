@@ -19,42 +19,32 @@ public class IrcTargetMembershipPortAdapter implements IrcTargetMembershipPort {
   private final IrcClientService irc;
 
   public IrcTargetMembershipPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.irc = irc;
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
-    return irc == null
-        ? IrcTargetMembershipPort.super.joinChannel(serverId, channel)
-        : irc.joinChannel(serverId, channel);
+    return irc.joinChannel(serverId, channel);
   }
 
   @Override
   public Completable partChannel(String serverId, String channel) {
-    return irc == null
-        ? IrcTargetMembershipPort.super.partChannel(serverId, channel)
-        : irc.partChannel(serverId, channel);
+    return irc.partChannel(serverId, channel);
   }
 
   @Override
   public Completable partChannel(String serverId, String channel, String reason) {
-    return irc == null
-        ? IrcTargetMembershipPort.super.partChannel(serverId, channel, reason)
-        : irc.partChannel(serverId, channel, reason);
+    return irc.partChannel(serverId, channel, reason);
   }
 
   @Override
   public Completable requestNames(String serverId, String channel) {
-    return irc == null
-        ? IrcTargetMembershipPort.super.requestNames(serverId, channel)
-        : irc.requestNames(serverId, channel);
+    return irc.requestNames(serverId, channel);
   }
 
   @Override
   public Completable sendRaw(String serverId, String line) {
-    return irc == null
-        ? IrcTargetMembershipPort.super.sendRaw(serverId, line)
-        : irc.sendRaw(serverId, line);
+    return irc.sendRaw(serverId, line);
   }
 
   @Override
@@ -63,7 +53,7 @@ public class IrcTargetMembershipPortAdapter implements IrcTargetMembershipPort {
       return port.currentNick(serverId);
     }
     String sid = Objects.toString(serverId, "").trim();
-    if (irc == null || sid.isEmpty()) return Optional.empty();
+    if (sid.isEmpty()) return Optional.empty();
     return irc.currentNick(sid);
   }
 }

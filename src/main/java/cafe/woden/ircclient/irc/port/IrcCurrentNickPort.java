@@ -9,7 +9,5 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcCurrentNickPort {
 
-  default Optional<String> currentNick(String serverId) {
-    return Optional.empty();
-  }
+  Optional<String> currentNick(String serverId);
 }
