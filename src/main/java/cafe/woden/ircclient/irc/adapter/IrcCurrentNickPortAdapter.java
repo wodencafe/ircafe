@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
@@ -15,14 +15,18 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcCurrentNickPortAdapter implements IrcCurrentNickPort {
 
-  private final IrcCurrentNickPort delegate;
+  private final IrcClientService irc;
 
   public IrcCurrentNickPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcCurrentNickPort.from(irc);
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    return delegate.currentNick(serverId);
+    // A client implementing the narrow port owns its identifier normalization.
+    if (irc instanceof IrcCurrentNickPort port) return port.currentNick(serverId);
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return Optional.empty();
+    return irc.currentNick(sid);
   }
 }

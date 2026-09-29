@@ -124,6 +124,26 @@ tasks.register('architectureTest', Test) {
         includeTestsMatching 'cafe.woden.ircclient.modulith.*'
     }
     shouldRunAfter(tasks.named('test'))
+
+    // Package names are shared across artifacts, so boundary checks need actual class ownership.
+    def boundaryProjects = providers.provider {
+        rootProject.subprojects.findAll {
+            it.name == 'ircafe-plugin-api' || it.name.startsWith('ircafe-feature-')
+        }.sort { it.name }
+    }
+    def boundaryOutputs = boundaryProjects.map { projects ->
+        projects.collect { it.sourceSets.main.output.classesDirs }
+    }
+    dependsOn(boundaryOutputs)
+    inputs.files(boundaryOutputs).withPropertyName('boundaryClasses')
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    doFirst {
+        systemProperty 'ircafe.architecture.classes.root', sourceSets.main.output.classesDirs.asPath
+        boundaryProjects.get().each { boundaryProject ->
+            systemProperty "ircafe.architecture.classes.${boundaryProject.name}",
+                boundaryProject.sourceSets.main.output.classesDirs.asPath
+        }
+    }
 }
 
 tasks.register('functionalTest', Test) {

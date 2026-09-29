@@ -22,6 +22,8 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -136,7 +138,8 @@ class ChatDockableIgnoresMockVerifyTest {
                     notificationStore,
                     activationBus,
                     outboundBus,
-                    irc,
+                    new IrcMediatorInteractionPortAdapter(irc),
+                    new IrcTypingPortAdapter(irc),
                     mock(Ircv3ReadMarkerFeatureSupport.class),
                     modeRoutingState,
                     serverIsupportState,

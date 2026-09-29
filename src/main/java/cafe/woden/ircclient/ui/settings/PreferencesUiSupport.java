@@ -114,12 +114,14 @@ public final class PreferencesUiSupport {
 
   public static JTextArea helpText(String text) {
     JTextArea area = new JTextArea(text);
+    // Nimbus paints non-opaque text areas unless their background is transparent.
+    area.setBackground(new Color(0, 0, 0, 0));
     area.setEditable(false);
     area.setLineWrap(true);
     area.setWrapStyleWord(true);
     area.setOpaque(false);
     area.setFocusable(false);
-    area.setBorder(null);
+    area.setBorder(BorderFactory.createEmptyBorder());
     area.setFont(UIManager.getFont(UiFontKeys.LABEL_FONT));
     area.setForeground(UIManager.getColor(UiColorKeys.LABEL_FOREGROUND));
     Dimension preferred = area.getPreferredSize();
@@ -129,12 +131,14 @@ public final class PreferencesUiSupport {
 
   public static JTextArea subtleInfoText() {
     JTextArea area = new JTextArea();
+    // Nimbus paints non-opaque text areas unless their background is transparent.
+    area.setBackground(new Color(0, 0, 0, 0));
     area.setEditable(false);
     area.setLineWrap(true);
     area.setWrapStyleWord(true);
     area.setOpaque(false);
     area.setFocusable(false);
-    area.setBorder(null);
+    area.setBorder(BorderFactory.createEmptyBorder());
 
     Font font = UIManager.getFont(UiFontKeys.LABEL_FONT);
     if (font != null) {

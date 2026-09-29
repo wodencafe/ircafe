@@ -46,10 +46,10 @@ import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.RuntimeConfigDiagnosticsAdapter;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
@@ -62,6 +62,7 @@ import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
 import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3OutboundCommandRuntimeCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3StsPolicyService;
@@ -367,7 +368,7 @@ class MemoServPanelContainerFunctionalTest {
 
   private static MediatorFixture newMediatorFixture(
       PircbotxIrcClientService service, UiPort ui, RuntimeIrcConfig appCfg) {
-    IrcMediatorInteractionPort mediatorIrc = IrcMediatorInteractionPort.from(service);
+    IrcMediatorInteractionPort mediatorIrc = new IrcMediatorInteractionPortAdapter(service);
     TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
     TargetRef memoServTarget = TargetRef.memoServ(appCfg.serverId());
     when(targetCoordinator.getActiveTarget()).thenReturn(memoServTarget);

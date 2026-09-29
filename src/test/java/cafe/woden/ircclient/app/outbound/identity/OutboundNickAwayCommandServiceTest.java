@@ -10,6 +10,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.api.PreferredNickRuntimeConfigPort;
+import cafe.woden.ircclient.irc.adapter.IrcIdentityPortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
@@ -28,9 +29,19 @@ class OutboundNickAwayCommandServiceTest {
       mock(PreferredNickRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
   private final NickCommandSupport nickCommandSupport =
-      new NickCommandSupport(irc, ui, connectionCoordinator, targetCoordinator, runtimeConfig);
+      new NickCommandSupport(
+          new IrcIdentityPortAdapter(irc),
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          runtimeConfig);
   private final AwayCommandSupport awayCommandSupport =
-      new AwayCommandSupport(irc, ui, connectionCoordinator, targetCoordinator, awayRoutingState);
+      new AwayCommandSupport(
+          new IrcIdentityPortAdapter(irc),
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          awayRoutingState);
   private final OutboundNickAwayCommandService service =
       new OutboundNickAwayCommandService(nickCommandSupport, awayCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();

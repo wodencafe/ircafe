@@ -247,6 +247,10 @@ class ThemeAppearanceService {
 
     for (Map.Entry<Object, Object> entry : densityDefaults.entrySet()) {
       defaults.put(entry.getKey(), entry.getValue());
+      // Nimbus caches compiled styles. Notify its defaults listener as well as updating
+      // the LAF table, including when the density matches the previous theme.
+      UIManager.put(entry.getKey(), null);
+      UIManager.put(entry.getKey(), entry.getValue());
     }
   }
 

@@ -5,8 +5,8 @@ import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.config.execution.ExecutorConfig;
 import cafe.woden.ircclient.config.properties.ConfigPropertyKeys;
 import cafe.woden.ircclient.config.properties.LogProperties;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
@@ -267,7 +267,7 @@ public class ChatLogDatabaseConfig {
       ChatLogRepository repo,
       LogProperties props,
       ChatHistoryTranscriptPort transcripts,
-      IrcClientService irc,
+      IrcChatHistoryPort irc,
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryIngestBus ingestBus,
       Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport,

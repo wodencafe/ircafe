@@ -13,7 +13,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
 import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
@@ -33,13 +33,17 @@ class OutboundDccCommandServiceControlMessagesTest {
       new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
   private final DccChatSessionSupport dccChatSessionSupport =
       new DccChatSessionSupport(
-          ui, IrcMediatorInteractionPort.from(irc), io, dccCommandSupport, dccRuntimeRegistry);
+          ui,
+          new IrcMediatorInteractionPortAdapter(irc),
+          io,
+          dccCommandSupport,
+          dccRuntimeRegistry);
   private final DccInboundOfferSupport dccInboundOfferSupport =
       new DccInboundOfferSupport(dccCommandSupport, dccRuntimeRegistry);
   private final DccOfferCommandSupport dccOfferCommandSupport =
       new DccOfferCommandSupport(
           ui,
-          IrcMediatorInteractionPort.from(irc),
+          new IrcMediatorInteractionPortAdapter(irc),
           connectionCoordinator,
           io,
           dccCommandSupport,

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;

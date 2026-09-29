@@ -4,7 +4,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.api.PreferredNickRuntimeConfigPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 final class NickCommandSupport {
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcIdentityPort irc;
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;

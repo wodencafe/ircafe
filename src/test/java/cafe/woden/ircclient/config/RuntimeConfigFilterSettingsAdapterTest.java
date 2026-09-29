@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.properties.UiProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.FilterDirection;
 import cafe.woden.ircclient.model.LogKind;

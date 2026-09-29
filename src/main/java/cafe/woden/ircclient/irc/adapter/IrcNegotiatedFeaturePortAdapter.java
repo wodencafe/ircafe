@@ -1,8 +1,7 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,74 +13,100 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcNegotiatedFeaturePortAdapter implements IrcNegotiatedFeaturePort {
 
-  private final IrcNegotiatedFeaturePort delegate;
+  private final IrcClientService irc;
 
   public IrcNegotiatedFeaturePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcNegotiatedFeaturePort.from(irc);
+    this.irc = irc;
   }
 
   @Override
   public boolean isChatHistoryAvailable(String serverId) {
-    return delegate.isChatHistoryAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isChatHistoryAvailable(serverId)
+        : irc.isChatHistoryAvailable(serverId);
   }
 
   @Override
   public boolean isMessageTagsAvailable(String serverId) {
-    return delegate.isMessageTagsAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isMessageTagsAvailable(serverId)
+        : irc.isMessageTagsAvailable(serverId);
   }
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
-    return delegate.isDraftReplyAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isDraftReplyAvailable(serverId)
+        : irc.isDraftReplyAvailable(serverId);
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
-    return delegate.isDraftReactAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isDraftReactAvailable(serverId)
+        : irc.isDraftReactAvailable(serverId);
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
-    return delegate.isDraftUnreactAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isDraftUnreactAvailable(serverId)
+        : irc.isDraftUnreactAvailable(serverId);
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
-    return delegate.isMultilineAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isMultilineAvailable(serverId)
+        : irc.isMultilineAvailable(serverId);
   }
 
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
-    return delegate.negotiatedMultilineMaxBytes(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.negotiatedMultilineMaxBytes(serverId)
+        : irc.negotiatedMultilineMaxBytes(serverId);
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
-    return delegate.negotiatedMultilineMaxLines(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.negotiatedMultilineMaxLines(serverId)
+        : irc.negotiatedMultilineMaxLines(serverId);
   }
 
   @Override
   public boolean isExperimentalMessageEditAvailable(String serverId) {
-    return delegate.isExperimentalMessageEditAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isExperimentalMessageEditAvailable(serverId)
+        : irc.isExperimentalMessageEditAvailable(serverId);
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
-    return delegate.isMessageRedactionAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isMessageRedactionAvailable(serverId)
+        : irc.isMessageRedactionAvailable(serverId);
   }
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
-    return delegate.isReadMarkerAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isReadMarkerAvailable(serverId)
+        : irc.isReadMarkerAvailable(serverId);
   }
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
-    return delegate.isLabeledResponseAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isLabeledResponseAvailable(serverId)
+        : irc.isLabeledResponseAvailable(serverId);
   }
 
   @Override
   public boolean isMonitorAvailable(String serverId) {
-    return delegate.isMonitorAvailable(serverId);
+    return irc == null
+        ? IrcNegotiatedFeaturePort.super.isMonitorAvailable(serverId)
+        : irc.isMonitorAvailable(serverId);
   }
 }

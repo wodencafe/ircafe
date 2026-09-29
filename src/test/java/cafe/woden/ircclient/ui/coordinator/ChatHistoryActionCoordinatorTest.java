@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -303,7 +304,7 @@ class ChatHistoryActionCoordinatorTest {
 
   private static MessageActionCapabilityPolicy capabilityPolicy(
       IrcBackendRuntimeClientService irc) {
-    IrcNegotiatedFeaturePort negotiatedFeaturePort = IrcNegotiatedFeaturePort.from(irc);
+    IrcNegotiatedFeaturePort negotiatedFeaturePort = new IrcNegotiatedFeaturePortAdapter(irc);
     Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
         new Ircv3ChatHistoryFeatureSupport(chatHistoryPolicy(irc), negotiatedFeaturePort, irc);
     Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport =

@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.irc.port;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
@@ -9,20 +8,5 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcShutdownPort {
 
-  default void shutdownNow() {}
-
-  static IrcShutdownPort from(IrcClientService irc) {
-    if (irc instanceof IrcShutdownPort port) {
-      return port;
-    }
-    if (irc == null) {
-      return new IrcShutdownPort() {};
-    }
-    return new IrcShutdownPort() {
-      @Override
-      public void shutdownNow() {
-        irc.shutdownNow();
-      }
-    };
-  }
+  void shutdownNow();
 }

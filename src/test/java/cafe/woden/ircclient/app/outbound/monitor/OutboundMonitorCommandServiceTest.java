@@ -16,13 +16,14 @@ import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendFeatureRegistry;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcMonitorPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3MonitorCommandRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3OutboundCommandRuntimeCatalog;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandOperation;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandProvider;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandRequest;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -49,7 +50,7 @@ class OutboundMonitorCommandServiceTest {
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
-          IrcNegotiatedFeaturePort.from(irc),
+          new IrcNegotiatedFeaturePortAdapter(irc),
           irc,
           cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final MonitorRosterPort monitorRosterPort = Mockito.mock(MonitorRosterPort.class);
@@ -57,7 +58,7 @@ class OutboundMonitorCommandServiceTest {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final OutboundMonitorCommandSupport monitorCommandSupport =
       new OutboundMonitorCommandSupport(
-          irc,
+          new IrcMonitorPortAdapter(irc),
           ui,
           targetCoordinator,
           connectionCoordinator,

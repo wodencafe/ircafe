@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.api.LaunchJvmRuntimeConfigPort.LaunchJvmSnapshot;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

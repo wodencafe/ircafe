@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import io.reactivex.rxjava3.core.Completable;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
@@ -17,34 +17,38 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcLagProbePortAdapter implements IrcLagProbePort {
 
-  private final IrcLagProbePort delegate;
+  private final IrcClientService irc;
 
   public IrcLagProbePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcLagProbePort.from(irc);
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    return delegate.currentNick(serverId);
+    // A client implementing the narrow port owns its identifier normalization.
+    if (irc instanceof IrcLagProbePort port) return port.currentNick(serverId);
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return Optional.empty();
+    return irc.currentNick(sid);
   }
 
   @Override
   public Completable requestLagProbe(String serverId) {
-    return delegate.requestLagProbe(serverId);
+    return irc.requestLagProbe(serverId);
   }
 
   @Override
   public boolean shouldRequestLagProbe(String serverId) {
-    return delegate.shouldRequestLagProbe(serverId);
+    return irc.shouldRequestLagProbe(serverId);
   }
 
   @Override
   public boolean isLagProbeReady(String serverId) {
-    return delegate.isLagProbeReady(serverId);
+    return irc.isLagProbeReady(serverId);
   }
 
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
-    return delegate.lastMeasuredLagMs(serverId);
+    return irc.lastMeasuredLagMs(serverId);
   }
 }

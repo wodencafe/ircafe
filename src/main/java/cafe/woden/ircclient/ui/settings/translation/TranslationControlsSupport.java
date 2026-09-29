@@ -168,9 +168,9 @@ public final class TranslationControlsSupport {
             MESSAGES.text("preferences.translation.section.languages"),
             MigLayouts.twoColumnForm(8));
     languages.add(new JLabel(MESSAGES.text("preferences.translation.field.source")));
-    languages.add(sourceLanguage, MigConstraints.widthWrap(120));
+    languages.add(sourceLanguage, MigConstraints.growXMinWidth0Wrap());
     languages.add(new JLabel(MESSAGES.text("preferences.translation.field.target")));
-    languages.add(targetLanguage, MigConstraints.widthWrap(120));
+    languages.add(targetLanguage, MigConstraints.growXMinWidth0Wrap());
     languages.add(new JLabel(""));
     languages.add(translateUnknownMessages, MigConstraints.growXMinWidth0());
     panel.add(languages, MigConstraints.growXMinWidth0Wrap());

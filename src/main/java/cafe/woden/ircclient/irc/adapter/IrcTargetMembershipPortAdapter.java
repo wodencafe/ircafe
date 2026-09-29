@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.irc.adapter;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.port.*;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import io.reactivex.rxjava3.core.Completable;
+import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
@@ -16,39 +16,44 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public class IrcTargetMembershipPortAdapter implements IrcTargetMembershipPort {
 
-  private final IrcTargetMembershipPort delegate;
+  private final IrcClientService irc;
 
   public IrcTargetMembershipPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcTargetMembershipPort.from(irc);
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
-    return delegate.joinChannel(serverId, channel);
+    return irc.joinChannel(serverId, channel);
   }
 
   @Override
   public Completable partChannel(String serverId, String channel) {
-    return delegate.partChannel(serverId, channel);
+    return irc.partChannel(serverId, channel);
   }
 
   @Override
   public Completable partChannel(String serverId, String channel, String reason) {
-    return delegate.partChannel(serverId, channel, reason);
+    return irc.partChannel(serverId, channel, reason);
   }
 
   @Override
   public Completable requestNames(String serverId, String channel) {
-    return delegate.requestNames(serverId, channel);
+    return irc.requestNames(serverId, channel);
   }
 
   @Override
   public Completable sendRaw(String serverId, String line) {
-    return delegate.sendRaw(serverId, line);
+    return irc.sendRaw(serverId, line);
   }
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    return delegate.currentNick(serverId);
+    if (irc instanceof IrcTargetMembershipPort port) {
+      return port.currentNick(serverId);
+    }
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return Optional.empty();
+    return irc.currentNick(sid);
   }
 }

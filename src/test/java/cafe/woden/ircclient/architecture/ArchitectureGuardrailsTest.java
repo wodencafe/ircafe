@@ -11,8 +11,8 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.spi.BouncerBackendDiscoveryHandler;
 import cafe.woden.ircclient.bouncer.spi.BouncerNetworkMappingStrategy;
-import cafe.woden.ircclient.irc.pircbotx.client.*;
-import cafe.woden.ircclient.irc.pircbotx.client.PircbotxIrcClientService;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -52,9 +52,9 @@ class ArchitectureGuardrailsTest {
       new DescribedPredicate<>("RuntimeConfigStore types") {
         @Override
         public boolean test(JavaClass input) {
-          String name = input.getName();
-          return name.equals("cafe.woden.ircclient.config.RuntimeConfigStore")
-              || name.startsWith("cafe.woden.ircclient.config.RuntimeConfigStore$");
+          String name = input.getBaseComponentType().getName();
+          String storeType = RuntimeConfigStore.class.getName();
+          return name.equals(storeType) || name.startsWith(storeType + "$");
         }
       };
 
@@ -196,6 +196,15 @@ class ArchitectureGuardrailsTest {
       };
 
   @ArchTest
+  static final ArchRule only_config_should_depend_on_runtime_config_store =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("cafe.woden.ircclient.config..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because("all consumers must use config ports instead of the persistence implementation");
+
+  @ArchTest
   static final ArchRule app_should_not_depend_on_ui_package_directly =
       noClasses()
           .that()
@@ -327,15 +336,65 @@ class ArchitectureGuardrailsTest {
               "logging module should expose adapters through app::api and avoid coupling to app internals or peer feature modules");
 
   @ArchTest
-  static final ArchRule app_should_not_depend_on_pircbotx_service_directly =
+  static final ArchRule irc_ports_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.irc.port..")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcClientService")
+          .because("client adaptation belongs in the IRC adapters, not in narrow port contracts");
+
+  @ArchTest
+  static final ArchRule app_should_not_depend_on_broad_irc_client =
       noClasses()
           .that()
           .resideInAPackage("cafe.woden.ircclient.app..")
           .should()
           .dependOnClassesThat()
-          .areAssignableTo(PircbotxIrcClientService.class)
+          .areAssignableTo(IrcClientService.class)
+          .because("application services should declare only the IRC operations they need");
+
+  @ArchTest
+  static final ArchRule logging_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.logging..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
           .because(
-              "application code should depend on IrcClientService, not transport-specific adapters");
+              "history loaders should use history and nickname ports instead of the full IRC client");
+
+  @ArchTest
+  static final ArchRule monitor_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.monitor..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("presence services should use the monitor port instead of the full IRC client");
+
+  @ArchTest
+  static final ArchRule perform_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.perform..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("perform automation should declare its IRC command and lifecycle ports");
+
+  @ArchTest
+  static final ArchRule ui_should_not_depend_on_broad_irc_client =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(IrcClientService.class)
+          .because("UI components should use focused IRC ports instead of the full IRC client");
 
   @ArchTest
   static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
@@ -462,26 +521,6 @@ class ArchitectureGuardrailsTest {
               "state::api should stay implementation-agnostic and independent from state internals");
 
   @ArchTest
-  static final ArchRule app_outbound_should_not_depend_on_config_module_internals_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.app.outbound..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "app outbound flows should depend on config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule app_commands_should_not_depend_on_config_module_internals_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.app.commands..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "app command flows should depend on config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
   static final ArchRule only_quassel_outbound_service_should_depend_on_quassel_core_control_port =
       noClasses()
           .that()
@@ -572,353 +611,6 @@ class ArchitectureGuardrailsTest {
           .haveFullyQualifiedName("cafe.woden.ircclient.irc.backend.IrcBackendModePort")
           .because(
               "backend mode checks in UI should stay centralized behind backend-ui profile/context services");
-
-  @ArchTest
-  static final ArchRule state_should_not_depend_on_config_module_internals_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.state..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because("state should depend on config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule connection_coordinator_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .haveFullyQualifiedName("cafe.woden.ircclient.app.core.ConnectionCoordinator")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ConnectionCoordinator should depend on config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule app_core_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.app.core..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because("app.core should depend on config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ircv3_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.irc.ircv3..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ircv3 support should persist policy state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule bouncer_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.bouncer..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "bouncer discovery support should persist settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule soju_support_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.irc.soju..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "soju discovery support should persist settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule znc_support_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.irc.znc..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "znc discovery support should persist settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule pircbotx_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.irc.pircbotx..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "pircbotx transport support should read runtime settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule monitor_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.monitor..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "monitor support should persist roster state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ignore_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ignore..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ignore support should persist rule state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule diagnostics_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.diagnostics..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "diagnostics support should persist/export config state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule interceptors_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.interceptors..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "interceptor support should resolve runtime paths via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule notify_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.notify..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "notification support should resolve runtime paths via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule logging_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.logging..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "logging support should resolve runtime paths via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_shell_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.shell..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.shell should persist UI chrome state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_tray_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.tray..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.tray should persist tray state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_servers_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.servers..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.servers should persist startup auto-connect state via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_filter_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.filter..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.filter should persist local transcript filter settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_nickcolors_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.nickcolors..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.nickcolors should persist per-nick override settings via config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_settings_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.settings..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "preferences and settings UI should use config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule theme_selection_dialog_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.theme.ThemeSelectionDialog")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ThemeSelectionDialog should persist theme settings through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      chat_history_transcript_port_adapter_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.chat.transcript.history.ChatHistoryTranscriptPortAdapter")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ChatHistoryTranscriptPortAdapter should resolve persisted chat history UI settings through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule ui_chat_embed_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.chat.embed..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "ui.chat.embed should resolve embed policy state through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      embed_load_policy_dialog_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.EmbedLoadPolicyDialog")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "EmbedLoadPolicyDialog should edit embed policy state through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_startup_selection_restorer_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeStartupSelectionRestorer should read remembered UI selection through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_built_in_visibility_coordinator_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilityCoordinator")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeBuiltInVisibilityCoordinator should persist built-in visibility through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_settings_synchronizer_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.state.ServerTreeSettingsSynchronizer")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeSettingsSynchronizer should resolve persisted UI settings through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_network_info_dialog_builder_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeNetworkInfoDialogBuilder should resolve requested capability settings through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_target_removal_state_coordinator_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeTargetRemovalStateCoordinator should remove persisted target state through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_channel_state_coordinator_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeChannelStateCoordinator should persist channel state through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_view_interaction_collaborators_factory_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeViewInteractionCollaboratorsFactory should resolve server auto-connect state through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule
-      server_tree_state_interaction_collaborators_factory_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "ServerTreeStateInteractionCollaboratorsFactory should wire server-tree collaborators through config::api ports, not RuntimeConfigStore directly");
-
-  @ArchTest
-  static final ArchRule server_tree_types_should_not_depend_on_runtime_config_store_directly =
-      noClasses()
-          .that()
-          .resideInAPackage("cafe.woden.ircclient.ui.servertree..")
-          .should()
-          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-          .because(
-              "server-tree collaborators should resolve persisted state through config::api ports instead of RuntimeConfigStore directly");
 
   @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =

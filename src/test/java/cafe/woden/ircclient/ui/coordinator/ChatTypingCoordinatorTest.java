@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import io.reactivex.rxjava3.core.Completable;
@@ -36,7 +36,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> true,
@@ -64,7 +64,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> active,
             () -> true,
@@ -94,7 +94,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> true,
@@ -129,7 +129,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> true,
@@ -163,7 +163,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -195,7 +195,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -228,7 +228,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -259,7 +259,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -289,7 +289,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            IrcTypingPort.from(irc),
+            new IrcTypingPortAdapter(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,

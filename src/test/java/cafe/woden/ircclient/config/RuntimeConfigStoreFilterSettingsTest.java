@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.FilterDirection;
 import cafe.woden.ircclient.model.FilterRule;

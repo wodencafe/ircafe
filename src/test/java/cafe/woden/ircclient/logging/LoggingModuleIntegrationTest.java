@@ -15,10 +15,15 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.config.properties.ConfigPropertyKeys;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
 import cafe.woden.ircclient.model.TargetRef;
@@ -29,15 +34,33 @@ import java.util.OptionalLong;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Answers;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.STANDALONE)
 @TestPropertySource(properties = {ConfigPropertyKeys.LOGGING_ENABLED_TRUE})
 class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest {
+
+  @MockitoBean(name = "ircChatHistoryPort")
+  IrcChatHistoryPort ircChatHistoryPort;
+
+  @MockitoBean(name = "ircCurrentNickPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcCurrentNickPort ircCurrentNickPort;
+
+  @MockitoBean Ircv3ChatHistoryFeatureSupport ircv3ChatHistoryFeatureSupport;
+
+  @MockitoBean ChatHistoryTranscriptPort chatHistoryTranscriptPortDouble;
+
+  @MockitoBean(name = "swingUiPort", answers = Answers.RETURNS_DEEP_STUBS)
+  UiPort swingUiPort;
+
+  @MockitoBean(name = "ircClientService", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcBouncerPlaybackPort bouncerPlayback;
 
   private final ApplicationContext applicationContext;
   private final ChatLogWriter writer;

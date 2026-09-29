@@ -4,11 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcIdentityPort;
 import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcShutdownPort;
@@ -22,6 +26,10 @@ class IrcPortAdaptersContextTest {
   private final ApplicationContextRunner runner =
       new ApplicationContextRunner()
           .withUserConfiguration(
+              IrcIdentityPortAdapter.class,
+              IrcMessagingPortAdapter.class,
+              IrcChatHistoryPortAdapter.class,
+              IrcMonitorPortAdapter.class,
               IrcConnectionLifecyclePortAdapter.class,
               IrcCurrentNickPortAdapter.class,
               IrcEchoCapabilityPortAdapter.class,
@@ -38,6 +46,10 @@ class IrcPortAdaptersContextTest {
   void createsAllNamedIrcPortAdapterBeans() {
     runner.run(
         ctx -> {
+          assertNotNull(ctx.getBean("ircMonitorPort", IrcMonitorPort.class));
+          assertNotNull(ctx.getBean("ircChatHistoryPort", IrcChatHistoryPort.class));
+          assertNotNull(ctx.getBean("ircMessagingPort", IrcMessagingPort.class));
+          assertNotNull(ctx.getBean("ircIdentityPort", IrcIdentityPort.class));
           assertNotNull(
               ctx.getBean("ircConnectionLifecyclePort", IrcConnectionLifecyclePort.class));
           assertNotNull(ctx.getBean("ircCurrentNickPort", IrcCurrentNickPort.class));

@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import cafe.woden.ircclient.config.api.FirstRunSetupConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ui.FirstRunSetupCoordinator;
 import java.nio.file.Path;

@@ -4,9 +4,9 @@ import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.config.execution.ExecutorConfig;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.port.IrcMonitorPort;
 import cafe.woden.ircclient.irc.presence.IsonParsers;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
@@ -46,7 +46,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
   private static final int MAX_NICKS_PER_ISON = 25;
   private static final long POLL_TIMEOUT_MS = 10_000L;
 
-  private final IrcClientService irc;
+  private final IrcMonitorPort irc;
   private final MonitorListService monitorListService;
   private final UiPort ui;
   private final UiSettingsPort uiSettingsPort;
@@ -69,7 +69,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       new ConcurrentHashMap<>();
 
   public MonitorIsonFallbackService(
-      IrcClientService irc,
+      IrcMonitorPort irc,
       MonitorListService monitorListService,
       UiPort ui,
       UiSettingsPort uiSettingsPort,

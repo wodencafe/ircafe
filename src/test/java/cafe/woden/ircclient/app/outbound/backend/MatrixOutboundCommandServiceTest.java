@@ -14,8 +14,8 @@ import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTargetView;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.List;
 import java.util.Optional;
@@ -35,7 +35,7 @@ class MatrixOutboundCommandServiceTest {
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           backendFeatureRegistry,
-          IrcNegotiatedFeaturePort.from(irc),
+          new IrcNegotiatedFeaturePortAdapter(irc),
           irc,
           cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final MatrixOutboundCommandSupport matrixCommandSupport =

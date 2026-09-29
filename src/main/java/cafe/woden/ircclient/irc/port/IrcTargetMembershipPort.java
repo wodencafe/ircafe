@@ -1,8 +1,6 @@
 package cafe.woden.ircclient.irc.port;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
-import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -12,69 +10,17 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface IrcTargetMembershipPort {
 
-  default Completable joinChannel(String serverId, String channel) {
-    return Completable.complete();
-  }
+  Completable joinChannel(String serverId, String channel);
 
   default Completable partChannel(String serverId, String channel) {
     return partChannel(serverId, channel, null);
   }
 
-  default Completable partChannel(String serverId, String channel, String reason) {
-    return Completable.complete();
-  }
+  Completable partChannel(String serverId, String channel, String reason);
 
-  default Completable requestNames(String serverId, String channel) {
-    return Completable.complete();
-  }
+  Completable requestNames(String serverId, String channel);
 
-  default Completable sendRaw(String serverId, String line) {
-    return Completable.complete();
-  }
+  Completable sendRaw(String serverId, String line);
 
-  default Optional<String> currentNick(String serverId) {
-    return Optional.empty();
-  }
-
-  static IrcTargetMembershipPort from(IrcClientService irc) {
-    if (irc instanceof IrcTargetMembershipPort port) {
-      return port;
-    }
-    if (irc == null) {
-      return new IrcTargetMembershipPort() {};
-    }
-    return new IrcTargetMembershipPort() {
-      @Override
-      public Completable joinChannel(String serverId, String channel) {
-        return irc.joinChannel(serverId, channel);
-      }
-
-      @Override
-      public Completable partChannel(String serverId, String channel) {
-        return irc.partChannel(serverId, channel);
-      }
-
-      @Override
-      public Completable partChannel(String serverId, String channel, String reason) {
-        return irc.partChannel(serverId, channel, reason);
-      }
-
-      @Override
-      public Completable requestNames(String serverId, String channel) {
-        return irc.requestNames(serverId, channel);
-      }
-
-      @Override
-      public Completable sendRaw(String serverId, String line) {
-        return irc.sendRaw(serverId, line);
-      }
-
-      @Override
-      public Optional<String> currentNick(String serverId) {
-        String sid = Objects.toString(serverId, "").trim();
-        if (sid.isEmpty()) return Optional.empty();
-        return irc.currentNick(sid);
-      }
-    };
-  }
+  Optional<String> currentNick(String serverId);
 }

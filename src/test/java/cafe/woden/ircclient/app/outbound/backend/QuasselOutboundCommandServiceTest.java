@@ -23,8 +23,8 @@ import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
@@ -53,7 +53,7 @@ class QuasselOutboundCommandServiceTest {
       new OutboundBackendCapabilityPolicy(
           commandTargetPolicy,
           outboundBackendFeatureRegistry,
-          IrcNegotiatedFeaturePort.from(irc),
+          new IrcNegotiatedFeaturePortAdapter(irc),
           irc,
           cafe.woden.ircclient.app.api.AvailableBackendIdsPort.builtInsOnly());
   private final QuasselOutboundCommandSupport quasselCommandSupport =

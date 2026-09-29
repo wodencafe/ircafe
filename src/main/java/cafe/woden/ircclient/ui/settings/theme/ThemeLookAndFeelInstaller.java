@@ -193,6 +193,7 @@ class ThemeLookAndFeelInstaller {
     LookAndFeel laf = UIManager.getLookAndFeel();
     if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
       nimbusOverrides.applyVariant(themeId);
+      nimbusOverrides.synchronizeLookAndFeelDefaults();
       if (ThemeLookAndFeelUtils.isNimbusDebugEnabled()) {
         nimbusDebug("[ircafe][nimbus] re-applied '" + themeId + "' after Nimbus LAF install");
       }

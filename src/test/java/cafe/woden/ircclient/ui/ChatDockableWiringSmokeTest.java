@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,7 +23,8 @@ import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -37,6 +40,7 @@ import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.transcript.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.chat.transcript.message.ReactionChipActionHandler;
 import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
@@ -46,6 +50,7 @@ import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.subjects.CompletableSubject;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.awt.Component;
 import java.awt.Container;
@@ -53,14 +58,91 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JButton;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import javax.swing.text.DefaultStyledDocument;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ChatDockableWiringSmokeTest {
+
+  @Test
+  void targetSelectionUsesInjectedTypingPort() throws Exception {
+    Fixture fixture = createFixture();
+    try {
+      TargetRef target = new TargetRef("libera", "#ircafe");
+      when(fixture.transcripts.document(target)).thenReturn(new DefaultStyledDocument());
+      when(fixture.transcripts.readMarkerJumpOffset(target)).thenReturn(-1);
+      when(fixture.typingPort.isTypingAvailable("libera")).thenReturn(true);
+
+      onEdt(() -> fixture.chat.setActiveTarget(target));
+      flushEdt();
+
+      verify(fixture.typingPort, atLeastOnce()).isTypingAvailable("libera");
+    } finally {
+      fixture.shutdown();
+    }
+  }
+
+  @Test
+  void memoServRefreshUsesInteractionPortAndShutdownDisposesPendingSend() throws Exception {
+    Fixture fixture = createFixture();
+    CompletableSubject pending = CompletableSubject.create();
+    TestSubscriber<TargetRef> activations = fixture.activationBus.stream().test();
+    TestSubscriber<String> outbound = fixture.outboundBus.stream().test();
+    try {
+      when(fixture.irc.sendRaw("libera", "PRIVMSG MemoServ :LIST")).thenReturn(pending);
+      TargetRef target = TargetRef.memoServ("libera");
+      onEdt(() -> fixture.chat.setActiveTarget(target));
+      flushEdt();
+      JButton refresh =
+          onEdtCall(() -> findByName(fixture.chat, JButton.class, "memoserv.refreshButton"));
+      assertNotNull(refresh);
+
+      onEdt(() -> refresh.doClick(0));
+
+      verify(fixture.irc).sendRaw("libera", "PRIVMSG MemoServ :LIST");
+      activations.assertValue(target);
+      outbound.assertNoValues();
+      assertTrue(pending.hasObservers());
+      onEdt(fixture.chat::shutdown);
+      assertFalse(pending.hasObservers());
+    } finally {
+      activations.cancel();
+      outbound.cancel();
+      fixture.shutdown();
+    }
+  }
+
+  @Test
+  void reactionChipUsesInteractionPortNicknameToRemoveOwnReaction() throws Exception {
+    Fixture fixture = createFixture();
+    TestSubscriber<String> outbound = fixture.outboundBus.stream().test();
+    TestSubscriber<TargetRef> activations = fixture.activationBus.stream().test();
+    try {
+      TargetRef target = new TargetRef("libera", "#ircafe");
+      when(fixture.irc.currentNick("libera")).thenReturn(Optional.of("me"));
+      when(fixture.messageActionCapabilityPolicy.canUnreact("libera")).thenReturn(true);
+      when(fixture.transcripts.hasReactionFromNick(target, "m-42", ":+1:", "me")).thenReturn(true);
+      ArgumentCaptor<ReactionChipActionHandler> handler =
+          ArgumentCaptor.forClass(ReactionChipActionHandler.class);
+      verify(fixture.transcripts).setReactionChipActionHandler(handler.capture());
+
+      onEdt(() -> handler.getValue().onReactionAction(target, "m-42", ":+1:", false));
+
+      verify(fixture.irc).currentNick("libera");
+      activations.assertValue(target);
+      outbound.assertValue("/unreact m-42 :+1:");
+    } finally {
+      outbound.cancel();
+      activations.cancel();
+      fixture.shutdown();
+    }
+  }
 
   @Test
   void setActiveTargetRoutesUiOnlyAndTranscriptViews() throws Exception {
@@ -222,7 +304,8 @@ class ChatDockableWiringSmokeTest {
     NotificationStore notificationStore = new NotificationStore();
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
+    IrcTypingPort typingPort = mock(IrcTypingPort.class);
     ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
     ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
@@ -266,6 +349,7 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    typingPort,
                     mock(Ircv3ReadMarkerFeatureSupport.class),
                     modeRoutingState,
                     serverIsupportState,
@@ -303,11 +387,14 @@ class ChatDockableWiringSmokeTest {
 
     return new Fixture(
         holder.get(),
+        irc,
+        typingPort,
         transcripts,
         serverTree,
         activationBus,
         outboundBus,
         monitorListService,
+        messageActionCapabilityPolicy,
         logViewerExecutor,
         interceptorRefreshExecutor);
   }
@@ -404,11 +491,14 @@ class ChatDockableWiringSmokeTest {
 
   private record Fixture(
       ChatDockable chat,
+      IrcMediatorInteractionPort irc,
+      IrcTypingPort typingPort,
       ChatTranscriptStore transcripts,
       ServerTreeDockable serverTree,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       MonitorListService monitorListService,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ExecutorService logViewerExecutor,
       ExecutorService interceptorRefreshExecutor) {
     void shutdown() throws Exception {

@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.util.Arrays;

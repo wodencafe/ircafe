@@ -4,8 +4,8 @@ import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpSink;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3ChatHistoryRuntimeSupport;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcChatHistoryPort irc;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
   @NonNull private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
@@ -31,7 +31,7 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
 
   @Autowired
   public OutboundChatHistoryCommandService(
-      IrcClientService irc,
+      IrcChatHistoryPort irc,
       TargetCoordinator targetCoordinator,
       Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport,
       OutboundChatHistoryRequestSupport chatHistoryRequestSupport,

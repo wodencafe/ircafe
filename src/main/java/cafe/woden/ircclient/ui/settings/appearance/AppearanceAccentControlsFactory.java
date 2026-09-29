@@ -312,7 +312,9 @@ final class AppearanceAccentControlsFactory {
     private void updateChip() {
       AccentPreview preview = enabled.isSelected() ? overridePreview() : themePreview();
       chip.setText(preview.text());
-      chip.setBackground(preview.background());
+      // This is a swatch, not a LAF-managed surface. Nimbus replaces ColorUIResource
+      // backgrounds while leaving the contrasting text, making the chip unreadable.
+      chip.setBackground(new Color(preview.background().getRGB(), true));
       chip.setForeground(SettingsColorSupport.contrastTextColor(preview.background()));
       chip.setToolTipText(preview.tooltip());
     }

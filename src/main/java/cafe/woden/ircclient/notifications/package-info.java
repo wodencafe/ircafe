@@ -3,6 +3,8 @@
     allowedDependencies = {
       "app::api",
       "config",
+      "config::execution",
+      "config::properties",
       "config::api",
       "model",
       "notify::api",

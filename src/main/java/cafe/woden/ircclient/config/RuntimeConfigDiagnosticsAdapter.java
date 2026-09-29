@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Path;
 import java.util.List;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;

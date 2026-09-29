@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

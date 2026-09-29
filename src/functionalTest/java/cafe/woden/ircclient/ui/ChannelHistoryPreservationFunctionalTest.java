@@ -16,18 +16,19 @@ import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.RuntimeConfigServerTreeAdapter;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
 import cafe.woden.ircclient.config.properties.LogProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.adapter.IrcChatHistoryPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
@@ -237,7 +238,7 @@ class ChannelHistoryPreservationFunctionalTest {
             repo,
             new LogProperties(true, true, false, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
-            irc,
+            new IrcChatHistoryPortAdapter(irc),
             bouncerPlayback,
             ingestBus,
             new Ircv3ChatHistoryFeatureSupport(
@@ -263,7 +264,7 @@ class ChannelHistoryPreservationFunctionalTest {
         new TargetCoordinator(
             ui,
             new UserListStore(),
-            IrcTargetMembershipPort.from(irc),
+            new IrcTargetMembershipPortAdapter(irc),
             bouncerPlayback,
             serverRegistry,
             new RuntimeConfigServerTreeAdapter(runtimeConfig),

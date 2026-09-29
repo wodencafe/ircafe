@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.config;
+package cafe.woden.ircclient.config.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.RuntimeConfigStoreTestFixtures;
 import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import java.nio.file.Path;
 import java.util.Locale;

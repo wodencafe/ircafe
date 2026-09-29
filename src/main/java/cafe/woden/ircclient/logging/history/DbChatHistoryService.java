@@ -2,8 +2,8 @@ package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.config.properties.LogProperties;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcChatHistoryPort;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.LogLine;
 import cafe.woden.ircclient.logging.LogRow;
@@ -67,7 +67,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   // Optional remote fill when DB runs out:
   //  - Prefer IRCv3 CHATHISTORY (soju / servers that support it)
   //  - Fall back to ZNC playback (znc.in/playback) when available
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcChatHistoryPort irc;
   @NonNull private final IrcBouncerPlaybackPort bouncerPlayback;
   @NonNull private final ChatHistoryIngestBus ingestBus;
   @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;

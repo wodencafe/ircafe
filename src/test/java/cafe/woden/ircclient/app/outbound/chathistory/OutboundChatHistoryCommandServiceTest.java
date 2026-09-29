@@ -16,8 +16,9 @@ import cafe.woden.ircclient.app.outbound.TestIrcv3RuntimeSupport;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpSink;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpTargetView;
+import cafe.woden.ircclient.irc.adapter.IrcChatHistoryPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
-import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
@@ -39,7 +40,7 @@ class OutboundChatHistoryCommandServiceTest {
       backendCapabilityPolicy();
   private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport =
       new Ircv3ChatHistoryFeatureSupport(
-          outboundBackendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc), irc);
+          outboundBackendCapabilityPolicy, new IrcNegotiatedFeaturePortAdapter(irc), irc);
   private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport =
       new OutboundChatHistoryRequestSupport(
           ui,
@@ -49,7 +50,7 @@ class OutboundChatHistoryCommandServiceTest {
           chatHistoryFeatureSupport);
   private final OutboundChatHistoryCommandService service =
       new OutboundChatHistoryCommandService(
-          irc,
+          new IrcChatHistoryPortAdapter(irc),
           targetCoordinator,
           chatHistoryFeatureSupport,
           chatHistoryRequestSupport,

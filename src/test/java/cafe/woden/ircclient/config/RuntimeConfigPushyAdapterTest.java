@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import cafe.woden.ircclient.config.properties.PushyProperties;
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import org.junit.jupiter.api.Test;
 
 class RuntimeConfigPushyAdapterTest {

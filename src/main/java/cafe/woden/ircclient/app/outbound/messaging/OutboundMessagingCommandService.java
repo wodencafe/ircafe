@@ -3,8 +3,9 @@ package cafe.woden.ircclient.app.outbound.messaging;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcMessagingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -20,7 +21,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public final class OutboundMessagingCommandService {
 
-  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcMessagingPort irc;
+  @NonNull private final IrcCurrentNickPort currentNickPort;
   @NonNull private final IrcEchoCapabilityPort echoCapabilityPort;
   @NonNull private final OutboundMultilineMessageSupport outboundMultilineMessageSupport;
   @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
@@ -107,7 +109,7 @@ public final class OutboundMessagingCommandService {
     }
 
     if (shouldUseLocalEcho(at.serverId())) {
-      String me = irc.currentNick(at.serverId()).orElse("me");
+      String me = currentNickPort.currentNick(at.serverId()).orElse("me");
       ui.appendAction(at, me, a, true);
     }
 
@@ -145,7 +147,7 @@ public final class OutboundMessagingCommandService {
     m = plan.payload();
 
     boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = currentNickPort.currentNick(target.serverId()).orElse("me");
     final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
     if (useLocalEcho) {
       pendingEntry = null;
@@ -214,7 +216,7 @@ public final class OutboundMessagingCommandService {
                         String.valueOf(err))));
 
     if (shouldUseLocalEcho(echoTarget.serverId())) {
-      String me = irc.currentNick(echoTarget.serverId()).orElse("me");
+      String me = currentNickPort.currentNick(echoTarget.serverId()).orElse("me");
       ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
     }
   }

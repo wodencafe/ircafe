@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
