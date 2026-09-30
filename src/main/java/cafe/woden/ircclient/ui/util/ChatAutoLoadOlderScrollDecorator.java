@@ -48,6 +48,7 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
   private void onWheel(MouseWheelEvent e) {
     try {
       if (e == null) return;
+      if (e.isControlDown()) return;
       if (e.getWheelRotation() >= 0) return;
 
       JScrollBar bar = scroll.getVerticalScrollBar();
