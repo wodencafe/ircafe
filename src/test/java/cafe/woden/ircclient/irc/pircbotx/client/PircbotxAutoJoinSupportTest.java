@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
+import org.pircbotx.UserChannelDao;
 import org.pircbotx.hooks.events.ServerResponseEvent;
 import org.pircbotx.output.OutputIRC;
 
@@ -25,6 +26,7 @@ class PircbotxAutoJoinSupportTest {
             .buildConfiguration();
     when(bot.getConfiguration()).thenReturn(config);
     when(bot.isConnected()).thenReturn(true);
+    when(bot.getUserChannelDao()).thenReturn(mock(UserChannelDao.class));
     OutputIRC output = mock(OutputIRC.class);
     when(bot.sendIRC()).thenReturn(output);
     CountDownLatch joined = new CountDownLatch(2);
@@ -50,6 +52,41 @@ class PircbotxAutoJoinSupportTest {
       support.maybeStart(bot);
       verify(output, times(1)).joinChannel("#one");
       verify(output, times(1)).joinChannel("#two key");
+    }
+  }
+
+  @Test
+  void skipsAlreadyJoinedChannelsIncludingKeyedEntriesButStillJoinsMissingChannels()
+      throws Exception {
+    PircBotX bot = mock(PircBotX.class);
+    when(bot.getConfiguration())
+        .thenReturn(
+            new Configuration.Builder()
+                .setName("probe")
+                .addServer("localhost", 6667)
+                .buildConfiguration());
+    when(bot.isConnected()).thenReturn(true);
+    UserChannelDao dao = mock(UserChannelDao.class);
+    when(bot.getUserChannelDao()).thenReturn(dao);
+    when(dao.containsChannel("#one")).thenReturn(true);
+    when(dao.containsChannel("#two")).thenReturn(true);
+    OutputIRC output = mock(OutputIRC.class);
+    when(bot.sendIRC()).thenReturn(output);
+    CountDownLatch joined = new CountDownLatch(1);
+    doAnswer(
+            invocation -> {
+              joined.countDown();
+              return null;
+            })
+        .when(output)
+        .joinChannel("#three secret-key");
+    try (PircbotxAutoJoinSupport support =
+        new PircbotxAutoJoinSupport(
+            "test", List.of("#one", "#two old-key", "#three secret-key"), 0)) {
+      support.onServerResponse(response(bot, 376));
+      assertTrue(joined.await(2, TimeUnit.SECONDS));
+      verify(output).joinChannel("#three secret-key");
+      verifyNoMoreInteractions(output);
     }
   }
 

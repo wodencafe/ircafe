@@ -18,6 +18,56 @@ import org.pircbotx.PircBotX;
 
 class PircbotxPacedOutputTest {
   @Test
+  void automaticJoinQueryOverloadLeavesReaderFreeAndShutdownCancelsWaitingAndQueuedQueries()
+      throws Exception {
+    RecordingBot bot = new RecordingBot();
+    CountDownLatch waiting = new CountDownLatch(1);
+    CountDownLatch cancelled = new CountDownLatch(1);
+    PircbotxPacedOutput output =
+        new PircbotxPacedOutput(
+            bot,
+            new IrcProperties.FloodProtection(10_000, 0),
+            () -> 0L,
+            nanos -> {
+              waiting.countDown();
+              try {
+                new CountDownLatch(1).await();
+              } finally {
+                cancelled.countDown();
+              }
+            });
+    try {
+      output.rawLine("JOIN #one");
+      output.rawLine("JOIN #two");
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(1),
+          () ->
+              output.deferJoinQueries(
+                  "#one",
+                  () -> {
+                    output.rawLine("WHO #one");
+                    output.rawLine("MODE #one");
+                  }));
+      assertTrue(waiting.await(1, TimeUnit.SECONDS));
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(2),
+          () ->
+              output.deferJoinQueries(
+                  "#two",
+                  () -> {
+                    // Exceed the bounded queue while the worker is waiting for a flood credit.
+                    for (int i = 0; i < 2048; i++) output.rawLine("WHO #two");
+                  }));
+      output.rawLine("PONG keepalive");
+      assertEquals(List.of("JOIN #one", "JOIN #two", "PONG keepalive"), bot.lines);
+    } finally {
+      output.close();
+    }
+    assertTrue(cancelled.await(1, TimeUnit.SECONDS));
+    assertEquals(3, bot.lines.size(), "shutdown must discard both waiting and queued queries");
+  }
+
+  @Test
   void twoCommandBurstRebuildsGraduallyAndIdleCreditIsCapped() {
     RecordingBot bot = new RecordingBot();
     AtomicLong clock = new AtomicLong();
