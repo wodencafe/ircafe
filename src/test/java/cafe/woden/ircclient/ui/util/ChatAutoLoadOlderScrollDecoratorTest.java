@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.util;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
@@ -16,6 +17,29 @@ import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
 class ChatAutoLoadOlderScrollDecoratorTest {
+
+  @Test
+  void ctrlWheelDoesNotTriggerHistoryLoads() throws Exception {
+    onEdt(
+        () -> {
+          JScrollPane scroll = new JScrollPane(new JTextPane());
+          LoadOlderMessagesComponent control = new LoadOlderMessagesComponent();
+          control.setState(LoadOlderMessagesComponent.State.READY);
+          AtomicInteger loads = new AtomicInteger();
+          control.setOnLoadRequested(
+              () -> {
+                loads.incrementAndGet();
+                return true;
+              });
+          try (ChatAutoLoadOlderScrollDecorator ignored =
+              ChatAutoLoadOlderScrollDecorator.decorate(scroll, control)) {
+            fireWheel(scroll, -1, InputEvent.CTRL_DOWN_MASK);
+            assertEquals(0, loads.get());
+            fireWheel(scroll, -1);
+            assertEquals(1, loads.get(), "ordinary scrolling should still load history");
+          }
+        });
+  }
 
   @Test
   void upwardWheelAtTopDebouncesLoadRequests() throws Exception {
@@ -101,12 +125,16 @@ class ChatAutoLoadOlderScrollDecoratorTest {
   }
 
   private static void fireWheel(JScrollPane scroll, int rotation) {
+    fireWheel(scroll, rotation, 0);
+  }
+
+  private static void fireWheel(JScrollPane scroll, int rotation, int modifiers) {
     MouseWheelEvent event =
         new MouseWheelEvent(
             scroll,
             MouseEvent.MOUSE_WHEEL,
             System.currentTimeMillis(),
-            0,
+            modifiers,
             10,
             10,
             0,

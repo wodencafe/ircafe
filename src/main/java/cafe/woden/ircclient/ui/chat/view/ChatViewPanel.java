@@ -7,6 +7,7 @@ import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.settings.SettingsRangeSupport;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.ChatAutoLoadOlderScrollDecorator;
@@ -21,13 +22,16 @@ import cafe.woden.ircclient.ui.util.UiFontKeys;
 import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.List;
@@ -50,7 +54,18 @@ import javax.swing.text.Utilities;
 public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   protected final WrapTextPane chat = new WrapTextPane();
-  protected final JScrollPane scroll = new JScrollPane(chat);
+  protected final JScrollPane scroll =
+      new JScrollPane(chat) {
+        @Override
+        protected void processMouseWheelEvent(MouseWheelEvent event) {
+          // Intercept before the UI delegate and history helpers can scroll or fetch history.
+          if (!zoomChatFont(event)) {
+            super.processMouseWheelEvent(event);
+          }
+        }
+      };
+
+  private double zoomWheelAccumulator;
 
   private final CloseableScope decorators = new CloseableScope();
 
@@ -75,8 +90,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     applyChatBackground();
     decorators.add(ViewportWrapRevalidateDecorator.decorate(scroll.getViewport(), chat));
-    if (this.settingsBus != null) {
-      applySettings(this.settingsBus.get());
+    UiSettings initialSettings = this.settingsBus != null ? this.settingsBus.get() : null;
+    if (initialSettings != null) {
+      applySettings(initialSettings);
     } else {
       chat.setFont(defaultMonospaceChatFont());
     }
@@ -245,6 +261,48 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     }
     chat.revalidate();
     chat.repaint();
+  }
+
+  private boolean zoomChatFont(MouseWheelEvent event) {
+    Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+    if (!event.isControlDown()
+        || event.isAltDown()
+        || event.isMetaDown()
+        || focusOwner == null
+        || !SwingUtilities.isDescendingFrom(focusOwner, this)) {
+      zoomWheelAccumulator = 0;
+      return false;
+    }
+
+    event.consume();
+    double rotation = event.getPreciseWheelRotation();
+    if (!Double.isFinite(rotation) || rotation == 0) return true;
+    // Fractional touchpad events accumulate to a whole point; reversing direction starts fresh.
+    if (Math.signum(rotation) != Math.signum(zoomWheelAccumulator)) {
+      zoomWheelAccumulator = 0;
+    }
+    zoomWheelAccumulator += rotation;
+    int steps = (int) zoomWheelAccumulator;
+    if (steps == 0) return true;
+    zoomWheelAccumulator -= steps;
+
+    long requestedSize = (long) chat.getFont().getSize() - steps;
+    int size =
+        SettingsRangeSupport.normalizeFontSize(
+            (int) Math.clamp(requestedSize, Integer.MIN_VALUE, Integer.MAX_VALUE));
+    if (size != chat.getFont().getSize()) {
+      UiSettings settings = settingsBus != null ? settingsBus.get() : null;
+      if (settings != null) {
+        UiSettings zoomed = settings.withChatFontSize(size);
+        settingsBus.set(zoomed);
+        applySettings(zoomed);
+      } else {
+        chat.setFont(chat.getFont().deriveFont((float) size));
+        chat.revalidate();
+        chat.repaint();
+      }
+    }
+    return true;
   }
 
   private Font defaultMonospaceChatFont() {
