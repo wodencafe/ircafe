@@ -4,17 +4,119 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
 
 class PircbotxPacedOutputTest {
   @Test
-  void ordinaryCommandsShareSpacingWithoutAccumulatingIdleBurstCredit() throws Exception {
+  void twoCommandBurstRebuildsGraduallyAndIdleCreditIsCapped() {
+    RecordingBot bot = new RecordingBot();
+    AtomicLong clock = new AtomicLong();
+    List<Long> waits = new ArrayList<>();
+    long interval = TimeUnit.MILLISECONDS.toNanos(1500);
+    PircbotxPacedOutput output =
+        new PircbotxPacedOutput(
+            bot,
+            IrcProperties.FloodProtection.defaults(),
+            clock::get,
+            nanos -> {
+              waits.add(nanos);
+              clock.addAndGet(nanos);
+            });
+
+    output.rawLine("@+typing=active TAGMSG #one");
+    assertTrue(waits.isEmpty(), "first command must not wait");
+    output.rawLine("PRIVMSG #one :hello");
+    assertTrue(waits.isEmpty(), "typing and a message may share a two-command burst");
+
+    clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(600));
+    output.rawLine("WHO #one");
+    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900)), waits);
+    output.rawLine("PRIVMSG #one :sustained traffic");
+    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900), interval), waits);
+
+    clock.addAndGet(10 * interval);
+    waits.clear();
+    output.rawLine("PRIVMSG #one :after idle");
+    assertTrue(waits.isEmpty(), "first command after idle must not wait");
+    output.rawLine("WHO #one");
+    assertTrue(waits.isEmpty(), "idle replenishes both burst credits");
+    output.rawLine("JOIN #two");
+    assertEquals(List.of(interval), waits, "idle must not bank more than two credits");
+    assertEquals(7, bot.lines.size());
+  }
+
+  @Test
+  void concurrentCommandsShareOneBurstAllowance() throws Exception {
+    RecordingBot bot = new RecordingBot();
+    AtomicLong clock = new AtomicLong();
+    List<Long> waits = new CopyOnWriteArrayList<>();
+    long interval = TimeUnit.MILLISECONDS.toNanos(1500);
+    PircbotxPacedOutput output =
+        new PircbotxPacedOutput(
+            bot,
+            IrcProperties.FloodProtection.defaults(),
+            clock::get,
+            nanos -> {
+              waits.add(nanos);
+              clock.addAndGet(nanos);
+            });
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      CountDownLatch start = new CountDownLatch(1);
+      List<Future<?>> sends = new ArrayList<>();
+      for (int i = 0; i < 8; i++) {
+        String line = "PRIVMSG #one :message " + i;
+        sends.add(
+            executor.submit(
+                () -> {
+                  start.await();
+                  output.rawLine(line);
+                  return null;
+                }));
+      }
+      start.countDown();
+      for (Future<?> send : sends) send.get(2, TimeUnit.SECONDS);
+    }
+    assertEquals(8, bot.lines.size());
+    assertEquals(List.of(interval, interval, interval, interval, interval, interval), waits);
+  }
+
+  @Test
+  void oversleepCannotRebuildMoreThanTwoBurstCredits() {
+    RecordingBot bot = new RecordingBot();
+    AtomicLong clock = new AtomicLong();
+    List<Long> waits = new ArrayList<>();
+    long interval = TimeUnit.MILLISECONDS.toNanos(100);
+    PircbotxPacedOutput output =
+        new PircbotxPacedOutput(
+            bot,
+            new IrcProperties.FloodProtection(100, 0),
+            clock::get,
+            nanos -> {
+              waits.add(nanos);
+              clock.addAndGet(nanos + 3 * interval);
+            });
+
+    output.rawLine("PRIVMSG #one :first");
+    output.rawLine("PRIVMSG #one :second");
+    output.rawLine("PRIVMSG #one :third");
+    output.rawLine("PRIVMSG #one :fourth");
+    output.rawLine("PRIVMSG #one :fifth");
+    assertEquals(List.of(interval, interval), waits);
+    assertEquals(5, bot.lines.size());
+  }
+
+  @Test
+  void ordinaryCommandsShareTheBurstBudgetAndThenWaitForCredit() throws Exception {
     RecordingBot bot = new RecordingBot();
     PircbotxPacedOutput output =
         new PircbotxPacedOutput(bot, new IrcProperties.FloodProtection(100, 0));
@@ -24,9 +126,7 @@ class PircbotxPacedOutputTest {
     output.rawLine("WHO #one");
     output.rawLine("JOIN #two");
     assertEquals(4, bot.lines.size());
-    for (int i = 1; i < bot.times.size(); i++) {
-      assertTrue(bot.times.get(i) - bot.times.get(i - 1) >= TimeUnit.MILLISECONDS.toNanos(95));
-    }
+    assertTrue(bot.times.get(3) - bot.times.get(1) >= TimeUnit.MILLISECONDS.toNanos(95));
   }
 
   @Test
@@ -36,25 +136,28 @@ class PircbotxPacedOutputTest {
     PircbotxPacedOutput output =
         new PircbotxPacedOutput(bot, new IrcProperties.FloodProtection(10_000, 0));
     output.rawLine("JOIN #one");
+    output.rawLine("JOIN #two");
     CountDownLatch started = new CountDownLatch(1);
     Thread pending =
         Thread.startVirtualThread(
             () -> {
               started.countDown();
-              assertThrows(IllegalStateException.class, () -> output.rawLine("JOIN #two"));
+              assertThrows(IllegalStateException.class, () -> output.rawLine("JOIN #three"));
             });
     try {
       assertTrue(started.await(1, TimeUnit.SECONDS));
       output.rawLine("PONG probe");
       output.rawLine("AUTHENTICATE +");
       output.rawLineNow("QUIT :bye");
-      assertEquals(List.of("JOIN #one", "PONG probe", "AUTHENTICATE +", "QUIT :bye"), bot.lines);
+      assertEquals(
+          List.of("JOIN #one", "JOIN #two", "PONG probe", "AUTHENTICATE +", "QUIT :bye"),
+          bot.lines);
     } finally {
       pending.interrupt();
       pending.join(1000);
     }
     assertFalse(pending.isAlive());
-    assertEquals(4, bot.lines.size());
+    assertEquals(5, bot.lines.size());
   }
 
   @Test
@@ -63,9 +166,10 @@ class PircbotxPacedOutputTest {
     PircbotxPacedOutput output =
         new PircbotxPacedOutput(bot, new IrcProperties.FloodProtection(100, 0));
     output.rawLine("JOIN #one");
+    output.rawLine("JOIN #two");
     bot.connected = false;
-    assertThrows(IllegalArgumentException.class, () -> output.rawLine("JOIN #two"));
-    assertEquals(List.of("JOIN #one"), bot.lines);
+    assertThrows(IllegalArgumentException.class, () -> output.rawLine("JOIN #three"));
+    assertEquals(List.of("JOIN #one", "JOIN #two"), bot.lines);
   }
 
   @Test

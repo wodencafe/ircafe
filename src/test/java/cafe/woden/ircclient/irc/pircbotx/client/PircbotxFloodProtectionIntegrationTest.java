@@ -102,13 +102,16 @@ class PircbotxFloodProtectionIntegrationTest {
             assertNotNull(first);
             assertEquals("JOIN #one", first.line().trim());
             assertTrue(first.at() - server.welcomeAt >= TimeUnit.MILLISECONDS.toNanos(250));
-            // PONG and inbound callbacks must complete before the next 2-second join slot.
+            Sent second = server.joins.poll(1, TimeUnit.SECONDS);
+            assertNotNull(second, "the initial two-command burst must not wait for refill");
+            assertEquals("JOIN #two secret-key", second.line().trim());
+            // PONG and inbound callbacks must complete while the exhausted burst budget refills.
             assertTrue(server.pong.await(1, TimeUnit.SECONDS));
             assertTrue(notice.await(1, TimeUnit.SECONDS));
-            Sent second = server.joins.poll(5, TimeUnit.SECONDS);
-            assertNotNull(second);
-            assertEquals("JOIN #two secret-key", second.line().trim());
-            assertTrue(second.at() - first.at() >= TimeUnit.MILLISECONDS.toNanos(1900));
+            Sent third = server.joins.poll(5, TimeUnit.SECONDS);
+            assertNotNull(third);
+            assertEquals("JOIN #three", third.line().trim());
+            assertTrue(third.at() - first.at() >= TimeUnit.MILLISECONDS.toNanos(1900));
           } finally {
             bot.close();
             runner.join(3000);

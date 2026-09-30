@@ -162,6 +162,13 @@ final class MessageInputTypingSupport {
     emitTypingState("done");
   }
 
+  /** An IRC message ends typing remotely; reset locally without a redundant TAGMSG. */
+  void onMessageSubmitted() {
+    typingPauseTimer.stop();
+    lastActiveSentAtMs = 0L;
+    lastEmittedTypingState = "done";
+  }
+
   void onSettingsApplied(UiSettings s) {
     if (s == null) return;
     boolean sendEnabledNow = s.typingIndicatorsEnabled();

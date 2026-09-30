@@ -295,7 +295,7 @@ irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"
 
-    # Native IRC: enabled by default, with per-connection pacing and conservative warm-up.
+    # Native IRC: enabled by default, with a two-command burst cap and gradual per-connection refill.
     # Also editable in Preferences > Network > Flood protection; reconnect to apply.
     floodProtection:
       enabled: true
