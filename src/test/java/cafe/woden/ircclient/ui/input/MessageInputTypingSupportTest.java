@@ -179,6 +179,51 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
+  void messageSubmissionResetsTypingWithoutDoneAndNextDraftEmitsActive() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          try {
+            f.support.setOnTypingStateChanged(states::add);
+            f.input.setText("hello");
+            f.support.onUserEdit(false);
+            f.support.onMessageSubmitted();
+            f.input.setText("");
+            f.support.onUserEdit(true);
+            f.support.flushTypingDone();
+            assertEquals(List.of("active"), states);
+
+            f.input.setText("another message");
+            f.support.onUserEdit(false);
+            assertEquals(List.of("active", "active"), states);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
+  void clearingDraftWithoutSendingEmitsDoneOnce() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          try {
+            f.support.setOnTypingStateChanged(states::add);
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.input.setText("");
+            f.support.onUserEdit(false);
+            f.support.flushTypingDone();
+            assertEquals(List.of("active", "done"), states);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
   void meCommandDraftEmitsActiveTypingState() throws Exception {
     Fixture f = newFixture();
     List<String> states = new ArrayList<>();

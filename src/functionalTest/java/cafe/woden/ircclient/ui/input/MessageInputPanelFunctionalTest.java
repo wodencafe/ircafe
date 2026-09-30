@@ -21,6 +21,7 @@ import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.FocusEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -130,6 +131,89 @@ class MessageInputPanelFunctionalTest {
       subscription.dispose();
       flushEdt();
     }
+  }
+
+  @Test
+  void sendingIrcMessagesAndActionsDoesNotEmitTypingDoneEvenWhenSendTakesFocus() throws Exception {
+    onEdt(
+        () -> {
+          MessageInputPanel panel =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          List<String> events = new CopyOnWriteArrayList<>();
+          panel.setOnTypingStateChanged(state -> events.add("typing:" + state));
+          Disposable subscription =
+              panel.outboundMessages().subscribe(line -> events.add("message:" + line));
+          try {
+            JTextComponent input = findFirst(panel, JTextComponent.class);
+            JButton send = findNamedButton(panel, "messageSendButton");
+            assertNotNull(input);
+            assertNotNull(send);
+            for (String message : List.of("hello", "/me waves")) {
+              events.clear();
+              input.setText(message);
+              FocusEvent focusToSend = new FocusEvent(input, FocusEvent.FOCUS_LOST, false, send);
+              for (var listener : input.getFocusListeners()) listener.focusLost(focusToSend);
+              send.doClick();
+              panel.flushTypingDone();
+              assertEquals(List.of("typing:active", "message:" + message), events);
+              assertTrue(input.getText().isEmpty());
+            }
+          } finally {
+            subscription.dispose();
+            panel.shutdownResources();
+          }
+        });
+  }
+
+  @Test
+  void leavingDraftPausesAndClearingItEndsTyping() throws Exception {
+    onEdt(
+        () -> {
+          MessageInputPanel panel =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          List<String> states = new CopyOnWriteArrayList<>();
+          panel.setOnTypingStateChanged(states::add);
+          try {
+            JTextComponent input = findFirst(panel, JTextComponent.class);
+            assertNotNull(input);
+            input.setText("unfinished draft");
+            FocusEvent focusOutside =
+                new FocusEvent(input, FocusEvent.FOCUS_LOST, false, new JButton());
+            for (var listener : input.getFocusListeners()) listener.focusLost(focusOutside);
+            assertEquals(List.of("active", "paused"), states);
+            input.setText("");
+            assertEquals(List.of("active", "paused", "done"), states);
+          } finally {
+            panel.shutdownResources();
+          }
+        });
+  }
+
+  @Test
+  void matrixMessageSubmissionStillSendsExplicitTypingDone() throws Exception {
+    onEdt(
+        () -> {
+          MessageInputPanel panel =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          List<String> events = new CopyOnWriteArrayList<>();
+          panel.setOnTypingStateChanged(state -> events.add("typing:" + state));
+          panel.setBackendUiProfile(
+              new BackendUiProfile("matrix", BackendUiContext.fromMatrixServerPredicate(MATRIX)));
+          Disposable subscription =
+              panel.outboundMessages().subscribe(line -> events.add("message:" + line));
+          try {
+            JTextComponent input = findFirst(panel, JTextComponent.class);
+            JButton send = findNamedButton(panel, "messageSendButton");
+            assertNotNull(input);
+            assertNotNull(send);
+            input.setText("hello");
+            send.doClick();
+            assertEquals(List.of("typing:active", "typing:done", "message:hello"), events);
+          } finally {
+            subscription.dispose();
+            panel.shutdownResources();
+          }
+        });
   }
 
   @Test

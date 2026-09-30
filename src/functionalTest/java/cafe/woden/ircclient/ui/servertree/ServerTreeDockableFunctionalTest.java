@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,9 @@ import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.awt.Dimension;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -35,12 +39,55 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 import org.junit.jupiter.api.Test;
 
 class ServerTreeDockableFunctionalTest {
+
+  @Test
+  void autoJoinCatalogUpdatePreservesServerRootSelectionAndScrollPosition() throws Exception {
+    IrcProperties.Server initialServer = server("libera", IrcProperties.Server.Backend.IRC);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    PublishProcessor<List<ServerEntry>> updates = PublishProcessor.create();
+    when(serverCatalog.entries()).thenReturn(List.of(ServerEntry.persistent(initialServer)));
+    when(serverCatalog.updates()).thenReturn(updates);
+
+    ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+    AtomicReference<DefaultMutableTreeNode> selectedServerNode = new AtomicReference<>();
+
+    try {
+      onEdt(
+          () -> {
+            for (int i = 0; i < 40; i++) {
+              dockable.ensureNode(new TargetRef("libera", "#channel-" + i));
+            }
+            DefaultMutableTreeNode serverNode = serverRootNode(dockable, "libera");
+            selectedServerNode.set(serverNode);
+            field(dockable, "tree", JTree.class)
+                .setSelectionPath(new TreePath(serverNode.getPath()));
+            scrollTreeTo(dockable, 160);
+          });
+
+      updates.onNext(
+          List.of(ServerEntry.persistent(initialServer.withAutoJoin(List.of("#new-channel")))));
+      flushEdt();
+
+      assertSame(
+          selectedServerNode.get(),
+          onEdtCall(
+              () ->
+                  field(dockable, "tree", JTree.class).getSelectionPath().getLastPathComponent()));
+      assertEquals(160, treeScrollPosition(dockable).y);
+    } finally {
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
 
   @Test
   void ensureAndSelectTargetPublishesSelection() throws Exception {
@@ -397,6 +444,28 @@ class ServerTreeDockableFunctionalTest {
     return out.get();
   }
 
+  private static <T> T field(Object target, String name, Class<T> type) throws Exception {
+    Field field = target.getClass().getDeclaredField(name);
+    field.setAccessible(true);
+    return type.cast(field.get(target));
+  }
+
+  private static void scrollTreeTo(ServerTreeDockable dockable, int y) throws Exception {
+    JTree tree = field(dockable, "tree", JTree.class);
+    JScrollPane scroll = field(dockable, "treeScroll", JScrollPane.class);
+    scroll.setPreferredSize(new Dimension(220, 120));
+    scroll.setSize(220, 120);
+    scroll.doLayout();
+    tree.setSize(tree.getPreferredSize());
+    scroll.getViewport().setViewSize(tree.getPreferredSize());
+    scroll.getViewport().setViewPosition(new Point(0, y));
+  }
+
+  private static Point treeScrollPosition(ServerTreeDockable dockable) throws Exception {
+    return onEdtCall(
+        () -> field(dockable, "treeScroll", JScrollPane.class).getViewport().getViewPosition());
+  }
+
   @SuppressWarnings("unchecked")
   private static JPopupMenu popupForTarget(ServerTreeDockable dockable, TargetRef ref)
       throws Exception {
@@ -416,6 +485,19 @@ class ServerTreeDockableFunctionalTest {
   @SuppressWarnings("unchecked")
   private static JPopupMenu popupForServerRoot(ServerTreeDockable dockable, String serverId)
       throws Exception {
+    DefaultMutableTreeNode serverNode = serverRootNode(dockable, serverId);
+    if (serverNode == null) return null;
+
+    Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
+    contextMenuBuilderField.setAccessible(true);
+    Function<TreePath, JPopupMenu> contextMenuBuilder =
+        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
+    return contextMenuBuilder.apply(new TreePath(serverNode.getPath()));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static DefaultMutableTreeNode serverRootNode(ServerTreeDockable dockable, String serverId)
+      throws Exception {
     Field serversField = ServerTreeDockable.class.getDeclaredField("servers");
     serversField.setAccessible(true);
     Map<String, ?> servers = (Map<String, ?>) serversField.get(dockable);
@@ -424,13 +506,7 @@ class ServerTreeDockableFunctionalTest {
 
     Field serverNodeField = serverNodes.getClass().getDeclaredField("serverNode");
     serverNodeField.setAccessible(true);
-    DefaultMutableTreeNode serverNode = (DefaultMutableTreeNode) serverNodeField.get(serverNodes);
-
-    Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
-    contextMenuBuilderField.setAccessible(true);
-    Function<TreePath, JPopupMenu> contextMenuBuilder =
-        (Function<TreePath, JPopupMenu>) contextMenuBuilderField.get(dockable);
-    return contextMenuBuilder.apply(new TreePath(serverNode.getPath()));
+    return (DefaultMutableTreeNode) serverNodeField.get(serverNodes);
   }
 
   private static void invokeAddServerRoot(ServerTreeDockable dockable, String serverId)
