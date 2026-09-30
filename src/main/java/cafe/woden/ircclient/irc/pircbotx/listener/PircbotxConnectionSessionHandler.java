@@ -41,8 +41,9 @@ final class PircbotxConnectionSessionHandler {
   }
 
   void onConnect(ConnectEvent event) {
-    recordInboundActivity();
     PircBotX bot = event.getBot();
+    if (isSupersededSession(bot)) return;
+    recordInboundActivity();
     conn.resetReconnectAttempts();
     conn.clearManualDisconnect();
     serverResponses.clear();
@@ -55,6 +56,7 @@ final class PircbotxConnectionSessionHandler {
   }
 
   void onDisconnect(DisconnectEvent event) {
+    if (isSupersededSession(event.getBot())) return;
     serverResponses.clear();
     String override = conn.takeDisconnectReasonOverride();
     Exception ex = event.getDisconnectException();
@@ -67,10 +69,17 @@ final class PircbotxConnectionSessionHandler {
     chatHistoryBatches.clear();
 
     emit.accept(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
-    boolean suppressReconnect = conn.consumeSuppressAutoReconnectOnce();
-    if (!conn.manualDisconnectRequested() && !suppressReconnect) {
-      reconnectScheduler.accept(conn, reason);
+    if (conn.claimReconnectFor(event.getBot())) {
+      boolean suppressReconnect = conn.consumeSuppressAutoReconnectOnce();
+      if (!conn.manualDisconnectRequested() && !suppressReconnect) {
+        reconnectScheduler.accept(conn, reason);
+      }
     }
+  }
+
+  private boolean isSupersededSession(PircBotX bot) {
+    PircBotX current = conn.currentBot();
+    return current != null && current != bot;
   }
 
   private static String disconnectReason(String override, Exception ex) {
