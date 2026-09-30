@@ -14,6 +14,8 @@ import cafe.woden.ircclient.notifications.api.HighlightEvent;
 import cafe.woden.ircclient.notifications.api.IrcEventRuleEvent;
 import cafe.woden.ircclient.notifications.api.RuleMatchEvent;
 import io.reactivex.rxjava3.core.Flowable;
+import java.awt.Rectangle;
+import java.awt.event.MouseEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -27,12 +29,78 @@ import java.util.function.BooleanSupplier;
 import javax.swing.JMenuItem;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
+import javax.swing.table.JTableHeader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class NotificationsPanelFunctionalTest {
 
   @TempDir Path tempDir;
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 2, 3, 4})
+  void clickingEachColumnHeaderSortsBothDirectionsAndKeepsSortOnRefresh(int column)
+      throws Exception {
+    String serverId = "libera";
+    HighlightEvent highlight =
+        new HighlightEvent(
+            serverId,
+            "#gamma",
+            "charlie",
+            "charlie: ping",
+            Instant.parse("2026-03-02T01:00:00Z"),
+            "msg-highlight");
+    RuleMatchEvent ruleMatch =
+        new RuleMatchEvent(
+            serverId,
+            "#alpha",
+            "alice",
+            "Alpha rule",
+            "alice: deploy",
+            Instant.parse("2026-03-01T23:00:00Z"),
+            "msg-rule");
+    IrcEventRuleEvent ircEvent =
+        new IrcEventRuleEvent(
+            serverId,
+            "#beta",
+            "bob",
+            "Zulu event",
+            "bob: joined",
+            Instant.parse("2026-02-28T23:00:00Z"),
+            "");
+    NotificationStore store = mock(NotificationStore.class);
+    when(store.changes()).thenReturn(Flowable.never());
+    when(store.listAll(serverId)).thenReturn(List.of(highlight));
+    when(store.listAllRuleMatches(serverId)).thenReturn(List.of(ruleMatch));
+    when(store.listAllIrcEventRules(serverId)).thenReturn(List.of(ircEvent));
+
+    NotificationsPanel panel = onEdtCall(() -> new NotificationsPanel(store, serverId, null));
+    JTable table = readField(panel, "table", JTable.class);
+    int[][] ascendingModelRows = {{2, 1, 0}, {1, 2, 0}, {1, 2, 0}, {0, 1, 2}, {1, 2, 0}};
+    try {
+      onEdt(
+          () -> {
+            assertEquals("charlie", table.getValueAt(0, 2));
+            clickColumnHeader(table, column);
+            for (int row = 0; row < 3; row++) {
+              assertEquals(ascendingModelRows[column][row], table.convertRowIndexToModel(row));
+            }
+            clickColumnHeader(table, column);
+            for (int row = 0; row < 3; row++) {
+              assertEquals(ascendingModelRows[column][2 - row], table.convertRowIndexToModel(row));
+            }
+            panel.refresh();
+            for (int row = 0; row < 3; row++) {
+              assertEquals(ascendingModelRows[column][2 - row], table.convertRowIndexToModel(row));
+            }
+          });
+    } finally {
+      onEdt(panel::close);
+      flushEdt();
+    }
+  }
 
   @Test
   void contextMenuActionsAndCsvExportWorkForNotificationRows() throws Exception {
@@ -93,18 +161,22 @@ class NotificationsPanelFunctionalTest {
             assertEquals("Topic changed", String.valueOf(table.getValueAt(0, 3)));
             assertEquals("Rule A", String.valueOf(table.getValueAt(1, 3)));
             assertEquals("(mention)", String.valueOf(table.getValueAt(2, 3)));
+            clickColumnHeader(table, 2);
+            assertEquals("alice", table.getValueAt(0, 2));
+            assertEquals("bob", table.getValueAt(1, 2));
+            assertEquals("server", table.getValueAt(2, 2));
           });
 
-      onEdt(() -> table.setRowSelectionInterval(0, 0));
+      onEdt(() -> table.setRowSelectionInterval(2, 2));
       waitFor(() -> onEdtBoolean(() -> !jumpToMessageMenuItem.isEnabled()), Duration.ofSeconds(2));
 
-      onEdt(() -> table.setRowSelectionInterval(1, 1));
+      onEdt(() -> table.setRowSelectionInterval(0, 0));
       waitFor(() -> onEdtBoolean(jumpToMessageMenuItem::isEnabled), Duration.ofSeconds(2));
       onEdt(jumpToMessageMenuItem::doClick);
       assertEquals(new TargetRef(serverId, "#ircafe"), jumpedTarget.get());
-      assertEquals("msg-rule", jumpedMessageId.get());
+      assertEquals("msg-highlight", jumpedMessageId.get());
 
-      onEdt(() -> table.setRowSelectionInterval(1, 2));
+      onEdt(() -> table.setRowSelectionInterval(0, 1));
       waitFor(() -> onEdtBoolean(clearSelectedMenuItem::isEnabled), Duration.ofSeconds(2));
       onEdt(clearSelectedMenuItem::doClick);
       verify(store)
@@ -122,23 +194,40 @@ class NotificationsPanelFunctionalTest {
       verify(store).clearServer(serverId);
 
       Path selectedOut = tempDir.resolve("notifications-selected.csv");
-      onEdt(() -> writeCsv(panel, selectedOut, List.of(1)));
+      onEdt(() -> writeCsv(panel, selectedOut, List.of(0)));
       List<String> selectedLines = Files.readAllLines(selectedOut);
       assertEquals(2, selectedLines.size());
       assertTrue(selectedLines.getFirst().contains("Time"));
-      assertTrue(selectedLines.getLast().contains("Rule A"));
-      assertTrue(selectedLines.getLast().contains("deploy now"));
+      assertTrue(selectedLines.getLast().contains("(mention)"));
+      assertTrue(selectedLines.getLast().contains("alice: ping"));
 
       Path allOut = tempDir.resolve("notifications-all.csv");
       onEdt(() -> writeCsv(panel, allOut, List.of(0, 1, 2)));
       List<String> allLines = Files.readAllLines(allOut);
       assertEquals(4, allLines.size());
-      assertTrue(allLines.stream().anyMatch(line -> line.contains("Topic changed")));
-      assertTrue(allLines.stream().anyMatch(line -> line.contains("alice: ping")));
+      assertTrue(allLines.get(1).contains("alice: ping"));
+      assertTrue(allLines.get(2).contains("deploy now"));
+      assertTrue(allLines.get(3).contains("Topic changed"));
     } finally {
       onEdt(panel::close);
       flushEdt();
     }
+  }
+
+  private static void clickColumnHeader(JTable table, int column) {
+    JTableHeader header = table.getTableHeader();
+    Rectangle bounds = header.getHeaderRect(column);
+    header.dispatchEvent(
+        new MouseEvent(
+            header,
+            MouseEvent.MOUSE_CLICKED,
+            System.currentTimeMillis(),
+            0,
+            bounds.x + bounds.width / 2,
+            bounds.y + bounds.height / 2,
+            1,
+            false,
+            MouseEvent.BUTTON1));
   }
 
   private static void writeCsv(NotificationsPanel panel, Path path, List<Integer> viewRows) {
