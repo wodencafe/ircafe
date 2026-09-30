@@ -177,11 +177,18 @@ public class PircbotxIrcClientService
 
   @Override
   public Completable connect(String serverId) {
+    return connect(serverId, true);
+  }
+
+  private Completable connect(String serverId, boolean resetReconnectAttempts) {
     return Completable.fromAction(
             () -> {
               if (shuttingDown.get()) return;
               PircbotxConnectionState c = conn(serverId);
               if (c.hasBot()) return;
+              // Explicit connects start a fresh retry sequence. Automatic retries must retain
+              // their attempt count so backoff and maxAttempts can take effect.
+              if (resetReconnectAttempts) c.resetReconnectAttempts();
               PircbotxConnectPreparationSupport.PreparedConnect prepared =
                   connectPreparationSupport.prepare(serverId, c);
               PircBotX bot =
@@ -668,7 +675,7 @@ public class PircbotxIrcClientService
     if (c == null) return;
     if (shuttingDown.get()) return;
     if (c.manualDisconnectRequested()) return;
-    timers.scheduleReconnect(c, reason, this::connect, bus::onNext);
+    timers.scheduleReconnect(c, reason, serverId -> connect(serverId, false), bus::onNext);
   }
 
   @Override

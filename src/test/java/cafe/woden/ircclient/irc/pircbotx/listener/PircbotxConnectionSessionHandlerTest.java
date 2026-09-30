@@ -5,6 +5,7 @@ import static cafe.woden.ircclient.irc.pircbotx.PircbotxRuntimeTestFixtures.serv
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -74,6 +75,52 @@ class PircbotxConnectionSessionHandlerTest {
     assertEquals("irc.example.net", connected.serverHost());
     assertEquals(6697, connected.serverPort());
     assertEquals("me", connected.nick());
+  }
+
+  @Test
+  void lateDisconnectFromOldSessionDoesNotClearNewSessionOrScheduleRetry() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    PircBotX oldBot = mock(PircBotX.class);
+    PircBotX currentBot = mock(PircBotX.class);
+    conn.setBot(oldBot);
+    conn.setBot(currentBot);
+    conn.storeSojuDiscoveredNetwork("net", mock(BouncerDiscoveredNetwork.class));
+    conn.overrideDisconnectReason("current session reason");
+    conn.suppressAutoReconnectOnce();
+    List<ServerIrcEvent> events = new ArrayList<>();
+    AtomicInteger heartbeatStops = new AtomicInteger();
+    AtomicInteger retries = new AtomicInteger();
+    PircbotxConnectionSessionHandler handler =
+        newHandler(
+            conn,
+            events,
+            c -> heartbeatStops.incrementAndGet(),
+            (c, reason) -> retries.incrementAndGet());
+
+    handler.onDisconnect(new DisconnectEvent(oldBot, null, new IOException("old session closed")));
+
+    assertSame(currentBot, conn.currentBot());
+    assertTrue(conn.hasAnySojuDiscoveredNetworks());
+    assertEquals("current session reason", conn.disconnectReasonOverride());
+    assertTrue(conn.autoReconnectSuppressed());
+    assertEquals(0, heartbeatStops.get());
+    assertEquals(0, retries.get());
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void lateConnectFromOldSessionDoesNotResetNewRetrySequence() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    PircBotX oldBot = mock(PircBotX.class);
+    conn.setBot(mock(PircBotX.class));
+    conn.setReconnectAttempts(3L);
+    List<ServerIrcEvent> events = new ArrayList<>();
+    PircbotxConnectionSessionHandler handler = newHandler(conn, events, null, null);
+
+    handler.onConnect(new ConnectEvent(oldBot));
+
+    assertEquals(3L, conn.reconnectAttempts());
+    assertTrue(events.isEmpty());
   }
 
   @Test

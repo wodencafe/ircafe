@@ -23,6 +23,7 @@ import org.pircbotx.PircBotX;
 public final class PircbotxConnectionState {
   final String serverId;
   final AtomicReference<PircBotX> botRef = new AtomicReference<>();
+  private final AtomicReference<PircBotX> reconnectSourceBot = new AtomicReference<>();
   final AtomicReference<String> selfNickHint = new AtomicReference<>("");
 
   final AtomicLong lastInboundMs = new AtomicLong(0);
@@ -80,6 +81,7 @@ public final class PircbotxConnectionState {
 
   public void setBot(PircBotX bot) {
     botRef.set(bot);
+    reconnectSourceBot.set(bot);
   }
 
   public boolean clearBotIf(PircBotX bot) {
@@ -87,7 +89,17 @@ public final class PircbotxConnectionState {
   }
 
   public PircBotX takeBot() {
-    return botRef.getAndSet(null);
+    PircBotX bot = botRef.getAndSet(null);
+    reconnectSourceBot.compareAndSet(bot, null);
+    return bot;
+  }
+
+  /**
+   * Claims reconnect handling once per bot session. Disconnect callbacks may arrive after the bot
+   * loop has cleared its reference, or after a newer session has started.
+   */
+  public boolean claimReconnectFor(PircBotX bot) {
+    return bot != null && reconnectSourceBot.compareAndSet(bot, null);
   }
 
   public String selfNickHint() {

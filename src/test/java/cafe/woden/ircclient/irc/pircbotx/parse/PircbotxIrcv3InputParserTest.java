@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.atLeastOnce;
@@ -19,15 +20,23 @@ import cafe.woden.ircclient.irc.ircv3.spi.*;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.pircbotx.Channel;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
+import org.pircbotx.User;
 import org.pircbotx.UserHostmask;
+import org.pircbotx.hooks.events.QuitEvent;
+import org.pircbotx.hooks.events.ServerResponseEvent;
+import org.pircbotx.hooks.events.UserListEvent;
+import org.pircbotx.hooks.managers.ListenerManager;
 import org.pircbotx.output.OutputCAP;
 
 class PircbotxIrcv3InputParserTest {
@@ -1006,7 +1015,8 @@ class PircbotxIrcv3InputParserTest {
   void lateNamesRepliesForMissingChannelDoNotThrow() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
-    PircbotxIrcv3InputParser parser = parser(dummyBot(), "libera", conn, out::add, stsPolicies());
+    PircBotX bot = dummyBot();
+    PircbotxIrcv3InputParser parser = parser(bot, "libera", conn, out::add, stsPolicies());
 
     assertDoesNotThrow(
         () ->
@@ -1019,6 +1029,7 @@ class PircbotxIrcv3InputParserTest {
                 ":server 366 me #ircafe :End of /NAMES list.",
                 List.of("me", "#ircafe", ":End of /NAMES list.")));
     assertTrue(out.isEmpty());
+    assertFalse(bot.getUserChannelDao().containsUser("alice"));
   }
 
   @Test
@@ -1037,6 +1048,103 @@ class PircbotxIrcv3InputParserTest {
                 ":server 353 me = #ircafe :@alice!~u@example.test",
                 List.of("me", "=", "#ircafe", ":@alice!~u@example.test")));
     assertTrue(out.isEmpty());
+    assertEquals(
+        Set.of("alice"),
+        bot.getUserChannelDao().getChannel("#ircafe").getUsers().stream()
+            .map(User::getNick)
+            .collect(java.util.stream.Collectors.toSet()));
+    assertTrue(
+        bot.getUserChannelDao()
+            .getChannel("#ircafe")
+            .getOps()
+            .contains(bot.getUserChannelDao().getUser("alice")));
+  }
+
+  @Test
+  void overlappingNamesRepliesRetainEveryUserAndPublishCompleteRoster() throws Exception {
+    ListenerManager listenerManager = mock(ListenerManager.class);
+    PircBotX bot = dummyBot(listenerManager);
+    bot.getUserChannelDao().createChannel("#other");
+    Channel channel = bot.getUserChannelDao().createChannel("##Llamas");
+    PircbotxIrcv3InputParser parser =
+        parser(bot, "libera", new PircbotxConnectionState("libera"), e -> {}, stsPolicies());
+
+    parser.handleLine(":server 353 ircafe-test = #other :@Alice!~old@old.test");
+    User alice = bot.getUserChannelDao().getUser("Alice");
+    String namesLine =
+        ":server 353 ircafe-test = ##llamas :first!u@first.test @+alice!~new@new.test +bob!u@bob.test carol";
+    parser.handleLine(namesLine);
+    parser.handleLine(
+        ":server 353 ircafe-test = ##Llamas :dave!u@dave.test @Alice!~new@new.test erin");
+    parser.handleLine(":server 366 ircafe-test ##llamas :End of /NAMES list.");
+
+    assertEquals(
+        Set.of("first", "Alice", "bob", "carol", "dave", "erin"),
+        channel.getUsers().stream()
+            .map(User::getNick)
+            .collect(java.util.stream.Collectors.toSet()));
+    assertSame(alice, bot.getUserChannelDao().getUser("alice"));
+    assertTrue(bot.getUserChannelDao().getChannel("#other").getUsers().contains(alice));
+    assertTrue(channel.getOps().contains(alice));
+    assertTrue(channel.getVoices().contains(alice));
+    assertTrue(channel.getVoices().contains(bot.getUserChannelDao().getUser("bob")));
+    assertEquals("Alice!~new@new.test", alice.getHostmask());
+    assertEquals("bob!u@bob.test", bot.getUserChannelDao().getUser("bob").getHostmask());
+
+    ArgumentCaptor<UserListEvent> rosterEvent = ArgumentCaptor.forClass(UserListEvent.class);
+    verify(listenerManager).onEvent(rosterEvent.capture());
+    assertEquals(channel.getUsers(), rosterEvent.getValue().getUsers());
+    ArgumentCaptor<ServerResponseEvent> response =
+        ArgumentCaptor.forClass(ServerResponseEvent.class);
+    verify(listenerManager, org.mockito.Mockito.times(4)).onEvent(response.capture());
+    assertEquals(namesLine, response.getAllValues().get(1).getRawLine());
+  }
+
+  @Test
+  void unknownTaggedQuitDoesNotThrowOrInventRosterMembership() throws Exception {
+    ListenerManager listenerManager = mock(ListenerManager.class);
+    PircBotX bot = dummyBot(listenerManager);
+    Channel channel = bot.getUserChannelDao().createChannel("##Llamas");
+    PircbotxIrcv3InputParser parser =
+        parser(bot, "libera", new PircbotxConnectionState("libera"), e -> {}, stsPolicies());
+    parser.handleLine(":server 353 ircafe-test = ##Llamas :alice bob");
+    Set<User> before = channel.getUsers();
+
+    assertDoesNotThrow(
+        () ->
+            parser.handleLine(
+                "@time=2026-09-29T20:42:02.289Z :jedi!jedi@user/jedi QUIT :Quit: Back I'll be"));
+    assertDoesNotThrow(() -> parser.handleLine(":jedi!jedi@user/jedi QUIT :Already gone"));
+
+    assertEquals(before, channel.getUsers());
+    assertFalse(bot.getUserChannelDao().containsUser("jedi"));
+    verify(listenerManager, org.mockito.Mockito.never())
+        .onEvent(org.mockito.ArgumentMatchers.any(QuitEvent.class));
+  }
+
+  @Test
+  void knownQuitStillRemovesUserAndPreservesSnapshotAndTags() throws Exception {
+    ListenerManager listenerManager = mock(ListenerManager.class);
+    PircBotX bot = dummyBot(listenerManager);
+    Channel channel = bot.getUserChannelDao().createChannel("##Llamas");
+    PircbotxIrcv3InputParser parser =
+        parser(bot, "libera", new PircbotxConnectionState("libera"), e -> {}, stsPolicies());
+    parser.handleLine(":server 353 ircafe-test = ##Llamas :alice bob");
+    parser.handleLine("@time=2026-09-29T20:42:02.289Z :alice!u@host.test QUIT :Client closed");
+
+    assertEquals(
+        Set.of("bob"),
+        channel.getUsers().stream()
+            .map(User::getNick)
+            .collect(java.util.stream.Collectors.toSet()));
+    assertFalse(bot.getUserChannelDao().containsUser("alice"));
+    ArgumentCaptor<QuitEvent> quitEvent = ArgumentCaptor.forClass(QuitEvent.class);
+    verify(listenerManager).onEvent(quitEvent.capture());
+    QuitEvent event = quitEvent.getValue();
+    assertEquals("alice", event.getUser().getNick());
+    assertEquals("Client closed", event.getReason());
+    assertEquals("2026-09-29T20:42:02.289Z", event.getTags().get("time"));
+    assertEquals(1, event.getUserChannelDaoSnapshot().getChannels(event.getUser()).size());
   }
 
   @Test
@@ -1177,5 +1285,15 @@ class PircbotxIrcv3InputParserTest {
             .addServer("example.invalid", 6667)
             .buildConfiguration();
     return new PircBotX(configuration);
+  }
+
+  private static PircBotX dummyBot(ListenerManager listenerManager) {
+    when(listenerManager.getListeners()).thenReturn(ImmutableSet.of());
+    return new PircBotX(
+        new Configuration.Builder()
+            .setName("ircafe-test")
+            .addServer("example.invalid", 6667)
+            .setListenerManager(listenerManager)
+            .buildConfiguration());
   }
 }

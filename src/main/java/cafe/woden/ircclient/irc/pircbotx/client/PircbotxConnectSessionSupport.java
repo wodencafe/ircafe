@@ -87,7 +87,10 @@ final class PircbotxConnectSessionSupport {
       if (connection.clearBotIf(bot)) {
         timers.stopHeartbeat(connection);
       }
-      if (crashed && !connection.manualDisconnectRequested()) {
+      if (crashed
+          && !connection.manualDisconnectRequested()
+          && connection.claimReconnectFor(bot)
+          && !connection.consumeSuppressAutoReconnectOnce()) {
         reconnectScheduler.accept(connection, "Bot crashed");
       }
     }
