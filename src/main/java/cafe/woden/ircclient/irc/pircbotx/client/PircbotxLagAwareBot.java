@@ -37,14 +37,19 @@ public class PircbotxLagAwareBot extends PircBotX {
 
   @Override
   public void close() {
-    if (autoJoin != null) autoJoin.close();
+    closeConnectionWorkers();
     super.close();
   }
 
   @Override
   protected void shutdown() {
-    if (autoJoin != null) autoJoin.close();
+    closeConnectionWorkers();
     super.shutdown();
+  }
+
+  private void closeConnectionWorkers() {
+    if (autoJoin != null) autoJoin.close();
+    if (sendRaw() instanceof PircbotxPacedOutput output) output.close();
   }
 
   void setLagProbeObserver(ObjLongConsumer<String> observer) {

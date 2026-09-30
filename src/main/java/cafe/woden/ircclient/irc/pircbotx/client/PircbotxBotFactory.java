@@ -34,6 +34,7 @@ import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.Configuration;
+import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.CoreHooks;
 import org.pircbotx.hooks.ListenerAdapter;
@@ -139,6 +140,11 @@ public class PircbotxBotFactory {
     builder.setMessageDelay(() -> flood.enabled() ? flood.commandIntervalMs() : 0);
     builder.setBotFactory(
         new Configuration.BotFactory() {
+          @Override
+          public InputParser createInputParser(PircBotX bot) {
+            return new PircbotxJoinInputParser(bot);
+          }
+
           @Override
           public OutputRaw createOutputRaw(PircBotX bot) {
             return new PircbotxPacedOutput(bot, flood);

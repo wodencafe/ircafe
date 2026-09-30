@@ -6,6 +6,7 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityLine;
 import cafe.woden.ircclient.irc.ircv3.spi.*;
 import cafe.woden.ircclient.irc.mode.*;
+import cafe.woden.ircclient.irc.pircbotx.client.PircbotxJoinInputParser;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
@@ -14,7 +15,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.pircbotx.UserHostmask;
 import org.pircbotx.exception.DaoException;
@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
  *   <li><code>:nick!user@host AWAY</code>
  * </ul>
  */
-final class PircbotxIrcv3InputParser extends InputParser {
+final class PircbotxIrcv3InputParser extends PircbotxJoinInputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcv3InputParser.class);
 

@@ -8,6 +8,9 @@ import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3RuntimeTestFixtures;
+import cafe.woden.ircclient.irc.ircv3.Ircv3StsPolicyService;
+import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.net.NetFloodProtectionContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
@@ -21,9 +24,79 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.ListenerAdapter;
+import org.pircbotx.hooks.events.JoinEvent;
 import org.pircbotx.hooks.events.NoticeEvent;
+import org.pircbotx.hooks.events.ServerResponseEvent;
+import org.pircbotx.hooks.events.WhoEvent;
 
 class PircbotxFloodProtectionIntegrationTest {
+  @Test
+  void restoredChannelsAndPingDoNotWaitForJoinQueriesAndAreNotJoinedAgain() throws Exception {
+    IrcProperties.FloodProtection previous = NetFloodProtectionContext.settings();
+    NetFloodProtectionContext.configure(new IrcProperties.FloodProtection(10_000, 300));
+    try (ScriptedServer server = new ScriptedServer(true)) {
+      CountDownLatch joined = new CountDownLatch(4);
+      CountDownLatch metadata = new CountDownLatch(2);
+      PircBotX bot =
+          bot(
+              server.port(),
+              new ListenerAdapter() {
+                @Override
+                public void onJoin(JoinEvent event) {
+                  joined.countDown();
+                }
+
+                @Override
+                public void onWho(WhoEvent event) {
+                  metadata.countDown();
+                }
+
+                @Override
+                public void onServerResponse(ServerResponseEvent event) {
+                  if (event.getCode() == 324) metadata.countDown();
+                }
+              });
+      AtomicReference<Throwable> failure = new AtomicReference<>();
+      Thread runner =
+          Thread.startVirtualThread(
+              () -> {
+                try {
+                  bot.startBot();
+                } catch (Throwable e) {
+                  failure.set(e);
+                }
+              });
+      try {
+        assertTrue(server.restored.await(10, TimeUnit.SECONDS));
+        assertTrue(
+            joined.await(2, TimeUnit.SECONDS),
+            "incoming self-JOINs must not wait for outgoing WHO/MODE flood credits");
+        assertTrue(
+            server.pong.await(1, TimeUnit.SECONDS),
+            "keepalive behind restored channels must be read immediately");
+        assertEquals("WHO #one", server.queries.poll(1, TimeUnit.SECONDS));
+        assertEquals("MODE #one", server.queries.poll(1, TimeUnit.SECONDS));
+        assertTrue(
+            metadata.await(1, TimeUnit.SECONDS),
+            "deferred WHO/MODE replies must still update state");
+        assertTrue(bot.getUserChannelDao().getUser("other").isAway());
+        assertTrue(bot.getUserChannelDao().getChannel("#one").getMode().contains("n"));
+        assertTrue(bot.getUserChannelDao().getChannel("#one").getMode().contains("t"));
+        Thread.sleep(500);
+        assertTrue(server.joins.isEmpty(), "ZNC-restored channels must not consume JOIN credits");
+      } finally {
+        bot.close();
+        runner.join(3000);
+      }
+      assertFalse(runner.isAlive());
+      assertNull(failure.get());
+      assertTrue(server.queries.isEmpty(), "disconnect must cancel queued join queries");
+      assertNull(server.failure.get());
+    } finally {
+      NetFloodProtectionContext.configure(previous);
+    }
+  }
+
   @Test
   void productionBotSendsUnpacedWhenExplicitlyDisabled() throws Exception {
     IrcProperties.FloodProtection previous = NetFloodProtectionContext.settings();
@@ -151,7 +224,11 @@ class PircbotxFloodProtectionIntegrationTest {
             .nickserv(new IrcProperties.Server.Nickserv(false, "", "", false))
             .autoJoin(List.of("#one", "#two secret-key", "#three", "#four"))
             .build();
-    return factory.build(cfg, "test", listener);
+    PircBotX bot = factory.build(cfg, "test", listener);
+    new PircbotxInputParserHookInstaller(
+            mock(Ircv3StsPolicyService.class), Ircv3RuntimeTestFixtures.catalogs())
+        .installIrcv3Hook(bot, "test", new PircbotxConnectionState("test"), event -> {});
+    return bot;
   }
 
   private record Sent(String line, long at) {}
@@ -160,12 +237,20 @@ class PircbotxFloodProtectionIntegrationTest {
     final ServerSocket listener = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
     final BlockingQueue<Sent> joins = new LinkedBlockingQueue<>();
     final CountDownLatch pong = new CountDownLatch(1);
+    final CountDownLatch restored = new CountDownLatch(1);
+    final BlockingQueue<String> queries = new LinkedBlockingQueue<>();
+    final boolean restoreChannels;
     final AtomicReference<Throwable> failure = new AtomicReference<>();
     volatile long welcomeAt;
     volatile Socket socket;
     final Thread runner;
 
     ScriptedServer() throws IOException {
+      this(false);
+    }
+
+    ScriptedServer(boolean restoreChannels) throws IOException {
+      this.restoreChannels = restoreChannels;
       runner = Thread.startVirtualThread(this::serve);
     }
 
@@ -196,6 +281,15 @@ class PircbotxFloodProtectionIntegrationTest {
             send(writer, ":test 375 probe :- Test server MOTD");
             send(writer, ":test 372 probe :- Test network");
             send(writer, ":test 376 probe :End of MOTD");
+            if (restoreChannels) {
+              for (String channel : List.of("#one", "#two", "#three", "#four")) {
+                send(writer, ":probe!user@host JOIN " + channel);
+                send(writer, ":test 353 probe = " + channel + " :probe other");
+                send(writer, ":test 366 probe " + channel + " :End of NAMES");
+              }
+              send(writer, "PING :probe-keepalive");
+              restored.countDown();
+            }
           } else if (line.startsWith("JOIN ")) {
             joins.add(new Sent(line, System.nanoTime()));
             if (line.trim().equals("JOIN #one")) {
@@ -204,6 +298,16 @@ class PircbotxFloodProtectionIntegrationTest {
             }
           } else if (line.contains("PONG") && line.contains("probe-keepalive")) {
             pong.countDown();
+          } else if (line.startsWith("WHO ") || line.startsWith("MODE ")) {
+            queries.add(line.trim());
+            String channel = line.substring(4).trim();
+            if (line.startsWith("WHO ")) {
+              send(writer, ":test 352 probe " + channel + " user host test other G :0 Other");
+              send(writer, ":test 315 probe " + channel + " :End of WHO");
+            } else {
+              channel = line.substring(5).trim();
+              send(writer, ":test 324 probe " + channel + " +nt");
+            }
           }
         }
       } catch (SocketException ignored) {
