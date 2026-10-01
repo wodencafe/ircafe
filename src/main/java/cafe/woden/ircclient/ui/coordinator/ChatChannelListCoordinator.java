@@ -410,7 +410,6 @@ public final class ChatChannelListCoordinator {
     String sid = Objects.toString(target.serverId(), "").trim();
     String channel = normalizeChannelName(target.target());
     if (sid.isBlank() || channel.isEmpty()) return;
-    serverTree.selectTarget(TargetRef.channelList(sid));
     modeRoutingState.putPendingModeTarget(sid, channel, new TargetRef(sid, channel));
     if (sendRawModeCommand(bindDisposables, sid, "MODE " + channel, "tree channel-mode refresh")) {
       return;

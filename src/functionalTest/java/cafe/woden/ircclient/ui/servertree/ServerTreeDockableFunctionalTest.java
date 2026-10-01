@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
@@ -15,12 +16,21 @@ import cafe.woden.ircclient.config.api.ServerEntry;
 import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
+import cafe.woden.ircclient.ui.UserListDockable;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
+import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.coordinator.ChatChannelListCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.awt.Dimension;
@@ -37,6 +47,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -284,6 +295,67 @@ class ServerTreeDockableFunctionalTest {
     } finally {
       detachSub.dispose();
       joinSub.dispose();
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void refreshModesContextMenuPreservesSelectionAndQueriesRequestedChannel() throws Exception {
+    ServerTreeDockable dockable = newDockable();
+    TargetRef channel = new TargetRef("libera", "#functional-mode");
+    TargetRef otherChannel = new TargetRef("other", "#other-channel");
+    IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
+    ModeRoutingPort modeRouting = mock(ModeRoutingPort.class);
+    when(irc.sendRaw("libera", "MODE #functional-mode")).thenReturn(Completable.complete());
+    CompositeDisposable disposables = new CompositeDisposable();
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            mock(ChannelListPanel.class),
+            dockable,
+            new OutboundLineBus(),
+            mock(UserListStore.class),
+            mock(UserListDockable.class),
+            dockable::selectedTargetForPersistence,
+            sid -> "",
+            (sid, ch) -> "",
+            (sid, ch) -> null,
+            irc,
+            modeRouting);
+
+    try {
+      onEdt(
+          () -> {
+            coordinator.bind(disposables);
+            dockable.ensureNode(channel);
+            dockable.ensureNode(otherChannel);
+          });
+      flushEdt();
+
+      for (TargetRef selected : List.of(channel, otherChannel)) {
+        onEdt(() -> dockable.selectTarget(selected));
+        flushEdt();
+        onEdt(
+            () -> {
+              JTree tree = field(dockable, "tree", JTree.class);
+              TreePath selection = tree.getSelectionPath();
+              JPopupMenu menu = popupForTarget(dockable, channel);
+              JMenu modes = (JMenu) findMenuItem(menu, "Channel Modes");
+              assertNotNull(modes);
+              JMenuItem refresh = findMenuItem(modes.getPopupMenu(), "Refresh Modes");
+              assertNotNull(refresh);
+              refresh.doClick(0);
+              assertEquals(selection, tree.getSelectionPath());
+            });
+        flushEdt();
+        assertEquals(selected, onEdtCall(dockable::selectedTargetForPersistence));
+      }
+
+      verify(irc, org.mockito.Mockito.times(2)).sendRaw("libera", "MODE #functional-mode");
+      verify(modeRouting, org.mockito.Mockito.times(2))
+          .putPendingModeTarget("libera", "#functional-mode", channel);
+    } finally {
+      disposables.dispose();
       onEdt(dockable::shutdown);
       flushEdt();
     }
