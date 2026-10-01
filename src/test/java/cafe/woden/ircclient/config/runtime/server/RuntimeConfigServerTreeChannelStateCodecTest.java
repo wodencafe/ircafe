@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config.runtime.server;
 
 import static cafe.woden.ircclient.config.runtime.server.RuntimeConfigServerTreeChannelStateCodec.channelPreferencesByKey;
 import static cafe.woden.ircclient.config.runtime.server.RuntimeConfigServerTreeChannelStateCodec.parseServerTreeChannelState;
+import static cafe.woden.ircclient.config.runtime.server.RuntimeConfigServerTreeChannelStateCodec.sanitizeCustomOrder;
 import static cafe.woden.ircclient.config.runtime.server.RuntimeConfigServerTreeChannelStateCodec.serializeChannelPreferences;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -14,6 +15,28 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RuntimeConfigServerTreeChannelStateCodecTest {
+
+  @Test
+  void customOrderDedupeUsesTheSpellingAlreadyAddedToTheOutput() {
+    var channels = new LinkedHashMap<String, ServerTreeChannelPreference>();
+    channels.put("#i\u0307", new ServerTreeChannelPreference("#\u0130", true));
+    channels.put("#i", new ServerTreeChannelPreference("#i", true));
+
+    assertEquals(List.of("#\u0130"), sanitizeCustomOrder(List.of("#i\u0307", "#i"), channels));
+  }
+
+  @Test
+  void customOrderKeepsUnicodeCaseInsensitiveDedupeAndCanonicalSpelling() {
+    var channels = new LinkedHashMap<String, ServerTreeChannelPreference>();
+    channels.put("#alpha", new ServerTreeChannelPreference("#Alpha", true));
+    channels.put("#i", new ServerTreeChannelPreference("#I", true));
+    channels.put("#\u0131", new ServerTreeChannelPreference("#\u0131", true));
+    channels.put("#beta", new ServerTreeChannelPreference("#beta", true));
+
+    assertEquals(
+        List.of("#I", "#Alpha", "#beta"),
+        sanitizeCustomOrder(List.of("#i", "#\u0131", "#ALPHA", "#alpha", "#missing"), channels));
+  }
 
   @Test
   void parseServerTreeChannelStateSanitizesChannelsCustomOrderAndJoinedChannels() {
