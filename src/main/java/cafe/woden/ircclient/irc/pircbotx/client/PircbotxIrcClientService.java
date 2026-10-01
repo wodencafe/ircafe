@@ -302,6 +302,20 @@ public class PircbotxIrcClientService
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
+  @Override
+  public Completable sendAutomaticWho(String serverId, String rawLine) {
+    return Completable.fromAction(
+            () -> {
+              PircBotX bot = requireBot(serverId);
+              if (bot.sendRaw() instanceof PircbotxPacedOutput output) {
+                output.enqueueAutomaticWho(rawLine);
+              } else {
+                basicCommandSupport.sendRaw(bot, rawLine);
+              }
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
   private void sendMessageWithMultiline(
       String serverId, String target, String message, boolean notice) {
     multilineMessageSupport.send(

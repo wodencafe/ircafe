@@ -20,6 +20,7 @@ import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettings;
 import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettingsProvider;
 import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettingsTestFixtures;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -32,6 +33,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class UserInfoEnrichmentServiceTest {
+
+  @Test
+  void channelEnrichmentUsesAutomaticWhoQueueAndPreservesWhoxFields() throws Exception {
+    Fixture fixture = fixtureWithSettings(settings(true, false));
+    try {
+      when(fixture.irc.sendAutomaticWho(anyString(), anyString()))
+          .thenReturn(Completable.complete());
+      Method execute =
+          UserInfoEnrichmentService.class.getDeclaredMethod(
+              "execute", UserInfoEnrichmentPlanner.PlannedCommand.class);
+      execute.setAccessible(true);
+      var scan =
+          new UserInfoEnrichmentPlanner.PlannedCommand(
+              UserInfoEnrichmentPlanner.ProbeKind.WHO_CHANNEL, "libera", List.of("#one"));
+      execute.invoke(fixture.service, scan);
+      verify(fixture.irc).sendAutomaticWho("libera", "WHO #one");
+      fixture.events.onNext(
+          new ServerIrcEvent("libera", new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
+      execute.invoke(fixture.service, scan);
+      verify(fixture.irc).sendAutomaticWho("libera", "WHO #one %tcuhnaf,1");
+      verify(fixture.irc, never()).sendRaw(anyString(), anyString());
+    } finally {
+      fixture.service.shutdown();
+    }
+  }
 
   @Test
   void enqueueWhoisIsIgnoredWhenWhoisFallbackIsDisabled() {
