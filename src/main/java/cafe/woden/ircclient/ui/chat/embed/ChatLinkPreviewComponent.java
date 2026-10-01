@@ -6,6 +6,8 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.localization.UiMessages;
 import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
 import cafe.woden.ircclient.ui.util.UiColorKeys;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
+import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -17,6 +19,8 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.datatransfer.StringSelection;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Locale;
 import java.util.Objects;
@@ -727,60 +731,72 @@ final class ChatLinkPreviewComponent extends JPanel {
         imageFetch
             .fetch(serverId, imageUrl)
             .observeOn(SwingEdt.scheduler())
+            // Snapshot layout on the EDT, then decode and resize on the shared background pool.
+            .flatMap(
+                bytes ->
+                    decodeThumbnail(
+                        imageUrl,
+                        bytes,
+                        thumbnailMaxWidth(),
+                        effectiveThumbnailMaxHeight(mediaMaxHeightPx)))
+            .observeOn(SwingEdt.scheduler())
             .subscribe(
-                bytes -> {
+                scaled -> {
                   try {
-                    DecodedImage d = ImageDecodeUtil.decode(imageUrl, bytes);
-                    java.awt.image.BufferedImage img = null;
-                    if (d instanceof StaticImageDecoded st) {
-                      img = st.image();
-                    } else if (d instanceof AnimatedGifDecoded gif && !gif.frames().isEmpty()) {
-                      img = gif.frames().get(0);
+                    if (instagramExtended || imgurExtended) {
+                      // Portrait photos can exceed the initial placeholder height.
+                      // Grow the host to the scaled image so it doesn't look cramped/cropped.
+                      setThumbHostSize(scaled.getWidth(), scaled.getHeight());
                     }
-                    if (img != null) {
-                      int maxW = THUMB_SIZE;
-                      try {
-                        Dimension dsz = thumb != null ? thumb.getPreferredSize() : null;
-                        if (dsz != null && dsz.width > 0) maxW = dsz.width;
-                      } catch (Exception ignored2) {
-                        // best effort
-                      }
-                      if (instagramExtended || imgurExtended) {
-                        int inlineW =
-                            EmbedHostLayoutUtil.computeMaxInlineWidth(
-                                this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
-                        if (inlineW > 0) {
-                          // Keep vertical media previews inside the card's usable content width.
-                          maxW = Math.max(120, inlineW - EXT_MEDIA_CARD_CHROME_PX);
-                        }
-                      }
-                      maxW = effectiveThumbnailMaxWidth(maxW, mediaMaxWidthPx);
-                      java.awt.image.BufferedImage scaled =
-                          ImageScaleUtil.scaleDownToFit(
-                              img, maxW, effectiveThumbnailMaxHeight(mediaMaxHeightPx));
-                      if (instagramExtended || imgurExtended) {
-                        // Portrait photos can exceed the initial placeholder height.
-                        // Grow the host to the scaled image so it doesn't look cramped/cropped.
-                        setThumbHostSize(scaled.getWidth(), scaled.getHeight());
-                      }
-                      thumb.setIcon(new javax.swing.ImageIcon(scaled));
-                      if (instagramExtended || imgurExtended) {
-                        lastMaxW = -1;
-                        layoutForCurrentWidth();
-                      }
-                    } else {
-                      log.warn("Thumbnail decode produced no image for {}", imageUrl);
-                      dropThumbnailPlaceholder();
+                    thumb.setIcon(new javax.swing.ImageIcon(scaled));
+                    if (instagramExtended || imgurExtended) {
+                      lastMaxW = -1;
+                      layoutForCurrentWidth();
                     }
                   } catch (Exception ex) {
-                    log.warn("Thumbnail decode failed for {}: {}", imageUrl, ex.toString());
+                    log.warn("Thumbnail display failed for {}: {}", imageUrl, ex.toString());
                     dropThumbnailPlaceholder();
                   }
                 },
                 err -> {
-                  log.warn("Thumbnail download failed for {}: {}", imageUrl, err.toString());
+                  log.warn("Thumbnail load failed for {}: {}", imageUrl, err.toString());
                   dropThumbnailPlaceholder();
                 });
+  }
+
+  private int thumbnailMaxWidth() {
+    int maxW = THUMB_SIZE;
+    try {
+      Dimension size = thumb != null ? thumb.getPreferredSize() : null;
+      if (size != null && size.width > 0) maxW = size.width;
+    } catch (Exception ignored) {
+      // best effort
+    }
+    if (instagramExtended || imgurExtended) {
+      int inlineW =
+          EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
+      if (inlineW > 0) {
+        // Keep vertical media previews inside the card's usable content width.
+        maxW = Math.max(120, inlineW - EXT_MEDIA_CARD_CHROME_PX);
+      }
+    }
+    return effectiveThumbnailMaxWidth(maxW, mediaMaxWidthPx);
+  }
+
+  static Single<BufferedImage> decodeThumbnail(String imageUrl, byte[] bytes, int maxW, int maxH) {
+    return Single.fromCallable(
+            () -> {
+              DecodedImage decoded = ImageDecodeUtil.decode(imageUrl, bytes);
+              BufferedImage image = null;
+              if (decoded instanceof StaticImageDecoded still) {
+                image = still.image();
+              } else if (decoded instanceof AnimatedGifDecoded gif && !gif.frames().isEmpty()) {
+                image = gif.frames().get(0);
+              }
+              if (image == null) throw new IOException("Thumbnail decode produced no image");
+              return ImageScaleUtil.scaleDownToFit(image, maxW, maxH);
+            })
+        .subscribeOn(RxVirtualSchedulers.computation());
   }
 
   private void dropThumbnailPlaceholder() {

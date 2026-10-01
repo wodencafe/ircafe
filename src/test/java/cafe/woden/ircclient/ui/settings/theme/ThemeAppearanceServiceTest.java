@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.settings.theme;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.util.UiColorKeys;
@@ -218,6 +219,40 @@ class ThemeAppearanceServiceTest {
           Font lightAfterRestore = uiFont(UiFontKeys.TREE_FONT);
           assertEquals(lightTreeBaseline.getSize(), lightAfterRestore.getSize());
           assertNotEquals(targetSize, lightAfterRestore.getSize());
+        });
+  }
+
+  @Test
+  void uiFontOverrideResolvesLazyFontsAndPreservesRelativeSizeAndStyle() throws Exception {
+    onEdt(
+        () -> {
+          installNimbus();
+          String key = "ircafe.fontRegression.font";
+          Font defaultFont = UIManager.getFont(UiFontKeys.DEFAULT_FONT);
+          Font baseline = new Font(Font.SERIF, Font.BOLD | Font.ITALIC, defaultFont.getSize() + 2);
+          var styleFactory = javax.swing.plaf.synth.SynthLookAndFeel.getStyleFactory();
+          UIManager.put(key, (javax.swing.UIDefaults.LazyValue) defaults -> baseline);
+          try {
+            int size = 24;
+            service.applyCommonTweaks(
+                new ThemeTweakSettings(
+                    ThemeTweakSettings.ThemeDensity.COZY, 10, true, Font.MONOSPACED, size));
+            Font overridden = UIManager.getFont(key);
+            var installedFactory = javax.swing.plaf.synth.SynthLookAndFeel.getStyleFactory();
+            NimbusFontStyleFactory.install();
+            assertSame(installedFactory, javax.swing.plaf.synth.SynthLookAndFeel.getStyleFactory());
+            assertEquals(Font.MONOSPACED, overridden.getFamily());
+            assertEquals(baseline.getStyle(), overridden.getStyle());
+            assertEquals(
+                Math.round(baseline.getSize2D() * size / defaultFont.getSize2D()),
+                overridden.getSize());
+            service.applyCommonTweaks(ThemeAppearanceSettingsTestFixtures.tweakDefaults());
+            assertEquals(baseline, UIManager.getFont(key));
+            assertSame(styleFactory, javax.swing.plaf.synth.SynthLookAndFeel.getStyleFactory());
+          } finally {
+            service.applyCommonTweaks(ThemeAppearanceSettingsTestFixtures.tweakDefaults());
+            UIManager.put(key, null);
+          }
         });
   }
 

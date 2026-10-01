@@ -40,6 +40,23 @@ class VirtualThreadsLifecycleTest {
   }
 
   @Test
+  void explicitlyOwnedWorkerSurvivesFallbackShutdownUntilOwnerClosesIt() throws Exception {
+    try (var executor =
+        VirtualThreads.newUntrackedSingleThreadScheduledExecutor("test-owned-persistence")) {
+      new VirtualThreadsLifecycle().shutdown();
+
+      assertFalse(executor.isShutdown());
+      assertTrue(
+          executor.submit(() -> Thread.currentThread().isVirtual()).get(1, TimeUnit.SECONDS));
+      assertTrue(
+          executor
+              .submit(() -> Thread.currentThread().getName())
+              .get(1, TimeUnit.SECONDS)
+              .startsWith("test-owned-persistence-"));
+    }
+  }
+
+  @Test
   void shutdownLetsShortRunningTasksFinishBeforeForcedInterrupt() throws Exception {
     ExecutorService exec = VirtualThreads.newSingleThreadExecutor("test-vt-graceful-shutdown");
     AtomicBoolean interrupted = new AtomicBoolean(false);

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import java.awt.Dimension;
+import java.awt.Graphics;
 import java.util.Objects;
 import javax.swing.JTextPane;
 import javax.swing.text.AbstractDocument;
@@ -15,6 +16,24 @@ public final class SingleLineEmojiTextPane extends JTextPane {
     setEditorKit(EmojiEditorKits.singleLine());
     if (getDocument() instanceof AbstractDocument doc) {
       doc.setDocumentFilter(new SingleLineDocumentFilter());
+    }
+  }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+    if (isOpaque()) {
+      super.paintComponent(g);
+      return;
+    }
+    // Synth/Nimbus UI.update paints its background even for a non-opaque text pane.
+    // Paint the editor directly so the compose shell remains visible behind the text.
+    if (getUI() != null) {
+      Graphics copy = g.create();
+      try {
+        getUI().paint(copy, this);
+      } finally {
+        copy.dispose();
+      }
     }
   }
 
