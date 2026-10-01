@@ -10,6 +10,7 @@ import java.awt.Container;
 import java.awt.Font;
 import java.awt.Insets;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import javax.swing.JComponent;
@@ -106,36 +107,14 @@ class ThemeAppearanceService {
   };
 
   private static final Object NULL_SENTINEL = new Object();
-  private static final String[] UI_FONT_PRIORITY_KEYS = {
-    UiFontKeys.DEFAULT_FONT,
-    UiFontKeys.LABEL_FONT,
-    UiFontKeys.BUTTON_FONT,
-    UiFontKeys.TABLE_FONT,
-    UiFontKeys.TABLE_HEADER_FONT,
-    UiFontKeys.TEXT_FIELD_FONT,
-    UiFontKeys.TEXT_AREA_FONT,
-    UiFontKeys.CHECK_BOX_FONT,
-    UiFontKeys.COMBO_BOX_FONT,
-    UiFontKeys.TREE_FONT,
-    UiFontKeys.TABBED_PANE_FONT,
-    UiFontKeys.TITLED_BORDER_FONT,
-    UiFontKeys.MENU_BAR_FONT,
-    UiFontKeys.MENU_FONT,
-    UiFontKeys.MENU_ITEM_FONT,
-    UiFontKeys.CHECK_BOX_MENU_ITEM_FONT,
-    UiFontKeys.RADIO_BUTTON_MENU_ITEM_FONT,
-    UiFontKeys.POPUP_MENU_FONT,
-    UiFontKeys.MENU_ITEM_ACCELERATOR_FONT,
-    UiFontKeys.CHECK_BOX_MENU_ITEM_ACCELERATOR_FONT,
-    UiFontKeys.RADIO_BUTTON_MENU_ITEM_ACCELERATOR_FONT
-  };
-
   private final Map<String, Object> accentBaselineValues = new HashMap<>();
   private String accentBaselineLafClassName;
   private final Map<String, Object> commonTweakBaselineValues = new HashMap<>();
   private String commonTweakBaselineLafClassName;
   private final Map<Object, Object> uiFontBaselineValues = new HashMap<>();
   private String uiFontBaselineLafClassName;
+  private final Map<Object, Object> nimbusFontBaselineValues = new HashMap<>();
+  private UIDefaults nimbusFontBaselineDefaults;
 
   private record NimbusDensityMetrics(
       int rowHeight,
@@ -236,6 +215,11 @@ class ThemeAppearanceService {
     NimbusDensityMetrics metrics = nimbusDensityMetrics(resolved.density());
     int rowHeight = rowHeight(metrics.rowHeight(), metrics.rowFontPadding());
     UIDefaults overrides = nimbusDensityDefaults(metrics, rowHeight);
+    if (resolved.uiFontOverrideEnabled()) {
+      // Equal spacing tables suppress property-change events. Include the font so a
+      // size/family change also invalidates each component's cached Nimbus style.
+      overrides.put(UiFontKeys.DEFAULT_FONT, UIManager.getFont(UiFontKeys.DEFAULT_FONT));
+    }
     applyNimbusDensityComponentOverrides(root, overrides, rowHeight);
   }
 
@@ -405,12 +389,20 @@ class ThemeAppearanceService {
 
       int scaledSize = Math.max(8, Math.round(font.getSize2D() * scale));
       Font replacement = new Font(tweaks.uiFontFamily(), font.getStyle(), scaledSize);
-      UIManager.put(key, new FontUIResource(replacement));
+      putUiFont(key, new FontUIResource(replacement));
     }
 
-    UIManager.put(
+    putUiFont(
         UiFontKeys.DEFAULT_FONT,
         new FontUIResource(new Font(tweaks.uiFontFamily(), Font.PLAIN, tweaks.uiFontSize())));
+    if (isNimbusActive()) NimbusFontStyleFactory.install();
+  }
+
+  private void putUiFont(Object key, FontUIResource font) {
+    // Nimbus compiles both defaults tables. Keep them consistent so a native lazy font
+    // cannot shadow the developer override while Synth is building a component style.
+    if (nimbusFontBaselineDefaults != null) nimbusFontBaselineDefaults.put(key, font);
+    UIManager.put(key, font);
   }
 
   void applyAccentOverrides(ThemeAccentSettings accent) {
@@ -503,10 +495,12 @@ class ThemeAppearanceService {
     uiFontBaselineValues.clear();
 
     UIDefaults defaults = UIManager.getDefaults();
-    for (Map.Entry<Object, Object> entry : defaults.entrySet()) {
-      Object value = entry.getValue();
-      if (value instanceof Font) {
-        uiFontBaselineValues.put(entry.getKey(), value);
+    // Font values can be lazy or active (including Nimbus renderer and state fonts).
+    // Resolve every font key before applying any replacements, using effective defaults.
+    for (Object key : defaults.keySet().toArray()) {
+      if (key instanceof String name && name.toLowerCase(Locale.ROOT).endsWith("font")) {
+        Font font = defaults.getFont(key);
+        if (font != null) uiFontBaselineValues.put(key, font);
       }
     }
 
@@ -516,13 +510,11 @@ class ThemeAppearanceService {
           UiFontKeys.DEFAULT_FONT, defaultFont != null ? defaultFont : NULL_SENTINEL);
     }
 
-    // Some LAFs expose menu fonts via LazyValue entries; resolve them explicitly.
-    for (String key : UI_FONT_PRIORITY_KEYS) {
-      if (key == null || key.isBlank()) continue;
-      if (uiFontBaselineValues.containsKey(key)) continue;
-      Font font = UIManager.getFont(key);
-      if (font != null) {
-        uiFontBaselineValues.put(key, font);
+    if (isNimbusActive()) {
+      nimbusFontBaselineDefaults = UIManager.getLookAndFeelDefaults();
+      Map<Object, Object> nativeDefaults = new HashMap<>(nimbusFontBaselineDefaults);
+      for (Object key : uiFontBaselineValues.keySet()) {
+        nimbusFontBaselineValues.put(key, nativeDefaults.getOrDefault(key, NULL_SENTINEL));
       }
     }
 
@@ -530,6 +522,15 @@ class ThemeAppearanceService {
   }
 
   private void restorePreviousUiFontOverridesIfCompatible() {
+    if (nimbusFontBaselineDefaults != null) {
+      NimbusFontStyleFactory.restore();
+      // Restore the table we changed, even when a new Nimbus variant has been installed.
+      for (Map.Entry<Object, Object> entry : nimbusFontBaselineValues.entrySet()) {
+        nimbusFontBaselineDefaults.put(entry.getKey(), denullSentinel(entry.getValue()));
+      }
+      nimbusFontBaselineValues.clear();
+      nimbusFontBaselineDefaults = null;
+    }
     if (uiFontBaselineValues.isEmpty()) return;
 
     String currentLafClassName = ThemeLookAndFeelUtils.currentLookAndFeelClassName();

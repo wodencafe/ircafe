@@ -68,6 +68,7 @@ public class ChatRichTextRenderer {
     int pos = Math.max(0, Math.min(insertPos, doc.getLength()));
     InsertCursor cur = new InsertCursor(doc, pos);
     cur.insert(text, baseStyle);
+    cur.flush();
     return cur.pos;
   }
 
@@ -99,6 +100,7 @@ public class ChatRichTextRenderer {
     for (IrcFormatting.Span span : IrcFormatting.parse(text, base)) {
       insertRichTextPlain(cur, ref, serverId, span.text(), span.style());
     }
+    cur.flush();
 
     return cur.pos;
   }
@@ -287,6 +289,8 @@ public class ChatRichTextRenderer {
   private static final class InsertCursor {
     final StyledDocument doc;
     int pos;
+    private final StringBuilder pendingText = new StringBuilder();
+    private AttributeSet pendingStyle;
 
     InsertCursor(StyledDocument doc, int pos) {
       this.doc = doc;
@@ -296,8 +300,7 @@ public class ChatRichTextRenderer {
     void insert(String s, AttributeSet attrs) throws BadLocationException {
       if (s == null || s.isEmpty()) return;
       if (!EmojiTextSupport.containsEmoji(s)) {
-        doc.insertString(pos, s, attrs);
-        pos += s.length();
+        append(s, attrs);
         return;
       }
 
@@ -317,9 +320,29 @@ public class ChatRichTextRenderer {
           effectiveAttrs = emojiAttrs;
         }
 
-        doc.insertString(pos, text, effectiveAttrs);
-        pos += text.length();
+        append(text, effectiveAttrs);
       }
+    }
+
+    private void append(String text, AttributeSet attrs) throws BadLocationException {
+      // Ordinary words and separators all have the same style. Keep them in one run so Swing
+      // does not repeat document notifications, bidi analysis, and view updates for every token.
+      if (!pendingText.isEmpty()
+          && pendingStyle != attrs
+          && (pendingStyle == null || attrs == null || !pendingStyle.isEqual(attrs))) {
+        flush();
+      }
+      if (pendingText.isEmpty()) pendingStyle = attrs;
+      pendingText.append(text);
+    }
+
+    void flush() throws BadLocationException {
+      if (pendingText.isEmpty()) return;
+      String text = pendingText.toString();
+      doc.insertString(pos, text, pendingStyle);
+      pos += text.length();
+      pendingText.setLength(0);
+      pendingStyle = null;
     }
   }
 

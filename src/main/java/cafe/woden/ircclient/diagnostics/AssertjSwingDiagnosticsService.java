@@ -50,7 +50,7 @@ public class AssertjSwingDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(AssertjSwingDiagnosticsService.class);
   private static final long AUTO_CAPTURE_COOLDOWN_MS = 120_000L;
   private static final long JFR_CAPTURE_DURATION_MS = 8000L;
-  private static final int FREEZE_STACK_MAX_FRAMES = 20;
+  private static final int FREEZE_STACK_MAX_FRAMES = 64;
   private static final DateTimeFormatter CAPTURE_STAMP_FMT =
       DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneId.systemDefault());
 

@@ -3,7 +3,6 @@ package cafe.woden.ircclient.config.yaml;
 import static cafe.woden.ircclient.config.yaml.RuntimeConfigYamlSupport.getOrCreateMap;
 import static cafe.woden.ircclient.config.yaml.RuntimeConfigYamlSupport.readMap;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +52,7 @@ public final class RuntimeConfigServerYamlSupport {
       if (file.toString().isBlank()) return Optional.empty();
       String sid = normalizeServerId(serverId);
       if (sid.isEmpty()) return Optional.empty();
-      if (!Files.exists(file)) return Optional.empty();
+      if (!documentStore.documentExists()) return Optional.empty();
 
       Map<String, Object> doc = documentStore.load();
       Map<String, Object> irc = readMap(doc, "irc").orElse(null);

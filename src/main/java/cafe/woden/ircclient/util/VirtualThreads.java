@@ -30,6 +30,15 @@ public final class VirtualThreads {
     return track(Executors.newSingleThreadScheduledExecutor(namedFactory(baseName)));
   }
 
+  /**
+   * Creates a worker whose owner must shut it down explicitly. Use for persistence workers that
+   * must flush pending changes before shutdown, independent of global fallback teardown ordering.
+   */
+  public static ScheduledExecutorService newUntrackedSingleThreadScheduledExecutor(
+      String baseName) {
+    return Executors.newSingleThreadScheduledExecutor(namedFactory(baseName));
+  }
+
   public static ExecutorService newThreadPerTaskExecutor(String baseName) {
     return track(Executors.newThreadPerTaskExecutor(namedFactory(baseName)));
   }

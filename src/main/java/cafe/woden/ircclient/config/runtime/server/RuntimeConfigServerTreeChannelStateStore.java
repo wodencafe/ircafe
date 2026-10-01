@@ -334,9 +334,10 @@ public class RuntimeConfigServerTreeChannelStateStore {
     channelsByServerSection.mutateDocument(
         "server-tree channel state",
         doc -> {
-          writeLegacyAutoJoinState(doc, sid, byKey);
-          writeServerTreeChannelStateMap(doc, sid, byKey, customOrder, sortMode);
-          return true;
+          boolean legacyChanged = writeLegacyAutoJoinState(doc, sid, byKey);
+          boolean treeChanged =
+              writeServerTreeChannelStateMap(doc, sid, byKey, customOrder, sortMode);
+          return legacyChanged || treeChanged;
         });
   }
 
@@ -347,14 +348,14 @@ public class RuntimeConfigServerTreeChannelStateStore {
         .orElse(Map.of());
   }
 
-  private static void writeLegacyAutoJoinState(
+  private static boolean writeLegacyAutoJoinState(
       Map<String, Object> doc,
       String serverId,
       Map<String, ServerTreeChannelPreference> channelsByKey) {
     Map<String, Object> irc = getOrCreateMap(doc, "irc");
     List<Map<String, Object>> servers = readServerList(irc).orElseGet(ArrayList::new);
     Map<String, Object> serverMap = findServerById(servers, serverId).orElse(null);
-    if (serverMap == null) return;
+    if (serverMap == null) return false;
 
     List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
     List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
@@ -377,11 +378,13 @@ public class RuntimeConfigServerTreeChannelStateStore {
     }
     // Keep an explicit empty override so restart logic doesn't fall back to seeded defaults
     // after the user closes-and-parts their last auto-reattach channel.
+    if (Objects.equals(serverMap.get("autoJoin"), nextAutoJoin)) return false;
     serverMap.put("autoJoin", nextAutoJoin);
     irc.put("servers", servers);
+    return true;
   }
 
-  private static void writeServerTreeChannelStateMap(
+  private static boolean writeServerTreeChannelStateMap(
       Map<String, Object> doc,
       String serverId,
       Map<String, ServerTreeChannelPreference> channelsByKey,
@@ -397,8 +400,9 @@ public class RuntimeConfigServerTreeChannelStateStore {
             || !customOrder.isEmpty()
             || sortMode != ServerTreeChannelSortMode.CUSTOM;
 
+    boolean changed;
     if (!shouldKeepState) {
-      channelsByServer.remove(serverId);
+      changed = channelsByServer.remove(serverId) != null;
     } else {
       Map<String, Object> out = new LinkedHashMap<>();
       if (sortMode != ServerTreeChannelSortMode.CUSTOM) {
@@ -411,7 +415,9 @@ public class RuntimeConfigServerTreeChannelStateStore {
       if (!channelsOut.isEmpty()) {
         out.put("channels", channelsOut);
       }
+      if (Objects.equals(channelsByServer.get(serverId), out)) return false;
       channelsByServer.put(serverId, out);
+      changed = true;
     }
 
     if (channelsByServer.isEmpty()) {
@@ -420,5 +426,6 @@ public class RuntimeConfigServerTreeChannelStateStore {
     if (serverTree.isEmpty()) {
       ui.remove("serverTree");
     }
+    return changed;
   }
 }
