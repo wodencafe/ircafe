@@ -1,0 +1,129 @@
+import org.gradle.api.artifacts.transform.CacheableTransform
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath 'org.javassist:javassist:3.30.2-GA' }
+}
+
+/**
+ * OS 1.8 waits for subprocess exit before reading stdout, deadlocking on full pipes for 60s.
+ * OS 1.9 fixes stdout ordering but removes getPlasmaVersion(), used by SystemTray 4.4 on KDE.
+ * Patch only process handling, retaining the compatible API until SystemTray can be upgraded.
+ */
+@CacheableTransform
+abstract class DorkboxOsProcessFix implements TransformAction<TransformParameters.None> {
+    @InputArtifact
+    @PathSensitive(PathSensitivity.NONE)
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    @Override
+    void transform(TransformOutputs outputs) {
+        File input = inputArtifact.get().asFile
+        if (input.name != 'OS-1.8.jar') {
+            outputs.file(input)
+            return
+        }
+        def pool = new javassist.ClassPool(true)
+        pool.appendClassPath(input.absolutePath)
+        def os = pool.get('dorkbox.os.OS')
+        try {
+            // File redirection drains stdout without a worker or an exit/read circular wait.
+            // Discard stderr separately so diagnostics cannot contaminate desktop detection.
+            os.getDeclaredMethod('execute').setBody('''{
+                java.io.File output = java.io.File.createTempFile("ircafe-os-", ".out");
+                java.lang.Process process = null;
+                try {
+                    process = new java.lang.ProcessBuilder($1)
+                        .redirectOutput(output)
+                        .redirectError(java.lang.ProcessBuilder.Redirect.DISCARD)
+                        .start();
+                    if (!process.waitFor($2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new java.io.IOException("Desktop detection command timed out");
+                    }
+                    java.io.FileInputStream capture = new java.io.FileInputStream(output);
+                    try {
+                        byte[] data = capture.readNBytes(1048577);
+                        if (data.length > 1048576) {
+                            throw new java.io.IOException("Desktop detection output exceeds 1 MiB");
+                        }
+                        return new java.lang.String(data,
+                            java.nio.charset.StandardCharsets.UTF_8).trim();
+                    } finally {
+                        capture.close();
+                    }
+                } finally {
+                    if (process != null && process.isAlive()) {
+                        process.destroyForcibly();
+                        process.waitFor(5L, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                    java.nio.file.Files.deleteIfExists(output.toPath());
+                }
+            }''')
+            os.getDeclaredMethod('executeStatus').setBody('''{
+                java.lang.Process process = new java.lang.ProcessBuilder($1)
+                    .redirectOutput(java.lang.ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(java.lang.ProcessBuilder.Redirect.DISCARD)
+                    .start();
+                try {
+                    if (!process.waitFor($2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new java.io.IOException("Desktop detection command timed out");
+                    }
+                    return process.exitValue() == 0;
+                } finally {
+                    if (process.isAlive()) {
+                        process.destroyForcibly();
+                        process.waitFor(5L, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                }
+            }''')
+            byte[] patchedClass = os.toBytecode()
+            File output = outputs.file('OS-1.8-ircafe-process-fix.jar')
+            new java.util.jar.JarFile(input).withCloseable { jar ->
+                new java.util.jar.JarOutputStream(new FileOutputStream(output)).withCloseable { out ->
+                    jar.entries().each { entry ->
+                        def copy = new java.util.jar.JarEntry(entry.name)
+                        copy.time = entry.time
+                        out.putNextEntry(copy)
+                        if (entry.name == 'dorkbox/os/OS.class') {
+                            out.write(patchedClass)
+                        } else {
+                            jar.getInputStream(entry).withCloseable { stream -> stream.transferTo(out) }
+                        }
+                        out.closeEntry()
+                    }
+                }
+            }
+        } finally {
+            os.detach()
+        }
+    }
+}
+
+def processFix = Attribute.of('cafe.woden.ircafe.dorkboxOsProcessFix', Boolean)
+dependencies {
+    components.withModule('com.dorkbox:OS') {
+        if (id.version != '1.8') {
+            throw new GradleException('Review/remove the OS 1.8 process patch before upgrading Dorkbox OS')
+        }
+    }
+    artifactTypes.getByName('jar').attributes.attribute(processFix, false)
+    registerTransform(DorkboxOsProcessFix) {
+        from.attribute(processFix, false)
+        from.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'jar')
+        to.attribute(processFix, true)
+        to.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'jar')
+    }
+}
+configurations.configureEach {
+    if (canBeResolved) attributes.attribute(processFix, true)
+}
