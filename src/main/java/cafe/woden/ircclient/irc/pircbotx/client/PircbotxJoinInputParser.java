@@ -14,6 +14,20 @@ public class PircbotxJoinInputParser extends InputParser {
   }
 
   @Override
+  public void processServerResponse(int code, String line, List<String> parsedLine) {
+    // Observe on the reader, before listener dispatch, so queued WHO work backs off immediately.
+    // Keep the numeric visible to the normal server-response/diagnostics pipeline.
+    if (code == 263
+        && parsedLine != null
+        && parsedLine.size() >= 2
+        && "WHO".equalsIgnoreCase(parsedLine.get(1))
+        && bot.sendRaw() instanceof PircbotxPacedOutput output) {
+      output.observeWhoRateLimit();
+    }
+    super.processServerResponse(code, line, parsedLine);
+  }
+
+  @Override
   public void processCommand(
       String target,
       UserHostmask source,

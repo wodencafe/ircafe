@@ -91,6 +91,14 @@ public interface IrcClientService {
   Completable sendRaw(String serverId, String rawLine);
 
   /**
+   * Queue a best-effort automatic WHO/WHOX channel scan. Transports may coalesce redundant scans
+   * and defer transmission independently of ordinary sends. Completion means accepted for sending.
+   */
+  default Completable sendAutomaticWho(String serverId, String rawLine) {
+    return sendRaw(serverId, rawLine);
+  }
+
+  /**
    * Request chat history from the server/bouncer.
    *
    * <p>Requires IRCv3 {@code chathistory} (or legacy {@code draft/chathistory}), and typically

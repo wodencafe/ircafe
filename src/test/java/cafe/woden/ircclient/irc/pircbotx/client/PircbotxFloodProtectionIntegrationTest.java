@@ -33,7 +33,7 @@ class PircbotxFloodProtectionIntegrationTest {
   @Test
   void restoredChannelsAndPingDoNotWaitForJoinQueriesAndAreNotJoinedAgain() throws Exception {
     IrcProperties.FloodProtection previous = NetFloodProtectionContext.settings();
-    NetFloodProtectionContext.configure(new IrcProperties.FloodProtection(10_000, 300));
+    NetFloodProtectionContext.configure(new IrcProperties.FloodProtection(2000, 300));
     try (ScriptedServer server = new ScriptedServer(true)) {
       CountDownLatch joined = new CountDownLatch(4);
       CountDownLatch metadata = new CountDownLatch(2);
@@ -74,8 +74,10 @@ class PircbotxFloodProtectionIntegrationTest {
         assertTrue(
             server.pong.await(1, TimeUnit.SECONDS),
             "keepalive behind restored channels must be read immediately");
-        assertEquals("WHO #one", server.queries.poll(1, TimeUnit.SECONDS));
-        assertEquals("MODE #one", server.queries.poll(1, TimeUnit.SECONDS));
+        List<String> queries = new java.util.ArrayList<>();
+        for (int i = 0; i < 5; i++) queries.add(server.queries.poll(5, TimeUnit.SECONDS));
+        assertEquals(1, queries.stream().filter("WHO #one"::equals).count());
+        assertTrue(queries.contains("MODE #one"));
         assertTrue(
             metadata.await(1, TimeUnit.SECONDS),
             "deferred WHO/MODE replies must still update state");
@@ -90,7 +92,7 @@ class PircbotxFloodProtectionIntegrationTest {
       }
       assertFalse(runner.isAlive());
       assertNull(failure.get());
-      assertTrue(server.queries.isEmpty(), "disconnect must cancel queued join queries");
+      assertTrue(server.queries.isEmpty(), "disconnect must cancel queued WHO scans");
       assertNull(server.failure.get());
     } finally {
       NetFloodProtectionContext.configure(previous);

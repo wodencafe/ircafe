@@ -345,6 +345,11 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public Completable sendAutomaticWho(String serverId, String rawLine) {
+    return routeActiveOrConfigured(serverId).sendAutomaticWho(serverId, rawLine);
+  }
+
+  @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, Instant beforeExclusive, int limit) {
     return routeActiveOrConfigured(serverId)

@@ -444,7 +444,7 @@ public class UserInfoEnrichmentService {
 
       log.debug("[{}] WHO channel enrichment: {}", serverId, channel);
       var unused =
-          irc.sendRaw(serverId, line)
+          irc.sendAutomaticWho(serverId, line)
               .subscribe(
                   () -> {},
                   err ->

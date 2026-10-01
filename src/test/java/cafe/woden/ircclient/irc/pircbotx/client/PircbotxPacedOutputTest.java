@@ -18,6 +18,43 @@ import org.pircbotx.PircBotX;
 
 class PircbotxPacedOutputTest {
   @Test
+  void waitingTaggedWhoDoesNotDelayChatOrKeepalivesAndCloseCancelsIt() throws Exception {
+    RecordingBot bot = new RecordingBot();
+    PircbotxPacedOutput output =
+        new PircbotxPacedOutput(bot, new IrcProperties.FloodProtection(false, 100, 0));
+    output.rawLine("WHO #one");
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch cancelled = new CountDownLatch(1);
+    Thread pending =
+        Thread.startVirtualThread(
+            () -> {
+              started.countDown();
+              try {
+                assertThrows(
+                    IllegalStateException.class, () -> output.rawLine("@label=manual who #two"));
+              } finally {
+                cancelled.countDown();
+              }
+            });
+    try {
+      assertTrue(started.await(1, TimeUnit.SECONDS));
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(1),
+          () -> {
+            output.rawLine("PRIVMSG #one :hello");
+            output.rawLine("PONG keepalive");
+          });
+      assertEquals(List.of("WHO #one", "PRIVMSG #one :hello", "PONG keepalive"), bot.lines);
+    } finally {
+      output.close();
+      pending.join(1000);
+    }
+    assertTrue(cancelled.await(1, TimeUnit.SECONDS));
+    assertFalse(pending.isAlive());
+    assertEquals(3, bot.lines.size());
+  }
+
+  @Test
   void automaticJoinQueryOverloadLeavesReaderFreeAndShutdownCancelsWaitingAndQueuedQueries()
       throws Exception {
     RecordingBot bot = new RecordingBot();
@@ -89,7 +126,7 @@ class PircbotxPacedOutputTest {
     assertTrue(waits.isEmpty(), "typing and a message may share a two-command burst");
 
     clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(600));
-    output.rawLine("WHO #one");
+    output.rawLine("NAMES #one");
     assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900)), waits);
     output.rawLine("PRIVMSG #one :sustained traffic");
     assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900), interval), waits);
@@ -98,7 +135,7 @@ class PircbotxPacedOutputTest {
     waits.clear();
     output.rawLine("PRIVMSG #one :after idle");
     assertTrue(waits.isEmpty(), "first command after idle must not wait");
-    output.rawLine("WHO #one");
+    output.rawLine("NAMES #one");
     assertTrue(waits.isEmpty(), "idle replenishes both burst credits");
     output.rawLine("JOIN #two");
     assertEquals(List.of(interval), waits, "idle must not bank more than two credits");
@@ -173,7 +210,7 @@ class PircbotxPacedOutputTest {
     output.rawLine("JOIN #one");
     Thread.sleep(350);
     output.rawLine("PRIVMSG #one :hello");
-    output.rawLine("WHO #one");
+    output.rawLine("NAMES #one");
     output.rawLine("JOIN #two");
     assertEquals(4, bot.lines.size());
     assertTrue(bot.times.get(3) - bot.times.get(1) >= TimeUnit.MILLISECONDS.toNanos(95));

@@ -37,6 +37,7 @@ final class PircbotxPacedOutput extends OutputRaw implements AutoCloseable {
   private final long maxCreditNanos;
   private final LongSupplier nanoTime;
   private final Sleeper sleeper;
+  private final PircbotxWhoRequestCoordinator whoRequests;
   // Guarded by pacingLock. One command costs commandIntervalNanos of credit.
   private long creditNanos;
   private long lastRefillNanos;
@@ -58,6 +59,9 @@ final class PircbotxPacedOutput extends OutputRaw implements AutoCloseable {
     this.nanoTime = nanoTime;
     this.sleeper = sleeper;
     lastRefillNanos = nanoTime.getAsLong();
+    whoRequests =
+        new PircbotxWhoRequestCoordinator(
+            bot.getBotId(), bot::isConnected, line -> pacedLine(line, line));
   }
 
   @Override
@@ -65,10 +69,47 @@ final class PircbotxPacedOutput extends OutputRaw implements AutoCloseable {
     if (line == null || line.isBlank())
       throw new IllegalArgumentException("Cannot send empty IRC line");
     String channel = joinQueryChannel.get();
-    if (channel != null && (line.equals("WHO " + channel) || line.equals("MODE " + channel))) {
+    if (channel != null && line.equals("WHO " + channel)) {
+      whoRequests.enqueue(line);
+      return;
+    }
+    if (channel != null && line.equals("MODE " + channel)) {
       enqueueJoinQuery(line, logline);
       return;
     }
+    if (isWho(line)) {
+      whoRequests.send(
+          () -> {
+            pacedLine(line, logline);
+            return true;
+          });
+      return;
+    }
+    pacedLine(line, logline);
+  }
+
+  void enqueueAutomaticWho(String line) {
+    whoRequests.enqueue(line);
+  }
+
+  void observeWhoRateLimit() {
+    whoRequests.rateLimited();
+  }
+
+  private static boolean isWho(String line) {
+    String command = line.stripLeading();
+    if (command.startsWith("@")) {
+      int endTags = command.indexOf(' ');
+      if (endTags < 0) return false;
+      command = command.substring(endTags + 1).stripLeading();
+    }
+    return command.equalsIgnoreCase("WHO")
+        || (command.length() > 3
+            && command.regionMatches(true, 0, "WHO", 0, 3)
+            && Character.isWhitespace(command.charAt(3)));
+  }
+
+  private void pacedLine(String line, String logline) {
     // SASL runs on the reader thread. Keep it and transport keepalives independent of
     // channel joins and application traffic; CAP, registration and QUIT use rawLineNow.
     if (commandIntervalNanos == 0
@@ -148,6 +189,7 @@ final class PircbotxPacedOutput extends OutputRaw implements AutoCloseable {
 
   @Override
   public void close() {
+    whoRequests.close();
     joinQueries.shutdownNow();
   }
 
