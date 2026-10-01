@@ -66,6 +66,15 @@ public class RuntimeConfigDocumentStore implements AutoCloseable {
     return fileExistedOnStartup;
   }
 
+  /**
+   * Version for derived read caches, or {@code -1} when reads cannot safely be cached. Mutation
+   * batches expose a mutable document, and disk-backed reads must continue to observe external
+   * edits.
+   */
+  public synchronized long cachedReadRevision() {
+    return cachedDoc != null && mutationBatchDepth == 0 && !closed ? revision : -1L;
+  }
+
   /** Loads the document before UI startup and enables bounded, coalesced background saves. */
   public synchronized void startAsyncPersistence() throws IOException {
     if (closed) throw new IOException("Runtime config store is closed");

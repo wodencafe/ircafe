@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.config.runtime.server;
 
 import static cafe.woden.ircclient.config.yaml.RuntimeConfigYamlSupport.asBoolean;
-import static cafe.woden.ircclient.config.yaml.RuntimeConfigYamlSupport.containsIgnoreCase;
 
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelPreference;
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
@@ -12,6 +11,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,6 +124,7 @@ final class RuntimeConfigServerTreeChannelStateCodec {
     Map<String, ServerTreeChannelPreference> safeChannels =
         channelsByKey == null ? Map.of() : channelsByKey;
     ArrayList<String> out = new ArrayList<>();
+    Set<String> seen = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
     if (rawOrder instanceof List<?> rawList) {
       for (Object entry : rawList) {
@@ -130,8 +132,10 @@ final class RuntimeConfigServerTreeChannelStateCodec {
         if (channel.isEmpty()) continue;
         String key = foldChannelKey(channel);
         if (!safeChannels.containsKey(key)) continue;
-        if (containsIgnoreCase(out, channel)) continue;
-        out.add(safeChannels.get(key).channel());
+        if (seen.contains(channel)) continue;
+        String canonicalChannel = safeChannels.get(key).channel();
+        out.add(canonicalChannel);
+        seen.add(canonicalChannel);
       }
     } else if (rawOrder instanceof ServerTreeChannelState state) {
       return sanitizeCustomOrder(state.customOrder(), safeChannels);
@@ -141,7 +145,7 @@ final class RuntimeConfigServerTreeChannelStateCodec {
       if (pref == null) continue;
       String channel = normalizeChannelName(pref.channel());
       if (channel.isEmpty()) continue;
-      if (containsIgnoreCase(out, channel)) continue;
+      if (!seen.add(channel)) continue;
       out.add(channel);
     }
     return out;
