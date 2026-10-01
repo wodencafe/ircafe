@@ -18,16 +18,15 @@ import javax.swing.*;
  * <ul>
  *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark themes).
  *   <li>Idle (typing available): steady green arrow.
- *   <li>Active: glowing blue arrow pulse.
- *   <li>Paused: light gray arrow (fades from active).
- *   <li>Done: fade back to idle green.
+ *   <li>Active: fade into a glowing blue arrow pulse.
+ *   <li>Paused/done: fade back to idle green.
  * </ul>
  */
 final class TypingSignalIndicator extends JComponent {
 
   private static final int FRAME_MS = 33;
   private static final long ACTIVE_PULSE_MS = 1050L;
-  private static final int PAUSE_FADE_MS = 240;
+  private static final int ACTIVE_FADE_MS = 240;
   private static final int RETURN_TO_IDLE_MS = 420;
   private static final float IDLE_GLOW_ALPHA = 0.12f;
   private static final Color DARK_THEME_FALLBACK_ARROW = new Color(0xFFFFFF);
@@ -91,14 +90,15 @@ final class TypingSignalIndicator extends JComponent {
     SignalEvent event = SignalEvent.fromState(state);
     switch (event) {
       case ACTIVE -> {
+        if (mode == Mode.ACTIVE) return;
+        ArrowVisual current = visualAt(now);
+        transitionFromColor = current.color();
+        transitionFromGlow = current.glowAlpha();
         mode = Mode.ACTIVE;
         modeStartMs = now;
         startTimerIfDisplayable();
       }
-      case PAUSED -> {
-        beginPauseTransition(now);
-      }
-      case DONE -> {
+      case PAUSED, DONE -> {
         beginReturnToIdle(now);
       }
     }
@@ -140,9 +140,7 @@ final class TypingSignalIndicator extends JComponent {
   @Override
   public void addNotify() {
     super.addNotify();
-    if (available
-        && (mode == Mode.ACTIVE || mode == Mode.PAUSING || mode == Mode.RETURNING)
-        && !fadeTimer.isRunning()) {
+    if (available && (mode == Mode.ACTIVE || mode == Mode.RETURNING) && !fadeTimer.isRunning()) {
       fadeTimer.start();
     }
   }
@@ -159,13 +157,7 @@ final class TypingSignalIndicator extends JComponent {
       mode = Mode.IDLE;
       return;
     }
-    if (mode == Mode.PAUSING) {
-      long elapsed = Math.max(0L, nowMs() - modeStartMs);
-      if (elapsed >= PAUSE_FADE_MS) {
-        mode = Mode.PAUSED;
-        fadeTimer.stop();
-      }
-    } else if (mode == Mode.RETURNING) {
+    if (mode == Mode.RETURNING) {
       long elapsed = Math.max(0L, nowMs() - modeStartMs);
       if (elapsed >= RETURN_TO_IDLE_MS) {
         mode = Mode.IDLE;
@@ -211,6 +203,7 @@ final class TypingSignalIndicator extends JComponent {
   }
 
   private void beginReturnToIdle(long now) {
+    if (mode == Mode.RETURNING) return;
     if (mode == Mode.IDLE) {
       fadeTimer.stop();
       return;
@@ -223,44 +216,25 @@ final class TypingSignalIndicator extends JComponent {
     startTimerIfDisplayable();
   }
 
-  private void beginPauseTransition(long now) {
-    if (mode == Mode.PAUSED) {
-      fadeTimer.stop();
-      return;
-    }
-    ArrowVisual current = visualAt(now);
-    transitionFromColor = current.color();
-    transitionFromGlow = current.glowAlpha();
-    mode = Mode.PAUSING;
-    modeStartMs = now;
-    startTimerIfDisplayable();
-  }
-
   private ArrowVisual visualAt(long now) {
     if (!available) {
       return new ArrowVisual(unavailableFallbackColor(), 0f);
-    }
-    if (mode == Mode.PAUSING) {
-      float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) PAUSE_FADE_MS));
-      float eased = easeOutCubic(t);
-      Color c = mix(transitionFromColor, pausedGrayColor(), eased);
-      float glow = transitionFromGlow * (1f - eased);
-      return new ArrowVisual(c, glow);
-    }
-    if (mode == Mode.PAUSED) {
-      return new ArrowVisual(pausedGrayColor(), 0f);
     }
     if (mode == Mode.ACTIVE) {
       float pulse = activePulse(now);
       Color c = mix(activeBlueBaseColor(), activeBluePeakColor(), 0.45f + (0.55f * pulse));
       float glow = 0.20f + (0.46f * pulse);
-      return new ArrowVisual(c, glow);
+      float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) ACTIVE_FADE_MS));
+      float eased = easeOutCubic(t);
+      return new ArrowVisual(
+          mix(transitionFromColor, c, eased),
+          transitionFromGlow + (glow - transitionFromGlow) * eased);
     }
     if (mode == Mode.RETURNING) {
       float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) RETURN_TO_IDLE_MS));
       float eased = easeOutCubic(t);
       Color c = mix(transitionFromColor, idleGreenColor(), eased);
-      float glow = transitionFromGlow * (1f - eased);
+      float glow = transitionFromGlow + (IDLE_GLOW_ALPHA - transitionFromGlow) * eased;
       return new ArrowVisual(c, glow);
     }
     return new ArrowVisual(idleGreenColor(), IDLE_GLOW_ALPHA);
@@ -292,10 +266,6 @@ final class TypingSignalIndicator extends JComponent {
 
   private static Color activeBluePeakColor() {
     return new Color(0x7CC4FF);
-  }
-
-  private static Color pausedGrayColor() {
-    return new Color(0xC6CDD5);
   }
 
   private static Color withAlpha(Color c, float alpha) {
@@ -373,8 +343,6 @@ final class TypingSignalIndicator extends JComponent {
   private enum Mode {
     IDLE,
     ACTIVE,
-    PAUSING,
-    PAUSED,
     RETURNING
   }
 

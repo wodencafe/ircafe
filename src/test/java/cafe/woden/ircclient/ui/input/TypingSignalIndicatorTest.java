@@ -74,19 +74,43 @@ class TypingSignalIndicatorTest {
   }
 
   @Test
-  void pausedTransitionFadesToGray() throws Exception {
+  void activeTransitionFadesFromGreenToGlowingBlue() throws Exception {
     ManualClock clock = new ManualClock();
     TypingSignalIndicator indicator = createOnEdt(clock);
     onEdt(
         () -> {
           indicator.setAvailable(true);
           indicator.pulse("active");
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+        });
+    clock.advance(120);
+    onEdt(() -> assertNotEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest())));
+    clock.advance(160);
+    onEdt(
+        () -> {
+          Color blue = indicator.debugArrowColorForTest();
+          assertTrue(blue.getBlue() > blue.getGreen());
+          assertTrue(indicator.debugArrowGlowForTest() > 0.2f);
+          indicator.pulse("active");
+          assertEquals(blue, indicator.debugArrowColorForTest());
+        });
+  }
+
+  @Test
+  void pausedTransitionFadesBackToGreen() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("active");
+          clock.advance(280);
           indicator.pulse("paused");
-          assertNotEquals(0xC6CDD5, rgbHex(indicator.debugArrowColorForTest()));
+          assertNotEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
         });
 
-    clock.advance(280);
-    onEdt(() -> assertEquals(0xC6CDD5, rgbHex(indicator.debugArrowColorForTest())));
+    clock.advance(500);
+    onEdt(() -> assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest())));
   }
 
   @Test
@@ -97,13 +121,10 @@ class TypingSignalIndicatorTest {
         () -> {
           indicator.setAvailable(true);
           indicator.pulse("active");
-          indicator.pulse("paused");
+          clock.advance(280);
         });
-    clock.advance(280);
-
     onEdt(
         () -> {
-          assertEquals(0xC6CDD5, rgbHex(indicator.debugArrowColorForTest()));
           indicator.pulse("done");
           assertNotEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
           assertTrue(indicator.debugArrowGlowForTest() >= 0f);
@@ -111,6 +132,25 @@ class TypingSignalIndicatorTest {
 
     clock.advance(500);
     onEdt(() -> assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest())));
+  }
+
+  @Test
+  void resumingDuringReturnFadePreservesCurrentColorAndGlow() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("active");
+          clock.advance(280);
+          indicator.pulse("paused");
+          clock.advance(120);
+          Color color = indicator.debugArrowColorForTest();
+          float glow = indicator.debugArrowGlowForTest();
+          indicator.pulse("active");
+          assertEquals(color, indicator.debugArrowColorForTest());
+          assertEquals(glow, indicator.debugArrowGlowForTest());
+        });
   }
 
   private static TypingSignalIndicator createOnEdt()
