@@ -125,6 +125,75 @@ class TypingSignalIndicatorTest {
   }
 
   @Test
+  void pausedAcknowledgementPulsesGreenOnceAndSettlesToIdle() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          float idleGlow = indicator.debugArrowGlowForTest();
+          indicator.pulsePausedSent();
+          assertEquals(idleGlow, indicator.debugArrowGlowForTest());
+          clock.advance(250);
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+          assertTrue(indicator.debugArrowGlowForTest() > 0.5f);
+          clock.advance(250);
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+          assertEquals(idleGlow, indicator.debugArrowGlowForTest());
+          clock.advance(1000);
+          assertEquals(idleGlow, indicator.debugArrowGlowForTest());
+        });
+  }
+
+  @Test
+  void pausedAcknowledgementAndResumptionPreserveCurrentColorAndGlow() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("active");
+          clock.advance(280);
+          Color blue = indicator.debugArrowColorForTest();
+          float blueGlow = indicator.debugArrowGlowForTest();
+          indicator.pulsePausedSent();
+          assertEquals(blue, indicator.debugArrowColorForTest());
+          assertEquals(blueGlow, indicator.debugArrowGlowForTest());
+          clock.advance(250);
+          Color green = indicator.debugArrowColorForTest();
+          float greenGlow = indicator.debugArrowGlowForTest();
+          assertEquals(0x35C86E, rgbHex(green));
+          indicator.pulsePausedSent();
+          assertEquals(greenGlow, indicator.debugArrowGlowForTest());
+          indicator.pulse("pending");
+          assertEquals(green, indicator.debugArrowColorForTest());
+          assertEquals(greenGlow, indicator.debugArrowGlowForTest());
+          clock.advance(280);
+          Color violet = indicator.debugArrowColorForTest();
+          assertTrue(violet.getBlue() > violet.getRed());
+          assertTrue(violet.getRed() > violet.getGreen());
+        });
+  }
+
+  @Test
+  void disablingAvailabilityCancelsPausedPulse() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulsePausedSent();
+          clock.advance(250);
+          indicator.setAvailable(false);
+          indicator.pulsePausedSent();
+          assertEquals(0f, indicator.debugArrowGlowForTest());
+          indicator.setAvailable(true);
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+          assertEquals(0.12f, indicator.debugArrowGlowForTest());
+        });
+  }
+
+  @Test
   void pausedTransitionFadesBackToGreen() throws Exception {
     ManualClock clock = new ManualClock();
     TypingSignalIndicator indicator = createOnEdt(clock);

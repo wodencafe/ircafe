@@ -320,6 +320,77 @@ class MessageInputTypingSupportTest {
         });
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void pauseOnlyPulsesGreenAfterSuccessfulAcknowledgement(boolean sendSucceeded) throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("unfinished draft");
+            f.support.onUserEdit(false);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(300);
+            f.support.flushTypingForBufferSwitch();
+            f.clock.addAndGet(500);
+            assertEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+            assertEquals(0.12f, f.signal.debugArrowGlowForTest(), 0.000001f);
+            if (sendSucceeded) {
+              f.support.onLocalTypingIndicatorSent("paused");
+            } else {
+              f.support.onLocalTypingIndicatorFailed("paused");
+            }
+            f.clock.addAndGet(250);
+            assertEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+            if (sendSucceeded) {
+              assertTrue(f.signal.debugArrowGlowForTest() > 0.5f);
+            } else {
+              assertEquals(0.12f, f.signal.debugArrowGlowForTest(), 0.000001f);
+            }
+            f.clock.addAndGet(250);
+            assertEquals(0.12f, f.signal.debugArrowGlowForTest(), 0.000001f);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"submit", "resume"})
+  void stalePauseAcknowledgementDoesNotPulseAfterSubmissionOrResumption(String action)
+      throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("unfinished draft");
+            f.support.onUserEdit(false);
+            f.support.flushTypingForBufferSwitch();
+            if ("submit".equals(action)) {
+              f.support.onMessageSubmitted();
+            } else {
+              f.support.onUserEdit(false);
+            }
+            f.clock.addAndGet(300);
+            var color = f.signal.debugArrowColorForTest();
+            float glow = f.signal.debugArrowGlowForTest();
+            f.support.onLocalTypingIndicatorSent("paused");
+            assertEquals(color, f.signal.debugArrowColorForTest());
+            assertEquals(glow, f.signal.debugArrowGlowForTest());
+            f.clock.addAndGet(250);
+            if ("submit".equals(action)) {
+              assertEquals(0.12f, f.signal.debugArrowGlowForTest(), 0.000001f);
+            } else {
+              assertViolet(f);
+            }
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
   @Test
   void latePausedAcknowledgementDoesNotInterruptResumedTyping() throws Exception {
     Fixture f = newFixture();

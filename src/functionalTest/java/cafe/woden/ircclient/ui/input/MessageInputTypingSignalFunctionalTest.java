@@ -109,6 +109,58 @@ class MessageInputTypingSignalFunctionalTest {
   }
 
   @Test
+  void pauseAcknowledgementProducesSingleGreenPulse() throws Exception {
+    MessageInputPanel[] panels = new MessageInputPanel[1];
+    List<String> states = new CopyOnWriteArrayList<>();
+    onEdt(
+        () -> {
+          MessageInputPanel panel =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          panels[0] = panel;
+          panel.setTypingSignalAvailable(true);
+          panel.setOnTypingStateChanged(
+              state -> {
+                states.add(state);
+                if ("active".equals(state)) panel.onLocalTypingIndicatorSent(state);
+              });
+          panel.addNotify();
+        });
+    MessageInputPanel panel = panels[0];
+    try {
+      JTextComponent input = findFirst(panel, JTextComponent.class);
+      TypingSignalIndicator signal = findFirst(panel, TypingSignalIndicator.class);
+      assertNotNull(input);
+      assertNotNull(signal);
+      onEdt(() -> input.setText("hello"));
+      waitFor(() -> signal.debugArrowColorForTest().getBlue() > 200, Duration.ofSeconds(1));
+      // Let the real inactivity timer emit PAUSED, but defer its acknowledgement.
+      waitFor(
+          () -> states.contains("paused") && signal.debugArrowGlowForTest() == 0.12f,
+          Duration.ofSeconds(4));
+      panel.onLocalTypingIndicatorSent("paused");
+      waitFor(
+          () ->
+              (signal.debugArrowColorForTest().getRGB() & 0xFFFFFF) == 0x35C86E
+                  && signal.debugArrowGlowForTest() > 0.4f,
+          Duration.ofSeconds(1));
+      waitFor(() -> signal.debugArrowGlowForTest() == 0.12f, Duration.ofSeconds(1));
+      Thread.sleep(600);
+      onEdt(
+          () -> {
+            assertEquals(0x35C86E, signal.debugArrowColorForTest().getRGB() & 0xFFFFFF);
+            assertEquals(0.12f, signal.debugArrowGlowForTest());
+          });
+      assertEquals(List.of("active", "paused"), states);
+    } finally {
+      onEdt(
+          () -> {
+            panel.shutdownResources();
+            if (panel.isDisplayable()) panel.removeNotify();
+          });
+    }
+  }
+
+  @Test
   void delayedSendTransitionsFromVioletToBlueOnBackgroundCompletion() throws Exception {
     MessageInputPanel[] panels = new MessageInputPanel[1];
     onEdt(

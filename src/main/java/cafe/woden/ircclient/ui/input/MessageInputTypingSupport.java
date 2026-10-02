@@ -120,7 +120,11 @@ final class MessageInputTypingSupport {
     String s = normalizeTypingState(state);
     // A send may complete after the draft was submitted or typing changed state.
     if (s.isEmpty() || !s.equals(lastEmittedTypingState)) return;
-    typingSignalIndicator.pulse(s);
+    if ("paused".equals(s)) {
+      typingSignalIndicator.pulsePausedSent();
+    } else {
+      typingSignalIndicator.pulse(s);
+    }
   }
 
   void onLocalTypingIndicatorFailed(String state) {
