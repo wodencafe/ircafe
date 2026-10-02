@@ -108,20 +108,34 @@ public final class OutboundMessagingCommandService {
       return;
     }
 
+    String me = currentNickPort.currentNick(at.serverId()).orElse("me");
+    final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
     if (shouldUseLocalEcho(at.serverId())) {
-      String me = currentNickPort.currentNick(at.serverId()).orElse("me");
+      pendingEntry = null;
       ui.appendAction(at, me, a, true);
+    } else {
+      pendingEntry = pendingEchoMessageState.registerAction(at, me, a, Instant.now());
+      ui.appendPendingOutgoingAction(at, pendingEntry.pendingId(), pendingEntry.createdAt(), me, a);
     }
 
     disposables.add(
         irc.sendAction(at.serverId(), at.target(), a)
             .subscribe(
                 () -> {},
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(send-error)",
-                        String.valueOf(err))));
+                err -> {
+                  if (pendingEntry != null) {
+                    pendingEchoMessageState.removeById(pendingEntry.pendingId());
+                    ui.failPendingOutgoingAction(
+                        at,
+                        pendingEntry.pendingId(),
+                        Instant.now(),
+                        pendingEntry.fromNick(),
+                        pendingEntry.text(),
+                        String.valueOf(err));
+                  }
+                  ui.appendError(
+                      targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err));
+                }));
   }
 
   void sendMessage(CompositeDisposable disposables, TargetRef target, String message) {

@@ -12,9 +12,28 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 public interface PendingEchoMessagePort {
 
   record PendingOutboundChat(
-      String pendingId, TargetRef target, String fromNick, String text, Instant createdAt) {}
+      String pendingId,
+      TargetRef target,
+      String fromNick,
+      String text,
+      Instant createdAt,
+      boolean action) {
+    public PendingOutboundChat(
+        String pendingId, TargetRef target, String fromNick, String text, Instant createdAt) {
+      this(pendingId, target, fromNick, text, createdAt, false);
+    }
+  }
 
   PendingOutboundChat register(TargetRef target, String fromNick, String text, Instant createdAt);
+
+  PendingOutboundChat registerAction(
+      TargetRef target, String fromNick, String text, Instant createdAt);
+
+  Optional<PendingOutboundChat> consumeActionByTargetAndText(
+      TargetRef target, String fromNick, String text);
+
+  Optional<PendingOutboundChat> consumePrivateActionFallback(
+      String serverId, String fromNick, String text);
 
   Optional<PendingOutboundChat> removeById(String pendingId);
 

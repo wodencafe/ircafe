@@ -40,6 +40,7 @@ public final class ChatTranscriptMessageLineCoordinator {
   private final ChatTranscriptManualPreviewFlowSupport manualPreviewFlowSupport =
       new ChatTranscriptManualPreviewFlowSupport();
   private final ChatTranscriptSystemLineSupport systemLineSupport;
+  private final ChatTranscriptOutgoingActionSupport outgoingActionSupport;
   private final ChatTranscriptManualPreviewFlowSupport.Context manualPreviewFlowContext;
   private final ChatTranscriptChatFlowSupport.Context chatFlowContext;
   private final ChatTranscriptActionFlowSupport.Context actionFlowContext;
@@ -108,6 +109,11 @@ public final class ChatTranscriptMessageLineCoordinator {
     this.actionFlowContext =
         createActionFlowContext(
             deps, actionAppendSupportContext, actionHistoryInsertSupportContext);
+    this.outgoingActionSupport =
+        new ChatTranscriptOutgoingActionSupport(
+            actionFlowContext,
+            new ChatTranscriptOutgoingDeliverySupport(deps.docs(), deps.mutationLock()),
+            deps.runtimeSettingsSupport()::outgoingDeliveryIndicatorsEnabled);
     this.systemLineSupport = createSystemLineSupport(deps);
   }
 
@@ -324,6 +330,11 @@ public final class ChatTranscriptMessageLineCoordinator {
         chatFlowContext, ref, pendingId, from, text, tsEpochMs);
   }
 
+  public void appendPendingOutgoingAction(
+      TargetRef ref, String pendingId, String from, String text, long tsEpochMs) {
+    outgoingActionSupport.appendPendingOutgoingAction(ref, pendingId, from, text, tsEpochMs);
+  }
+
   public boolean resolvePendingOutgoingChat(
       TargetRef ref,
       String pendingId,
@@ -336,10 +347,28 @@ public final class ChatTranscriptMessageLineCoordinator {
         chatFlowContext, ref, pendingId, from, text, tsEpochMs, messageId, ircv3Tags);
   }
 
+  public boolean resolvePendingOutgoingAction(
+      TargetRef ref,
+      String pendingId,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return outgoingActionSupport.resolvePendingOutgoingAction(
+        ref, pendingId, from, text, tsEpochMs, messageId, ircv3Tags);
+  }
+
   public boolean failPendingOutgoingChat(
       TargetRef ref, String pendingId, String from, String text, long tsEpochMs, String reason) {
     return chatFlowSupport.failPendingOutgoingChat(
         chatFlowContext, ref, pendingId, from, text, tsEpochMs, reason);
+  }
+
+  public boolean failPendingOutgoingAction(
+      TargetRef ref, String pendingId, String from, String text, long tsEpochMs, String reason) {
+    return outgoingActionSupport.failPendingOutgoingAction(
+        ref, pendingId, from, text, tsEpochMs, reason);
   }
 
   public int insertChatFromHistoryAt(

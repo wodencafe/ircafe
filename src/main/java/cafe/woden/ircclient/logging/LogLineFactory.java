@@ -100,6 +100,25 @@ public final class LogLineFactory {
         .build();
   }
 
+  public LogLine resolvedOutgoingActionAt(
+      TargetRef target,
+      String from,
+      String text,
+      long tsEpochMs,
+      String pendingId,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.OUT)
+        .kind(LogKind.ACTION)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(true)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(pendingId, messageId, ircv3Tags))
+        .build();
+  }
+
   public LogLine softIgnoredSpoiler(TargetRef target, String from, String text) {
     return base(target)
         .direction(LogDirection.IN)

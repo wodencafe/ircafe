@@ -144,6 +144,32 @@ class LoggingUiPortDecoratorTest {
   }
 
   @Test
+  void resolvePendingOutgoingActionPersistsPendingAndIdentityMetadata() throws Exception {
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
+    AtomicReference<LogLine> captured = new AtomicReference<>();
+    LoggingUiPortDecorator d = newDecorator(delegate, captured);
+
+    TargetRef target = new TargetRef("srv", "#chan");
+    Instant at = Instant.ofEpochMilli(1_732_000_001_222L);
+    Map<String, String> tags = Map.of("msgid", "srv-echo-1");
+    when(delegate.resolvePendingOutgoingAction(
+            target, "p-123", at, "me", "hello", "srv-echo-1", tags))
+        .thenReturn(true);
+
+    boolean resolved =
+        d.resolvePendingOutgoingAction(target, "p-123", at, "me", "hello", "srv-echo-1", tags);
+
+    assertTrue(resolved);
+    LogLine line = captured.get();
+    assertNotNull(line);
+    assertEquals(LogDirection.OUT, line.direction());
+    assertEquals(LogKind.ACTION, line.kind());
+    assertEquals("p-123", meta(line).get("pendingId"));
+    assertEquals("srv-echo-1", meta(line).get("messageId"));
+    assertEquals("srv-echo-1", metaTags(line).get("msgid"));
+  }
+
+  @Test
   void resolvePendingOutgoingChatWithoutMatchDoesNotPersist() {
     UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
@@ -158,6 +184,26 @@ class LoggingUiPortDecoratorTest {
 
     boolean resolved =
         d.resolvePendingOutgoingChat(target, "p-404", at, "me", "hello", "srv-echo-2", tags);
+
+    assertFalse(resolved);
+    assertNull(captured.get());
+  }
+
+  @Test
+  void resolvePendingOutgoingActionWithoutMatchDoesNotPersist() {
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
+    AtomicReference<LogLine> captured = new AtomicReference<>();
+    LoggingUiPortDecorator d = newDecorator(delegate, captured);
+
+    TargetRef target = new TargetRef("srv", "#chan");
+    Instant at = Instant.ofEpochMilli(1_732_000_001_333L);
+    Map<String, String> tags = Map.of("msgid", "srv-echo-2");
+    when(delegate.resolvePendingOutgoingAction(
+            target, "p-404", at, "me", "hello", "srv-echo-2", tags))
+        .thenReturn(false);
+
+    boolean resolved =
+        d.resolvePendingOutgoingAction(target, "p-404", at, "me", "hello", "srv-echo-2", tags);
 
     assertFalse(resolved);
     assertNull(captured.get());

@@ -54,6 +54,11 @@ public interface UiTranscriptPort {
     appendChatAt(target, at, from, text + " [pending]", true);
   }
 
+  default void appendPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text) {
+    appendActionAt(target, at, from, text + " [pending]", true);
+  }
+
   default boolean resolvePendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -65,7 +70,23 @@ public interface UiTranscriptPort {
     return false;
   }
 
+  default boolean resolvePendingOutgoingAction(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return false;
+  }
+
   default void failPendingOutgoingChat(
+      TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
+    appendErrorAt(target, at, "(send-error)", "Failed to send: " + text);
+  }
+
+  default void failPendingOutgoingAction(
       TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
     appendErrorAt(target, at, "(send-error)", "Failed to send: " + text);
   }

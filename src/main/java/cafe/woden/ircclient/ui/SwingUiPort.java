@@ -435,6 +435,12 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text) {
+    transcriptPort.appendPendingOutgoingAction(target, pendingId, at, from, text);
+  }
+
+  @Override
   public boolean resolvePendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -448,9 +454,28 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public boolean resolvePendingOutgoingAction(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return transcriptPort.resolvePendingOutgoingAction(
+        target, pendingId, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void failPendingOutgoingChat(
       TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
     transcriptPort.failPendingOutgoingChat(target, pendingId, at, from, text, reason);
+  }
+
+  @Override
+  public void failPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
+    transcriptPort.failPendingOutgoingAction(target, pendingId, at, from, text, reason);
   }
 
   @Override

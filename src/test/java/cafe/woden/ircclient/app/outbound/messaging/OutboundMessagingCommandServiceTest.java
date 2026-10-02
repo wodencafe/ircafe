@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.app.outbound.messaging;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,9 +24,12 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class OutboundMessagingCommandServiceTest {
 
@@ -138,5 +144,53 @@ class OutboundMessagingCommandServiceTest {
 
     verify(ui).appendAction(at, "me", "waves", true);
     verify(irc).sendAction("libera", "#ircafe", "waves");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"#ircafe", "alice"})
+  void meWithEchoMessageDisplaysPendingActionBeforeSending(String target) {
+    TargetRef at = new TargetRef("libera", target);
+    Instant createdAt = Instant.now();
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "action-1", at, "me", "waves", createdAt, true);
+    when(targetCoordinator.getActiveTarget()).thenReturn(at);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
+    when(pendingEchoMessageState.registerAction(eq(at), eq("me"), eq("waves"), any()))
+        .thenReturn(pending);
+    when(irc.sendAction("libera", target, "waves")).thenReturn(Completable.never());
+
+    service.handleMe(disposables, " waves ");
+
+    var order = inOrder(ui, irc);
+    order.verify(ui).appendPendingOutgoingAction(at, "action-1", createdAt, "me", "waves");
+    order.verify(irc).sendAction("libera", target, "waves");
+    verify(ui, never()).appendAction(at, "me", "waves", true);
+  }
+
+  @Test
+  void meSendFailureRemovesPendingStateAndFailsAction() {
+    TargetRef at = new TargetRef("libera", "#ircafe");
+    Instant createdAt = Instant.now();
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "action-1", at, "me", "waves", createdAt, true);
+    var error = new IllegalStateException("network");
+    when(targetCoordinator.getActiveTarget()).thenReturn(at);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
+    when(pendingEchoMessageState.registerAction(eq(at), eq("me"), eq("waves"), any()))
+        .thenReturn(pending);
+    when(irc.sendAction("libera", "#ircafe", "waves")).thenReturn(Completable.error(error));
+
+    service.handleMe(disposables, "waves");
+
+    verify(pendingEchoMessageState).removeById("action-1");
+    verify(ui)
+        .failPendingOutgoingAction(
+            eq(at), eq("action-1"), any(), eq("me"), eq("waves"), eq(error.toString()));
   }
 }

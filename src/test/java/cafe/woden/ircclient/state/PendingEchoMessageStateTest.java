@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class PendingEchoMessageStateTest {
@@ -63,5 +65,37 @@ class PendingEchoMessageStateTest {
     var next = state.consumeOldestByTarget(pm);
     assertTrue(next.isPresent());
     assertEquals(second.pendingId(), next.get().pendingId());
+  }
+
+  @Test
+  void identicalChatAndActionTextReconcileIndependently() {
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    var action = state.registerAction(target, "me", "waves", Instant.now());
+    var chat = state.register(target, "me", "waves", Instant.now());
+
+    assertEquals(chat, state.consumeByTargetAndText(target, "me", "waves").orElseThrow());
+    assertEquals(action, state.consumeActionByTargetAndText(target, "me", "waves").orElseThrow());
+    assertTrue(state.consumeActionByTargetAndText(target, "me", "waves").isEmpty());
+  }
+
+  @Test
+  void privateActionFallbackDoesNotConsumeMatchingChat() {
+    TargetRef target = new TargetRef("libera", "friend");
+    var chat = state.register(target, "me", "waves", Instant.now());
+    var action = state.registerAction(target, "me", "waves", Instant.now());
+
+    assertEquals(action, state.consumePrivateActionFallback("libera", "me", "waves").orElseThrow());
+    assertEquals(chat, state.consumePrivateFallback("libera", "me", "waves").orElseThrow());
+  }
+
+  @Test
+  void actionsParticipateInTimeoutAndDisconnectCleanup() {
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    Instant now = Instant.now();
+    var expired = state.registerAction(target, "me", "waves", now.minusSeconds(60));
+    var fresh = state.registerAction(target, "me", "smiles", now);
+    assertEquals(List.of(expired), state.collectTimedOut(Duration.ofSeconds(45), 10, now));
+    assertEquals(List.of(fresh), state.drainServer("libera"));
+    assertTrue(state.drainServer("libera").isEmpty());
   }
 }

@@ -111,6 +111,13 @@ final class SwingUiTranscriptPort implements UiTranscriptPort {
   }
 
   @Override
+  public void appendPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    edt.run(() -> transcripts.appendPendingOutgoingAction(target, pendingId, from, text, ts));
+  }
+
+  @Override
   public boolean resolvePendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -128,10 +135,34 @@ final class SwingUiTranscriptPort implements UiTranscriptPort {
   }
 
   @Override
+  public boolean resolvePendingOutgoingAction(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    return edt.call(
+        () ->
+            transcripts.resolvePendingOutgoingAction(
+                target, pendingId, from, text, ts, messageId, ircv3Tags),
+        false);
+  }
+
+  @Override
   public void failPendingOutgoingChat(
       TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     edt.run(() -> transcripts.failPendingOutgoingChat(target, pendingId, from, text, ts, reason));
+  }
+
+  @Override
+  public void failPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    edt.run(() -> transcripts.failPendingOutgoingAction(target, pendingId, from, text, ts, reason));
   }
 
   @Override

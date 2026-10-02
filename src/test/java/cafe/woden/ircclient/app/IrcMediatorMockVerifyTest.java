@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -94,6 +96,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.context.ApplicationEventPublisher;
@@ -1392,12 +1397,15 @@ class IrcMediatorMockVerifyTest {
     verify(targetCoordinator).joinChannel(new TargetRef("quassel", "#new"));
   }
 
-  @Test
-  void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError(boolean action)
+      throws Exception {
     TargetRef pm = new TargetRef("libera", "ghost");
     Instant at = Instant.parse("2026-03-02T18:53:57Z");
     PendingEchoMessagePort.PendingOutboundChat pending =
-        new PendingEchoMessagePort.PendingOutboundChat("pending-1", pm, "Birbasaurus", "pie", at);
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-1", pm, "Birbasaurus", "pie", at, action);
     when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.of(pending));
 
     invokeOnServerIrcEvent(
@@ -1409,14 +1417,25 @@ class IrcMediatorMockVerifyTest {
                 "No such nick/channel",
                 ":osmium.libera.chat 401 me ghost :No such nick/channel")));
 
-    verify(ui)
-        .failPendingOutgoingChat(
-            eq(pm),
-            eq("pending-1"),
-            eq(at),
-            eq("Birbasaurus"),
-            eq("pie"),
-            eq("[401] No such nick/channel"));
+    if (action) {
+      verify(ui)
+          .failPendingOutgoingAction(
+              eq(pm),
+              eq("pending-1"),
+              eq(at),
+              eq("Birbasaurus"),
+              eq("pie"),
+              eq("[401] No such nick/channel"));
+    } else {
+      verify(ui)
+          .failPendingOutgoingChat(
+              eq(pm),
+              eq("pending-1"),
+              eq(at),
+              eq("Birbasaurus"),
+              eq("pie"),
+              eq("[401] No such nick/channel"));
+    }
     verify(ui)
         .appendErrorAt(
             eq(pm),
@@ -1482,5 +1501,135 @@ class IrcMediatorMockVerifyTest {
         .tls(false)
         .backend(backend)
         .build();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void channelActionSelfEchoResolvesPendingOrAppendsIfPruned(boolean resolved) throws Exception {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Instant at = Instant.now();
+    Map<String, String> tags = Map.of("msgid", "action-echo");
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-action", channel, "bob", "waves", at, true);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("bob"));
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(pendingEchoMessageState.consumeActionByTargetAndText(channel, "bob", "waves"))
+        .thenReturn(Optional.of(pending));
+    when(ui.resolvePendingOutgoingAction(
+            channel, "pending-action", at, "bob", "waves", "action-echo", tags))
+        .thenReturn(resolved);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelAction(at, "#ircafe", "bob", "waves", "action-echo", tags)));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelAction(at, "#ircafe", "bob", "waves", "action-echo", tags)));
+
+    verify(ui)
+        .resolvePendingOutgoingAction(
+            channel, "pending-action", at, "bob", "waves", "action-echo", tags);
+    verify(ui, resolved ? never() : times(1))
+        .appendActionAt(channel, at, "bob", "waves", true, "action-echo", tags);
+    verify(ui, never())
+        .appendActionAt(
+            eq(channel), eq(at), eq("bob"), eq("waves"), eq(false), anyString(), any(), any());
+    verify(pendingEchoMessageState, never())
+        .consumeByTargetAndText(any(), anyString(), anyString());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+  void privateActionSelfEchoResolvesOnOriginalPeerWithOrWithoutTargetHint(
+      boolean hasHint, boolean autoOpen) throws Exception {
+    TargetRef pm = new TargetRef("libera", "alice");
+    TargetRef fallback = hasHint ? pm : new TargetRef("libera", "bob");
+    Instant at = Instant.now();
+    Map<String, String> tags =
+        hasHint
+            ? Map.of("msgid", "action-echo", "ircafe/pm-target", "alice")
+            : Map.of("msgid", "action-echo");
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-action", pm, "bob", "waves", at, true);
+    when(targetCoordinator.allowPrivateAutoOpenFromInbound(fallback, true)).thenReturn(autoOpen);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("bob"));
+    if (hasHint) {
+      when(pendingEchoMessageState.consumeActionByTargetAndText(fallback, "bob", "waves"))
+          .thenReturn(Optional.of(pending));
+    } else {
+      when(pendingEchoMessageState.consumePrivateActionFallback("libera", "bob", "waves"))
+          .thenReturn(Optional.of(pending));
+    }
+    when(ui.resolvePendingOutgoingAction(
+            pm, "pending-action", at, "bob", "waves", "action-echo", tags))
+        .thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.PrivateAction(at, "bob", "waves", "action-echo", tags)));
+
+    verify(ui)
+        .resolvePendingOutgoingAction(
+            pm, "pending-action", at, "bob", "waves", "action-echo", tags);
+    verify(ui, never())
+        .appendActionAt(any(), any(), anyString(), anyString(), anyBoolean(), anyString(), any());
+  }
+
+  @Test
+  void actionFromAnotherUserDoesNotConsumeOwnPendingAction() throws Exception {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Instant at = Instant.now();
+    when(irc.currentNick("libera")).thenReturn(Optional.of("bob"));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("libera", new IrcEvent.ChannelAction(at, "#ircafe", "alice", "waves")));
+    verify(pendingEchoMessageState, never())
+        .consumeActionByTargetAndText(any(), anyString(), anyString());
+    verify(ui).appendActionAt(channel, at, "alice", "waves", false, "", Map.of(), null);
+  }
+
+  @Test
+  void disconnectedEventFailsPendingActions() throws Exception {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Instant at = Instant.now();
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-action", channel, "bob", "waves", at, true);
+    when(pendingEchoMessageState.drainServer("libera")).thenReturn(List.of(pending));
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", new IrcEvent.Disconnected(at, "closed")));
+    verify(ui)
+        .failPendingOutgoingAction(
+            eq(channel),
+            eq("pending-action"),
+            any(),
+            eq("bob"),
+            eq("waves"),
+            eq("disconnected before echo"));
+    verify(ui, never())
+        .failPendingOutgoingChat(any(), anyString(), any(), anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void timedOutPendingActionUsesActionFailureRendering() {
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    var pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-action", channel, "bob", "waves", Instant.now().minusSeconds(60), true);
+    when(pendingEchoMessageState.collectTimedOut(any(), anyInt(), any()))
+        .thenReturn(List.of(pending));
+    mediatorServerStatusEventHandler.handlePendingEchoTimeouts();
+    verify(ui)
+        .failPendingOutgoingAction(
+            eq(channel),
+            eq("pending-action"),
+            any(),
+            eq("bob"),
+            eq("waves"),
+            contains("Timed out waiting for server echo"));
+    verify(ui, never())
+        .failPendingOutgoingChat(any(), anyString(), any(), anyString(), anyString(), anyString());
   }
 }

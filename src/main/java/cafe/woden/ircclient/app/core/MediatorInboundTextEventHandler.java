@@ -274,6 +274,10 @@ public class MediatorInboundTextEventHandler {
 
     clearRemoteTypingIndicatorsForSender(channel, event.from());
 
+    if (tryResolvePendingEchoChannelAction(callbacks, sid, channel, active, event)) {
+      return;
+    }
+
     if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
       callbacks.postTo(
           channel,
@@ -578,6 +582,10 @@ public class MediatorInboundTextEventHandler {
 
     if (!fromSelf) {
       clearRemoteTypingIndicatorsForSender(pm, event.from());
+    }
+
+    if (tryResolvePendingEchoPrivateAction(callbacks, sid, pm, event, allowAutoOpen)) {
+      return;
     }
 
     if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
@@ -1074,6 +1082,50 @@ public class MediatorInboundTextEventHandler {
     return true;
   }
 
+  private boolean tryResolvePendingEchoChannelAction(
+      Callbacks callbacks,
+      String sid,
+      TargetRef channel,
+      TargetRef active,
+      IrcEvent.ChannelAction event) {
+    if (!callbacks.isFromSelf(sid, event.from())) {
+      return false;
+    }
+    var pending =
+        pendingEchoMessageState.consumeActionByTargetAndText(channel, event.from(), event.action());
+    if (pending.isEmpty()) {
+      return false;
+    }
+
+    var entry = pending.get();
+    callbacks.postTo(
+        channel,
+        active,
+        true,
+        dest -> {
+          boolean replaced =
+              ui.resolvePendingOutgoingAction(
+                  dest,
+                  entry.pendingId(),
+                  event.at(),
+                  event.from(),
+                  event.action(),
+                  event.messageId(),
+                  event.ircv3Tags());
+          if (!replaced) {
+            ui.appendActionAt(
+                dest,
+                event.at(),
+                event.from(),
+                event.action(),
+                true,
+                event.messageId(),
+                event.ircv3Tags());
+          }
+        });
+    return true;
+  }
+
   private boolean tryResolvePendingEchoPrivateMessage(
       Callbacks callbacks,
       String sid,
@@ -1136,6 +1188,78 @@ public class MediatorInboundTextEventHandler {
             event.at(),
             event.from(),
             event.text(),
+            true,
+            event.messageId(),
+            event.ircv3Tags());
+      }
+    }
+    return true;
+  }
+
+  private boolean tryResolvePendingEchoPrivateAction(
+      Callbacks callbacks,
+      String sid,
+      TargetRef fallbackPm,
+      IrcEvent.PrivateAction event,
+      boolean allowAutoOpen) {
+    if (!callbacks.isFromSelf(sid, event.from())) {
+      return false;
+    }
+
+    var pending =
+        pendingEchoMessageState.consumeActionByTargetAndText(
+            fallbackPm, event.from(), event.action());
+    if (pending.isEmpty()) {
+      pending =
+          pendingEchoMessageState.consumePrivateActionFallback(sid, event.from(), event.action());
+    }
+    if (pending.isEmpty()) {
+      return false;
+    }
+
+    var entry = pending.get();
+    TargetRef dest = entry.target() != null ? entry.target() : fallbackPm;
+    if (allowAutoOpen) {
+      callbacks.postTo(
+          dest,
+          true,
+          target -> {
+            boolean replaced =
+                ui.resolvePendingOutgoingAction(
+                    target,
+                    entry.pendingId(),
+                    event.at(),
+                    event.from(),
+                    event.action(),
+                    event.messageId(),
+                    event.ircv3Tags());
+            if (!replaced) {
+              ui.appendActionAt(
+                  target,
+                  event.at(),
+                  event.from(),
+                  event.action(),
+                  true,
+                  event.messageId(),
+                  event.ircv3Tags());
+            }
+          });
+    } else {
+      boolean replaced =
+          ui.resolvePendingOutgoingAction(
+              dest,
+              entry.pendingId(),
+              event.at(),
+              event.from(),
+              event.action(),
+              event.messageId(),
+              event.ircv3Tags());
+      if (!replaced) {
+        ui.appendActionAt(
+            dest,
+            event.at(),
+            event.from(),
+            event.action(),
             true,
             event.messageId(),
             event.ircv3Tags());

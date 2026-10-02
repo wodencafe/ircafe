@@ -142,6 +142,29 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
   }
 
   @Override
+  public boolean resolvePendingOutgoingAction(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    boolean resolved =
+        super.resolvePendingOutgoingAction(target, pendingId, at, from, text, messageId, ircv3Tags);
+    if (resolved) {
+      long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+      tryLog(
+          target,
+          () ->
+              factory.resolvedOutgoingActionAt(
+                  target, from, text, ts, pendingId, messageId, ircv3Tags));
+      rememberMessageSnapshot(target, LogKind.ACTION, from, text, ts, messageId);
+    }
+    return resolved;
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     if (Boolean.TRUE.equals(props.logSoftIgnoredLines())) {
       tryLog(target, () -> factory.softIgnoredSpoiler(target, from, text));
