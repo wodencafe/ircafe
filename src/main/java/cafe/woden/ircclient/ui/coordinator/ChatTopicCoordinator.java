@@ -9,6 +9,7 @@ import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.localization.UiMessages;
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -548,7 +549,11 @@ public final class ChatTopicCoordinator {
     private final JLabel header = new JLabel();
     private final JTextArea text = new JTextArea();
     private final JButton notificationsButton = new JButton();
-    private final Color activeNotificationGlow = new Color(255, 223, 128, 170);
+    private final Color activeNotificationBackground = new Color(255, 223, 128);
+    // The highlighted button uses a light background even in dark themes.
+    private final FlatSVGIcon activeNotificationIcon =
+        new FlatSVGIcon("icons/svg/bell.svg", 16, 16)
+            .setColorFilter(new FlatSVGIcon.ColorFilter(color -> new Color(68, 50, 0)));
 
     private Runnable onNotificationsClick;
 
@@ -562,7 +567,7 @@ public final class ChatTopicCoordinator {
       text.setOpaque(false);
       text.setBorder(null);
 
-      notificationsButton.setIcon(SvgIcons.quiet("lightbulb", 14));
+      notificationsButton.setIcon(SvgIcons.quiet("bell", 16));
       notificationsButton.setBorderPainted(false);
       notificationsButton.setContentAreaFilled(false);
       notificationsButton.setOpaque(false);
@@ -616,14 +621,14 @@ public final class ChatTopicCoordinator {
         return;
       }
       if (count > 0) {
-        notificationsButton.setIcon(SvgIcons.action("lightbulb", 14));
+        notificationsButton.setIcon(activeNotificationIcon);
         notificationsButton.setText("");
         notificationsButton.setOpaque(true);
         notificationsButton.setContentAreaFilled(true);
         notificationsButton.setBorderPainted(true);
-        notificationsButton.setBackground(activeNotificationGlow);
+        notificationsButton.setBackground(activeNotificationBackground);
       } else {
-        notificationsButton.setIcon(SvgIcons.quiet("lightbulb", 14));
+        notificationsButton.setIcon(SvgIcons.quiet("bell", 16));
         notificationsButton.setText("");
         notificationsButton.setOpaque(false);
         notificationsButton.setContentAreaFilled(false);
