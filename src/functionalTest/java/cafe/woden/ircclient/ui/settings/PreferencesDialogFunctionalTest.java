@@ -136,6 +136,41 @@ class PreferencesDialogFunctionalTest {
     assertNotNull(findLabel(fixture.appearancePanel, "Action messages"));
     assertNotNull(findLabel(fixture.appearancePanel, "Presence messages"));
     assertNotNull(findLabel(fixture.appearancePanel, "Error messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "New message color"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Notification color"));
+  }
+
+  @Test
+  void serverTreeColorsCanBeConfiguredIndependentlyAndClearedToAutomaticDefaults()
+      throws Exception {
+    AppearanceFixture fixture = buildAppearanceFixture(ChatThemeSettingsTestFixtures.defaults());
+    Object controls = readField(fixture.section, "serverTree");
+    Object unread = readField(controls, "unreadChannelColor");
+    Object notification = readField(controls, "highlightChannelColor");
+    JTextField unreadHex = (JTextField) readField(unread, "hex");
+    JTextField notificationHex = (JTextField) readField(notification, "hex");
+    javax.swing.SwingUtilities.invokeAndWait(
+        () -> {
+          unreadHex.setText("123abc");
+          notificationHex.setText("#DE4567");
+        });
+    var settings = fixture.section.readServerTreeSettings();
+    assertEquals("#123ABC", settings.unreadChannelColor());
+    assertEquals("#DE4567", settings.highlightChannelColor());
+    javax.swing.SwingUtilities.invokeAndWait(
+        () -> {
+          try {
+            ((JButton) readField(unread, "clear")).doClick();
+          } catch (Exception ex) {
+            throw new RuntimeException(ex);
+          }
+        });
+    assertNull(fixture.section.readServerTreeSettings().unreadChannelColor());
+    assertEquals("#DE4567", fixture.section.readServerTreeSettings().highlightChannelColor());
+    javax.swing.SwingUtilities.invokeAndWait(
+        () -> findButton(fixture.appearancePanel, "Reset to defaults").doClick());
+    assertNull(fixture.section.readServerTreeSettings().unreadChannelColor());
+    assertNull(fixture.section.readServerTreeSettings().highlightChannelColor());
   }
 
   @Test
@@ -433,7 +468,7 @@ class PreferencesDialogFunctionalTest {
             accentSettingsBus,
             tweakSettingsBus,
             chatThemeSettingsBus);
-    return new AppearanceFixture(section.panel(), readField(section, "chatTheme"));
+    return new AppearanceFixture(section.panel(), readField(section, "chatTheme"), section);
   }
 
   private static PreferencesDialog newPreferencesDialog() {
@@ -627,5 +662,6 @@ class PreferencesDialogFunctionalTest {
     }
   }
 
-  private record AppearanceFixture(JPanel appearancePanel, Object chatThemeControls) {}
+  private record AppearanceFixture(
+      JPanel appearancePanel, Object chatThemeControls, AppearancePreferencesSection section) {}
 }

@@ -152,7 +152,7 @@ class AppearanceControlsSupportTest {
             () -> AppearanceControlsSupport.readServerTreeSettings(controls));
 
     assertEquals("Invalid server tree color", ex.title());
-    assertTrue(ex.getMessage().contains("Unread channel color"));
+    assertTrue(ex.getMessage().contains("New message color"));
   }
 
   @Test
