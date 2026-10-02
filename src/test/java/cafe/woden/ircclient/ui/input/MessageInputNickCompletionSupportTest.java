@@ -18,6 +18,8 @@ import javax.swing.JTextField;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.CompletionProvider;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MessageInputNickCompletionSupportTest {
 
@@ -223,6 +225,93 @@ class MessageInputNickCompletionSupportTest {
     input.setCaretPosition(7);
 
     assertTrue(shouldForcePopupInsteadOfImmediateCompletion(support, "forensi", 7));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ali", "hello ali", "/me waves at ali", "/msg ali", "  /ME waves at ali"})
+  void nickPopupPreferenceAppliesToMessagesAndCommandArguments(String text) throws Exception {
+    JTextField input = new JTextField(text);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, null);
+    support.setNickCompletions(List.of("alice"));
+    input.setCaretPosition(text.length());
+
+    assertTrue(shouldForcePopupInsteadOfImmediateCompletion(support, text, text.length()));
+    support.setCompletionPreferences(true, true);
+    assertFalse(shouldForcePopupInsteadOfImmediateCompletion(support, text, text.length()));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"forensi", "hello forensi", "/me feels forensi", "  /ME feels forensi"})
+  void wordSuggestionsAlwaysUsePopupInBothNickModes(String text) throws Exception {
+    JTextField input = new JTextField(text);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, null, (token, maxSuggestions) -> List.of("forensic"));
+    support.setNickCompletions(List.of("alice"));
+    input.setCaretPosition(text.length());
+
+    assertEquals(List.of("forensic"), replacementTextsForCurrentToken(support, input));
+    for (boolean cycleWithTab : List.of(false, true)) {
+      support.setCompletionPreferences(cycleWithTab, true);
+      assertFalse(tryCycleNickCompletion(support, text, text.length()));
+      assertTrue(shouldForcePopupInsteadOfImmediateCompletion(support, text, text.length()));
+    }
+    assertEquals(text, input.getText());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/me waves at ali today", "/msg ali today", "hello ali today"})
+  void automaticNickCompletionCyclesArgumentsAndPreservesSurroundingText(String text)
+      throws Exception {
+    JTextField input = new JTextField(text);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, null);
+    support.setNickCompletions(List.of("alice", "alina"));
+    support.setCompletionPreferences(true, true);
+    input.setCaretPosition(text.indexOf("ali") + 3);
+
+    assertTrue(tryCycleNickCompletion(support, text, input.getCaretPosition()));
+    assertEquals(text.replace("ali", "alice"), input.getText());
+    assertTrue(tryCycleNickCompletion(support, input.getText(), input.getCaretPosition()));
+    assertEquals(text.replace("ali", "alina"), input.getText());
+    assertTrue(tryCycleNickCompletion(support, input.getText(), input.getCaretPosition()));
+    assertEquals(text.replace("ali", "alice"), input.getText());
+  }
+
+  @Test
+  void nicknamePreferenceDoesNotInterceptSlashCommandNameCompletion() throws Exception {
+    JTextField input = new JTextField("/me");
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, null, (token, maxSuggestions) -> List.of("message"));
+    support.setNickCompletions(List.of("megan"));
+    input.setCaretPosition(3);
+
+    for (boolean cycleWithTab : List.of(false, true)) {
+      support.setCompletionPreferences(cycleWithTab, true);
+      assertFalse(tryCycleNickCompletion(support, "/me", 3));
+      assertFalse(shouldForcePopupInsteadOfImmediateCompletion(support, "/me", 3));
+    }
+    assertEquals(List.of(), replacementTextsForCurrentToken(support, input));
+  }
+
+  @Test
+  void switchingFromAutomaticToPopupStopsNickCycling() throws Exception {
+    JTextField input = new JTextField("/me ali");
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, null);
+    support.setNickCompletions(List.of("alice", "alina"));
+    support.setCompletionPreferences(true, true);
+    input.setCaretPosition(input.getText().length());
+    assertTrue(tryCycleNickCompletion(support, input.getText(), input.getCaretPosition()));
+
+    support.setCompletionPreferences(false, true);
+    assertFalse(tryCycleNickCompletion(support, input.getText(), input.getCaretPosition()));
+    assertTrue(
+        shouldForcePopupInsteadOfImmediateCompletion(
+            support, input.getText(), input.getCaretPosition()));
+    assertEquals("/me alice", input.getText());
   }
 
   @Test
