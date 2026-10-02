@@ -23,6 +23,9 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.ArrayList;
@@ -34,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.ConnectEvent;
 import org.pircbotx.hooks.events.DisconnectEvent;
+import org.slf4j.LoggerFactory;
 
 class PircbotxConnectionSessionHandlerTest {
 
@@ -227,7 +231,25 @@ class PircbotxConnectionSessionHandlerTest {
                 "Disconnected", new SocketException("SOCKS authentication failed")));
     conn.setBot(bot);
 
-    handler.onDisconnect(event);
+    Logger logger = (Logger) LoggerFactory.getLogger(PircbotxConnectionSessionHandler.class);
+    ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    logger.addAppender(logs);
+    try {
+      handler.onDisconnect(event);
+      assertTrue(
+          logs.list.stream()
+              .anyMatch(
+                  entry ->
+                      entry.getFormattedMessage().contains("server=libera manual=false")
+                          && entry
+                              .getFormattedMessage()
+                              .contains("reason=SOCKS authentication failed")
+                          && entry.getThrowableProxy() != null));
+    } finally {
+      logger.detachAppender(logs);
+      logs.stop();
+    }
 
     IrcEvent.Disconnected disconnected =
         assertInstanceOf(IrcEvent.Disconnected.class, events.getFirst().event());

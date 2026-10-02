@@ -15,12 +15,14 @@ import java.util.function.Consumer;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.ConnectEvent;
 import org.pircbotx.hooks.events.DisconnectEvent;
 
 /** Owns connection-scoped lifecycle transitions and inbound activity bookkeeping. */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
+@Slf4j
 final class PircbotxConnectionSessionHandler {
 
   private static final String DEFAULT_DISCONNECT_REASON = "Disconnected";
@@ -48,6 +50,12 @@ final class PircbotxConnectionSessionHandler {
     conn.clearManualDisconnect();
     serverResponses.clear();
 
+    log.info(
+        "IRC registration completed: server={} endpoint={}:{} nick={}",
+        serverId,
+        bot.getServerHostname(),
+        bot.getServerPort(),
+        bot.getNick());
     emit.accept(
         new ServerIrcEvent(
             serverId,
@@ -61,6 +69,11 @@ final class PircbotxConnectionSessionHandler {
     String override = conn.takeDisconnectReasonOverride();
     Exception ex = event.getDisconnectException();
     String reason = disconnectReason(override, ex);
+    if (conn.manualDisconnectRequested()) {
+      log.info("IRC disconnected: server={} manual=true reason={}", serverId, reason);
+    } else {
+      log.warn("IRC disconnected: server={} manual=false reason={}", serverId, reason, ex);
+    }
     if (conn.clearBotIf(event.getBot())) {
       heartbeatStopper.accept(conn);
     }

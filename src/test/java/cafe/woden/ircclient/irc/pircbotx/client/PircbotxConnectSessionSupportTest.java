@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -20,6 +21,9 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.ArrayList;
@@ -28,6 +32,7 @@ import java.util.function.BiConsumer;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.ListenerAdapter;
+import org.slf4j.LoggerFactory;
 
 class PircbotxConnectSessionSupportTest {
 
@@ -106,7 +111,23 @@ class PircbotxConnectSessionSupportTest {
     RuntimeException failure = new RuntimeException("boom");
     doThrow(failure).when(bot).startBot();
 
-    support.runBotLoop("libera", connection, bot, reconnectScheduler);
+    Logger logger = (Logger) LoggerFactory.getLogger(PircbotxConnectSessionSupport.class);
+    ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    logger.addAppender(logs);
+    try {
+      support.runBotLoop("libera", connection, bot, reconnectScheduler);
+      assertTrue(
+          logs.list.stream()
+              .anyMatch(
+                  entry ->
+                      entry.getFormattedMessage().contains("IRC session failed: server=libera")
+                          && entry.getThrowableProxy() != null
+                          && "boom".equals(entry.getThrowableProxy().getMessage())));
+    } finally {
+      logger.detachAppender(logs);
+      logs.stop();
+    }
 
     assertNull(connection.currentBot());
     verify(timers).stopHeartbeat(connection);
