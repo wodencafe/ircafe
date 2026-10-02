@@ -48,6 +48,18 @@ public final class OutboundJoinPartCommandService {
       return;
     }
 
+    TargetRef target = new TargetRef(at.serverId(), chan);
+    if (target.isChannel()
+        && !OutboundRawCommandSupport.containsLineBreaks(chan)
+        && !OutboundRawCommandSupport.containsLineBreaks(joinKey)
+        && connectionCoordinator.isConnected(at.serverId())
+        && ui.hasTarget(target)
+        && !ui.isChannelDisconnected(target)) {
+      // Already joined channels may not produce another JOIN event to trigger selection.
+      targetCoordinator.joinChannel(target);
+      return;
+    }
+
     if (shouldPersistJoinedChannel(at.serverId())) {
       runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
       targetCoordinator.syncRuntimeAutoJoinForReconnect(at.serverId());

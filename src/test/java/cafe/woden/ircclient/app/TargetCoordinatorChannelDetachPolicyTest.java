@@ -98,6 +98,50 @@ class TargetCoordinatorChannelDetachPolicyTest {
   }
 
   @Test
+  void explicitPartOfDetachedZncChannelStillLeavesUpstream() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendRuntimeClientService irc = mock(IrcBackendRuntimeClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#linux-offtopic");
+    when(ui.isChannelDisconnected(chan)).thenReturn(true);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isZncBouncerDetected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#linux-offtopic", "leaving"))
+        .thenReturn(Completable.complete());
+
+    coordinator.partChannel(chan, " leaving ");
+
+    verify(irc).partChannel("libera", "#linux-offtopic", "leaving");
+    verify(runtimeConfig).forgetJoinedChannel("libera", "#linux-offtopic");
+    verify(ui).closeTarget(chan);
+
+    clearInvocations(ui);
+    coordinator.onChannelMembershipLost("libera", "#linux-offtopic", true);
+    verify(ui, never()).ensureTargetExists(chan);
+    verify(ui, never()).setChannelDisconnected(chan, true);
+  }
+
+  @Test
+  void explicitPartWhileOfflineClosesLocallyWithoutSendingPart() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendRuntimeClientService irc = mock(IrcBackendRuntimeClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#linux-offtopic");
+
+    coordinator.partChannel(chan, "leaving");
+
+    verify(irc, never()).partChannel("libera", "#linux-offtopic", "leaving");
+    verify(runtimeConfig).forgetJoinedChannel("libera", "#linux-offtopic");
+    verify(ui).closeTarget(chan);
+  }
+
+  @Test
   void closeChannelDoesNotReopenAsDetachedOnSubsequentMembershipLoss() {
     UiPort ui = mock(UiPort.class);
     IrcBackendRuntimeClientService irc = mock(IrcBackendRuntimeClientService.class);

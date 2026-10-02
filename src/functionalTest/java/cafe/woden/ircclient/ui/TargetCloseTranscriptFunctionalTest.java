@@ -46,24 +46,29 @@ class TargetCloseTranscriptFunctionalTest {
 
   @ParameterizedTest
   @CsvSource({
-    "#channel, true, false",
-    "#channel, true, true",
-    "#channel, false, false",
-    "Alice, false, false"
+    "#channel, true, false, false",
+    "#channel, true, true, false",
+    "#channel, false, false, false",
+    "Alice, false, false, false",
+    "#channel, true, false, true",
+    "#channel, true, true, true",
+    "#channel, false, true, true"
   })
   void closingActiveTargetDoesNotRebuildStatusTranscriptDuringAppend(
-      String targetName, boolean connected, boolean detached) throws Exception {
+      String targetName, boolean connected, boolean detached, boolean explicitPart)
+      throws Exception {
     SwingUtilities.invokeAndWait(
         () -> {
           try {
-            verifyClose(targetName, connected, detached);
+            verifyClose(targetName, connected, detached, explicitPart);
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
         });
   }
 
-  private static void verifyClose(String targetName, boolean connected, boolean detached)
+  private static void verifyClose(
+      String targetName, boolean connected, boolean detached, boolean explicitPart)
       throws Exception {
     TargetRef target = new TargetRef("libera", targetName);
     TargetRef status = new TargetRef("libera", "status");
@@ -144,7 +149,11 @@ class TargetCloseTranscriptFunctionalTest {
     try {
       coordinator.onTargetSelected(target);
       if (target.isChannel()) {
-        coordinator.closeChannel(target);
+        if (explicitPart) {
+          coordinator.partChannel(target, null);
+        } else {
+          coordinator.closeChannel(target);
+        }
         verify(config).forgetJoinedChannel("libera", targetName);
       } else {
         coordinator.closeTarget(target);
@@ -162,7 +171,7 @@ class TargetCloseTranscriptFunctionalTest {
       verify(historyPort).reset(target);
       verify(ui).closeTarget(target);
       assertEquals(0, transcripts.document(target).getLength());
-      if (target.isChannel() && connected && !detached) {
+      if (target.isChannel() && connected && (explicitPart || !detached)) {
         verify(membership).partChannel("libera", targetName, null);
       } else {
         verify(membership, never()).partChannel(anyString(), anyString(), any());

@@ -540,6 +540,15 @@ public class TargetCoordinator implements ActiveTargetPort {
   }
 
   public void closeChannel(TargetRef target, String reason) {
+    closeChannel(target, reason, false);
+  }
+
+  /** Requests an upstream PART even when the local buffer is detached or disconnected. */
+  public void partChannel(TargetRef target, String reason) {
+    closeChannel(target, reason, true);
+  }
+
+  private void closeChannel(TargetRef target, String reason, boolean explicitPart) {
     if (target == null || !target.isChannel()) return;
 
     String sid = Objects.toString(target.serverId(), "").trim();
@@ -551,11 +560,11 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
     boolean detached = ui.isChannelDisconnected(target);
     boolean connected = connectionCoordinator.isConnected(sid);
-    boolean shouldPart = !detached && connected;
+    boolean shouldPart = connected && (explicitPart || !detached);
 
     // Guard against stale tree selection/activation events racing behind the close action only
-    // when a live PART is still in flight. Detached/offline closes are local-only and may be
-    // deliberately reopened by a later explicit selection.
+    // when a live PART is still in flight. Local-only closes may be deliberately reopened by a
+    // later explicit selection.
     if (shouldPart) {
       channelsClosedByUser.add(target);
     } else {

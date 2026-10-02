@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -120,6 +121,58 @@ class ServerTreeDockableFunctionalTest {
       assertEquals(target, selectedTargets.getLast());
     } finally {
       sub.dispose();
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void selectingExistingChannelExpandsServerAndScrollsIntoViewEvenWhenAlreadySelected()
+      throws Exception {
+    ServerTreeDockable dockable = newDockable();
+    TargetRef target = new TargetRef("libera", "##zz-existing");
+
+    try {
+      onEdt(
+          () -> {
+            for (int i = 0; i < 80; i++) {
+              dockable.ensureNode(new TargetRef("libera", "##channel-" + i));
+            }
+            dockable.ensureNode(target);
+            JTree tree = field(dockable, "tree", JTree.class);
+            TreePath serverPath = new TreePath(serverRootNode(dockable, "libera").getPath());
+            scrollTreeTo(dockable, 0);
+            tree.collapsePath(serverPath);
+
+            dockable.selectTarget(target);
+
+            assertTrue(tree.isExpanded(serverPath));
+            assertEquals(target, dockable.selectedTargetForPersistence());
+            JScrollPane scroll = field(dockable, "treeScroll", JScrollPane.class);
+            assertTrue(
+                scroll
+                    .getViewport()
+                    .getViewRect()
+                    .contains(tree.getPathBounds(tree.getSelectionPath())));
+
+            // Repeating /join must reveal the row even if selection itself has not changed.
+            scrollTreeTo(dockable, 0);
+            assertFalse(
+                scroll
+                    .getViewport()
+                    .getViewRect()
+                    .intersects(tree.getPathBounds(tree.getSelectionPath())));
+
+            dockable.selectTarget(new TargetRef("libera", "##ZZ-EXISTING"));
+
+            assertEquals(target, dockable.selectedTargetForPersistence());
+            assertTrue(
+                scroll
+                    .getViewport()
+                    .getViewRect()
+                    .contains(tree.getPathBounds(tree.getSelectionPath())));
+          });
+    } finally {
       onEdt(dockable::shutdown);
       flushEdt();
     }
