@@ -29,15 +29,139 @@ import java.awt.event.MouseWheelEvent;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import javax.swing.JFrame;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class ChatFontZoomFunctionalTest {
+
+  @ParameterizedTest
+  @MethodSource("zoomKeys")
+  void ctrlZoomKeysChangeFontAndSharedSettingsWithoutChangingText(KeyStroke key, int delta)
+      throws Exception {
+    onEdt(
+        () -> {
+          UiSettingsBus bus = liveSettingsBus(settings());
+          TestChatView view = new TestChatView(bus);
+          TestChatView detached = new TestChatView(bus);
+          JTextField input = new JTextField("draft + text - stays");
+          view.add(input, BorderLayout.SOUTH);
+          withFocus(
+              view,
+              input,
+              () -> {
+                view.addNotify();
+                detached.addNotify();
+                try {
+                  view.chat.setText("alice: hello world 😀\n".repeat(100));
+                  String transcript = view.chat.getText();
+                  view.setSize(480, 240);
+                  layout(view);
+                  view.scroll.getVerticalScrollBar().setValue(100);
+                  int initialScroll = view.scroll.getVerticalScrollBar().getValue();
+                  Font initialFont = view.chat.getFont();
+
+                  assertTrue(view.pressKey(key));
+
+                  assertEquals(12 + delta, view.chat.getFont().getSize());
+                  assertEquals(initialFont.getFamily(), view.chat.getFont().getFamily());
+                  assertEquals(12 + delta, bus.get().chatFontSize());
+                  assertEquals(12 + delta, detached.chat.getFont().getSize());
+                  assertEquals(initialScroll, view.scroll.getVerticalScrollBar().getValue());
+                  assertEquals(transcript, view.chat.getText());
+                  assertEquals("draft + text - stays", input.getText());
+                } finally {
+                  view.removeNotify();
+                  detached.removeNotify();
+                  detached.closeDecorators();
+                }
+              });
+        });
+  }
+
+  private static Stream<Arguments> zoomKeys() {
+    int ctrl = InputEvent.CTRL_DOWN_MASK;
+    int ctrlShift = ctrl | InputEvent.SHIFT_DOWN_MASK;
+    return Stream.of(
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, ctrl), 1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, ctrlShift), 1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, ctrl), 1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, ctrlShift), 1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_ADD, ctrl), 1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, ctrl), -1),
+        Arguments.of(KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, ctrl), -1));
+  }
+
+  @Test
+  void keyboardZoomIsBoundedAndResetsFractionalWheelZoom() throws Exception {
+    onEdt(
+        () -> {
+          TestChatView view = new TestChatView(liveSettingsBus(settings()));
+          withFocus(
+              view,
+              view.chat,
+              () -> {
+                KeyStroke plus =
+                    KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK);
+                KeyStroke minus =
+                    KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK);
+                view.scroll.dispatchEvent(wheel(view.scroll, InputEvent.CTRL_DOWN_MASK, -0.75));
+                assertTrue(view.pressKey(plus));
+                view.scroll.dispatchEvent(wheel(view.scroll, InputEvent.CTRL_DOWN_MASK, -0.25));
+                assertEquals(13, view.chat.getFont().getSize());
+                for (int i = 0; i < 60; i++) assertTrue(view.pressKey(plus));
+                assertEquals(48, view.chat.getFont().getSize());
+                assertTrue(view.pressKey(minus));
+                assertEquals(47, view.chat.getFont().getSize());
+                for (int i = 0; i < 60; i++) assertTrue(view.pressKey(minus));
+                assertEquals(8, view.chat.getFont().getSize());
+                assertTrue(view.pressKey(plus));
+                assertEquals(9, view.chat.getFont().getSize());
+              });
+        });
+  }
+
+  @Test
+  void zoomKeysRequireControlAndDoNotInstallWindowWideBindings() throws Exception {
+    onEdt(
+        () -> {
+          TestChatView view = new TestChatView(null);
+          withFocus(
+              view,
+              view.chat,
+              () -> {
+                Font initialFont = view.chat.getFont();
+                for (int key :
+                    new int[] {KeyEvent.VK_EQUALS, KeyEvent.VK_PLUS, KeyEvent.VK_MINUS}) {
+                  for (int modifiers :
+                      new int[] {
+                        0,
+                        InputEvent.SHIFT_DOWN_MASK,
+                        InputEvent.ALT_DOWN_MASK,
+                        InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK,
+                        InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK
+                      }) {
+                    assertFalse(view.pressKey(KeyStroke.getKeyStroke(key, modifiers)));
+                  }
+                  assertEquals(
+                      null,
+                      view.getInputMap(TestChatView.WHEN_IN_FOCUSED_WINDOW)
+                          .get(KeyStroke.getKeyStroke(key, InputEvent.CTRL_DOWN_MASK)));
+                }
+                assertEquals(initialFont, view.chat.getFont());
+              });
+        });
+  }
 
   @Test
   void ctrlWheelChangesRenderedTextSizeWithoutScrollingOrChangingText() throws Exception {
@@ -282,8 +406,9 @@ class ChatFontZoomFunctionalTest {
         });
   }
 
-  @Test
-  void nativeCtrlWheelZoomsWhileInputKeepsKeyboardFocus() throws Exception {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void nativeZoomKeepsInputTextAndKeyboardFocus(boolean keyboard) throws Exception {
     assumeFalse(GraphicsEnvironment.isHeadless(), "requires a desktop or xvfb-run");
     String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
     assumeTrue(
@@ -299,7 +424,7 @@ class ChatFontZoomFunctionalTest {
       onEdt(
           () -> {
             TestChatView chatView = new TestChatView(liveSettingsBus(settings()));
-            JTextField field = new JTextField();
+            JTextField field = new JTextField("draft + text - stays");
             chatView.chat.setText("alice: hello world\n".repeat(100));
             chatView.add(field, BorderLayout.SOUTH);
             JFrame window = new JFrame("Chat font zoom test");
@@ -323,20 +448,39 @@ class ChatFontZoomFunctionalTest {
       onEdt(() -> assertTrue(input.get().isFocusOwner()));
       robot.mouseMove(wheelPosition.get().x, wheelPosition.get().y);
       robot.keyPress(KeyEvent.VK_CONTROL);
-      robot.mouseWheel(-1);
+      if (keyboard) {
+        robot.keyPress(KeyEvent.VK_SHIFT);
+        robot.keyPress(KeyEvent.VK_EQUALS);
+        robot.keyRelease(KeyEvent.VK_EQUALS);
+        robot.keyRelease(KeyEvent.VK_SHIFT);
+      } else {
+        robot.mouseWheel(-1);
+      }
       robot.keyRelease(KeyEvent.VK_CONTROL);
       robot.waitForIdle();
       onEdt(
           () -> {
             assertEquals(13, view.get().chat.getFont().getSize());
             assertTrue(input.get().isFocusOwner());
+            assertEquals("draft + text - stays", input.get().getText());
           });
       robot.keyPress(KeyEvent.VK_CONTROL);
-      robot.mouseWheel(1);
+      if (keyboard) {
+        robot.keyPress(KeyEvent.VK_MINUS);
+        robot.keyRelease(KeyEvent.VK_MINUS);
+      } else {
+        robot.mouseWheel(1);
+      }
       robot.keyRelease(KeyEvent.VK_CONTROL);
       robot.waitForIdle();
-      onEdt(() -> assertEquals(12, view.get().chat.getFont().getSize()));
+      onEdt(
+          () -> {
+            assertEquals(12, view.get().chat.getFont().getSize());
+            assertTrue(input.get().isFocusOwner());
+            assertEquals("draft + text - stays", input.get().getText());
+          });
     } finally {
+      robot.keyRelease(KeyEvent.VK_SHIFT);
       robot.keyRelease(KeyEvent.VK_CONTROL);
       onEdt(
           () -> {
@@ -439,6 +583,18 @@ class ChatFontZoomFunctionalTest {
   private static final class TestChatView extends ChatViewPanel {
     private TestChatView(UiSettingsBus bus) {
       super(bus);
+    }
+
+    private boolean pressKey(KeyStroke key) {
+      KeyEvent event =
+          new KeyEvent(
+              chat,
+              KeyEvent.KEY_PRESSED,
+              System.currentTimeMillis(),
+              key.getModifiers(),
+              key.getKeyCode(),
+              KeyEvent.CHAR_UNDEFINED);
+      return processKeyBinding(key, event, WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, true);
     }
 
     @Override
