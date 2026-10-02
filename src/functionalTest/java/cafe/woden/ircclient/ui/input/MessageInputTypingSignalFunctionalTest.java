@@ -63,10 +63,11 @@ class MessageInputTypingSignalFunctionalTest {
       waitFor(
           () -> {
             var color = signal.debugArrowColorForTest();
-            return color.getBlue() > color.getGreen()
-                && (acknowledgeSend
-                    ? color.getGreen() > color.getRed()
-                    : color.getRed() > color.getGreen())
+            return (acknowledgeSend
+                    ? color.getBlue() > color.getGreen() && color.getGreen() > color.getRed()
+                    : (color.getBlue() > color.getRed() && color.getRed() > color.getGreen())
+                        || (color.getRed() == color.getGreen()
+                            && color.getGreen() == color.getBlue()))
                 && signal.debugArrowGlowForTest() > 0.2f;
           },
           Duration.ofSeconds(1));
@@ -161,7 +162,7 @@ class MessageInputTypingSignalFunctionalTest {
   }
 
   @Test
-  void delayedSendTransitionsFromVioletToBlueOnBackgroundCompletion() throws Exception {
+  void delayedSendAlternatesVioletAndGrayUntilBackgroundCompletion() throws Exception {
     MessageInputPanel[] panels = new MessageInputPanel[1];
     onEdt(
         () -> {
@@ -183,6 +184,14 @@ class MessageInputTypingSignalFunctionalTest {
             return color.getBlue() > color.getRed()
                 && color.getRed() > color.getGreen()
                 && signal.debugArrowGlowForTest() > 0.2f;
+          },
+          Duration.ofSeconds(1));
+      waitFor(
+          () -> {
+            var color = signal.debugArrowColorForTest();
+            return color.getRed() == color.getGreen()
+                && color.getGreen() == color.getBlue()
+                && signal.debugArrowGlowForTest() >= 0.2f;
           },
           Duration.ofSeconds(1));
       // The test thread simulates a network send completing off the EDT.

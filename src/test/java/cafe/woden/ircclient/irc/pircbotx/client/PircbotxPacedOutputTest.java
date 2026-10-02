@@ -109,7 +109,7 @@ class PircbotxPacedOutputTest {
     RecordingBot bot = new RecordingBot();
     AtomicLong clock = new AtomicLong();
     List<Long> waits = new ArrayList<>();
-    long interval = TimeUnit.MILLISECONDS.toNanos(1500);
+    long interval = TimeUnit.MILLISECONDS.toNanos(2000);
     PircbotxPacedOutput output =
         new PircbotxPacedOutput(
             bot,
@@ -127,9 +127,9 @@ class PircbotxPacedOutputTest {
 
     clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(600));
     output.rawLine("NAMES #one");
-    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900)), waits);
+    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(1400)), waits);
     output.rawLine("PRIVMSG #one :sustained traffic");
-    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(900), interval), waits);
+    assertEquals(List.of(TimeUnit.MILLISECONDS.toNanos(1400), interval), waits);
 
     clock.addAndGet(10 * interval);
     waits.clear();
@@ -147,7 +147,7 @@ class PircbotxPacedOutputTest {
     RecordingBot bot = new RecordingBot();
     AtomicLong clock = new AtomicLong();
     List<Long> waits = new CopyOnWriteArrayList<>();
-    long interval = TimeUnit.MILLISECONDS.toNanos(1500);
+    long interval = TimeUnit.MILLISECONDS.toNanos(2000);
     PircbotxPacedOutput output =
         new PircbotxPacedOutput(
             bot,

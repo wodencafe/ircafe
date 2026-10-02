@@ -37,7 +37,7 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 - Auto-join channels or PM targets and per-server perform-on-connect commands.
 - Native IRC flood protection in Preferences > Network > Flood protection is enabled by default
   for new and existing configurations. Ordinary commands share a two-command burst allowance per
-  connection, starting full and rebuilding one credit every 1500 ms, capped at two. Once the
+  connection, starting full and rebuilding one credit every 2000 ms, capped at two. Once the
   allowance is spent, further commands wait for credit to rebuild, without a warm-up penalty.
   Auto-joins start five seconds after registration (and NickServ identification when required), run in the
   background, and stop on disconnect. Both timings are configurable. Uncheck "Enable outgoing

@@ -18,7 +18,7 @@ import javax.swing.*;
  * <ul>
  *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark themes).
  *   <li>Idle (typing available): steady green arrow.
- *   <li>Pending: fade into a glowing violet arrow pulse while waiting to send.
+ *   <li>Pending: alternate glowing violet and gray while waiting to send.
  *   <li>Active: fade into a glowing blue arrow pulse.
  *   <li>Paused sent: briefly pulse green, then settle back to idle.
  *   <li>Paused/done: fade back to idle green.
@@ -28,11 +28,17 @@ final class TypingSignalIndicator extends JComponent {
 
   private static final int FRAME_MS = 33;
   private static final long ACTIVE_PULSE_MS = 1050L;
+  private static final long PENDING_COLOR_CYCLE_MS = 1200L;
+  private static final int PENDING_COLOR_FADE_MS = 200;
   private static final int ACTIVE_FADE_MS = 240;
   private static final int RETURN_TO_IDLE_MS = 420;
   private static final int PAUSED_SENT_PULSE_MS = 500;
   private static final int PAUSED_SENT_FADE_MS = 120;
   private static final float IDLE_GLOW_ALPHA = 0.12f;
+  private static final Color PENDING_VIOLET_BASE = new Color(0xA46BFF);
+  private static final Color PENDING_VIOLET_PEAK = new Color(0xCFABFF);
+  private static final Color PENDING_GRAY_BASE = new Color(0x939393);
+  private static final Color PENDING_GRAY_PEAK = new Color(0xB8B8B8);
   private static final Color DARK_THEME_FALLBACK_ARROW = new Color(0xFFFFFF);
   private static final Color LIGHT_THEME_FALLBACK_ARROW = new Color(0x2B313A);
 
@@ -254,8 +260,15 @@ final class TypingSignalIndicator extends JComponent {
     }
     if (mode == Mode.ACTIVE || mode == Mode.PENDING) {
       float pulse = activePulse(now);
-      Color base = mode == Mode.PENDING ? new Color(0xA46BFF) : activeBlueBaseColor();
-      Color peak = mode == Mode.PENDING ? new Color(0xCFABFF) : activeBluePeakColor();
+      float grayMix = mode == Mode.PENDING ? pendingGrayMix(now) : 0f;
+      Color base =
+          mode == Mode.PENDING
+              ? mix(PENDING_VIOLET_BASE, PENDING_GRAY_BASE, grayMix)
+              : activeBlueBaseColor();
+      Color peak =
+          mode == Mode.PENDING
+              ? mix(PENDING_VIOLET_PEAK, PENDING_GRAY_PEAK, grayMix)
+              : activeBluePeakColor();
       Color c = mix(base, peak, 0.45f + (0.55f * pulse));
       float glow = 0.20f + (0.46f * pulse);
       float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) ACTIVE_FADE_MS));
@@ -278,6 +291,16 @@ final class TypingSignalIndicator extends JComponent {
     long elapsed = Math.max(0L, now - modeStartMs);
     double phase = (elapsed % ACTIVE_PULSE_MS) / (double) ACTIVE_PULSE_MS;
     return (float) (0.5d + 0.5d * Math.sin(phase * Math.PI * 2d));
+  }
+
+  private float pendingGrayMix(long now) {
+    long elapsed = Math.max(0L, now - modeStartMs);
+    long halfCycle = PENDING_COLOR_CYCLE_MS / 2;
+    long phase = elapsed % PENDING_COLOR_CYCLE_MS;
+    // Hold each color before fading so the neutral gray phase is easy to recognize.
+    long fadeElapsed = (phase % halfCycle) - (halfCycle - PENDING_COLOR_FADE_MS);
+    float fade = easeOutCubic(clamp01(fadeElapsed / (float) PENDING_COLOR_FADE_MS));
+    return phase < halfCycle ? fade : 1f - fade;
   }
 
   private static Color idleGreenColor() {

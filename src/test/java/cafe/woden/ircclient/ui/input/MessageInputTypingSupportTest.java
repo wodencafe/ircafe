@@ -23,7 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class MessageInputTypingSupportTest {
 
   @Test
-  void userEditGlowsVioletUntilActiveSendCompletes() throws Exception {
+  void userEditAlternatesPendingGlowUntilActiveSendCompletes() throws Exception {
     Fixture f = newFixture();
     onEdt(
         () -> {
@@ -37,6 +37,14 @@ class MessageInputTypingSupportTest {
             f.input.setText("draft more");
             f.support.onUserEdit(false);
             assertViolet(f);
+            f.clock.addAndGet(400);
+            var gray = f.signal.debugArrowColorForTest();
+            assertEquals(gray.getRed(), gray.getGreen());
+            assertEquals(gray.getGreen(), gray.getBlue());
+            assertTrue(f.signal.debugArrowGlowForTest() >= 0.2f);
+            f.input.setText("draft more text");
+            f.support.onUserEdit(false);
+            assertEquals(gray, f.signal.debugArrowColorForTest());
             f.support.onLocalTypingIndicatorSent("active");
             f.clock.addAndGet(300);
             var blue = f.signal.debugArrowColorForTest();
@@ -383,7 +391,8 @@ class MessageInputTypingSupportTest {
             if ("submit".equals(action)) {
               assertEquals(0.12f, f.signal.debugArrowGlowForTest(), 0.000001f);
             } else {
-              assertViolet(f);
+              assertNotEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+              assertTrue(f.signal.debugArrowGlowForTest() >= 0.2f);
             }
           } finally {
             f.support.onRemoveNotify();

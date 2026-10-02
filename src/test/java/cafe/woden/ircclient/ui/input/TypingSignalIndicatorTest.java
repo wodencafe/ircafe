@@ -102,6 +102,70 @@ class TypingSignalIndicatorTest {
   }
 
   @Test
+  void pendingGlowAlternatesBetweenVioletAndNeutralGray() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("pending");
+          clock.advance(280);
+          Color violet = indicator.debugArrowColorForTest();
+          assertTrue(violet.getBlue() > violet.getRed());
+          assertTrue(violet.getRed() > violet.getGreen());
+          clock.advance(220);
+          Color fading = indicator.debugArrowColorForTest();
+          assertTrue(fading.getBlue() > fading.getRed());
+          assertNotEquals(violet, fading);
+          clock.advance(100);
+          Color gray = indicator.debugArrowColorForTest();
+          assertEquals(gray.getRed(), gray.getGreen());
+          assertEquals(gray.getGreen(), gray.getBlue());
+          assertTrue(indicator.debugArrowGlowForTest() >= 0.2f);
+          indicator.pulse("pending");
+          assertEquals(gray, indicator.debugArrowColorForTest());
+          clock.advance(300);
+          gray = indicator.debugArrowColorForTest();
+          assertEquals(gray.getRed(), gray.getGreen());
+          assertEquals(gray.getGreen(), gray.getBlue());
+          assertTrue(indicator.debugArrowGlowForTest() >= 0.2f);
+          clock.advance(300);
+          violet = indicator.debugArrowColorForTest();
+          assertTrue(violet.getBlue() > violet.getRed());
+          assertTrue(violet.getRed() > violet.getGreen());
+          assertTrue(indicator.debugArrowGlowForTest() >= 0.2f);
+        });
+  }
+
+  @Test
+  void grayPendingGlowTransitionsSmoothlyToBlueAndBackToIdle() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("pending");
+          clock.advance(700);
+          Color gray = indicator.debugArrowColorForTest();
+          float glow = indicator.debugArrowGlowForTest();
+          assertEquals(gray.getRed(), gray.getBlue());
+          indicator.pulse("active");
+          assertEquals(gray, indicator.debugArrowColorForTest());
+          assertEquals(glow, indicator.debugArrowGlowForTest());
+          clock.advance(280);
+          Color blue = indicator.debugArrowColorForTest();
+          assertTrue(blue.getBlue() > blue.getGreen());
+          assertTrue(blue.getGreen() > blue.getRed());
+          indicator.pulse("pending");
+          clock.advance(700);
+          indicator.pulse("done");
+          clock.advance(500);
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+          assertEquals(0.12f, indicator.debugArrowGlowForTest(), 0.000001f);
+        });
+  }
+
+  @Test
   void activeTransitionFadesFromGreenToGlowingBlue() throws Exception {
     ManualClock clock = new ManualClock();
     TypingSignalIndicator indicator = createOnEdt(clock);
