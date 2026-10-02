@@ -209,6 +209,7 @@ If you prefer a Make-first workflow, these cover most tasks:
 | Run unit/non-functional tests | `make test` | `./gradlew test` |
 | Run integration tests | `make integration-test` | `./gradlew integrationTest` |
 | Run architecture guardrails | `make architecture-test` | `./gradlew architectureTest` |
+| Find architecture refactoring candidates | `make architecture-report` | `./gradlew architectureReport` |
 | Run Swing functional tests | `make functional-test` | `./gradlew functionalTest` |
 | Verify UI changes | `make verify-ui-change` | `./gradlew verifyUiChange` |
 | Verify Spring changes | `make verify-spring-change` | `./gradlew verifySpringChange` |
@@ -459,9 +460,15 @@ Targeted suites:
 # Modulith/jMolecules/ArchUnit guardrails
 ./gradlew architectureTest
 
+# Advisory refactoring candidates, with Markdown/JSON reports
+./gradlew architectureReport
+
 # Swing UI functional tests from src/functionalTest (classes ending with FunctionalTest)
 ./gradlew functionalTest
 ```
+
+See [architecture report tooling](ARCHITECTURE_REPORT.md) for the rules, thresholds,
+baseline comparison, and interpretation limits.
 
 Functional tests default to headless mode, which skips tests requiring a dialog.
 Use `-PfunctionalTestHeadless=false` with a display to exercise those interactions.
