@@ -25,7 +25,7 @@ final class PircbotxRegistrationLifecycleHandler {
 
   private final String serverId;
   private final PircbotxConnectionState conn;
-  private final PlaybackCursorProvider playbackCursorProvider;
+  private final OptionalLong playbackCursorAtConnect;
   private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   private final PircbotxServerResponseEmitter serverResponses;
   private final Consumer<ServerIrcEvent> emit;
@@ -43,8 +43,18 @@ final class PircbotxRegistrationLifecycleHandler {
       Ircv3ZncPlaybackRuntimeSupport zncPlaybackRuntimeSupport) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
-    this.playbackCursorProvider =
-        Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+    // A new handler is created before each bot starts. Snapshot the resume point now: live
+    // messages received during registration/discovery must not move playback past the backlog.
+    Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+    OptionalLong cursor;
+    try {
+      cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId);
+    } catch (Exception ex) {
+      log.warn(
+          "[{}] failed to snapshot ZNC playback cursor; requesting retained buffer", serverId, ex);
+      cursor = OptionalLong.empty();
+    }
+    this.playbackCursorAtConnect = cursor;
     this.bouncerDiscovery = Objects.requireNonNull(bouncerDiscovery, "bouncerDiscovery");
     this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
     this.emit = Objects.requireNonNull(emit, "emit");
@@ -116,8 +126,7 @@ final class PircbotxRegistrationLifecycleHandler {
     if (!conn.isZncPlaybackCapAcked()) return;
     if (!conn.beginZncPlaybackRequest()) return;
 
-    OptionalLong cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId);
-    long request = Math.max(0L, cursor.orElse(0L) - 1L);
+    long request = Math.max(0L, playbackCursorAtConnect.orElse(0L) - 1L);
 
     try {
       String command =
@@ -128,7 +137,12 @@ final class PircbotxRegistrationLifecycleHandler {
         throw new IllegalStateException("No IRCv3 ZNC playback runtime provider is available");
       }
       bot.sendIRC().message("*playback", command);
-      log.info("[{}] requested ZNC playback since {} (epoch seconds)", serverId, request);
+      log.info(
+          "[{}] requested ZNC playback since {} (epoch seconds={}, resumeCursor={})",
+          serverId,
+          Instant.ofEpochSecond(request),
+          request,
+          playbackCursorAtConnect);
     } catch (Exception ex) {
       conn.clearZncPlaybackRequest();
       log.warn("[{}] failed to request ZNC playback", serverId, ex);
@@ -138,6 +152,16 @@ final class PircbotxRegistrationLifecycleHandler {
   private void logNegotiatedCaps() {
     if (!conn.beginCapabilitySummaryLog()) return;
     Ircv3CapabilitySnapshot caps = conn.capabilitySnapshot();
+    // ZNC normally forwards the upstream RPL 004, so server-version detection alone cannot
+    // identify a native-buffer connection. Report the replay policy for every registration.
+    log.info(
+        "[{}] replay bootstrap: mode={} zncDetected={} server-time={} batch={} resumeCursor={}",
+        serverId,
+        caps.zncPlaybackCapAcked() ? "explicit-playback-request" : "server-buffer-if-available",
+        conn.isZncDetected(),
+        caps.serverTimeCapAcked(),
+        caps.batchCapAcked(),
+        playbackCursorAtConnect);
     boolean multiline = caps.multilineAvailable();
     boolean typing = caps.typingAvailable();
     log.debug(

@@ -153,10 +153,12 @@ public class MediatorInboundTextEventHandler {
 
     InboundIgnorePolicyPort.Decision decision = channelText.decision();
     if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) {
+      logChannelMessageRoute(sid, event, "ignored");
       return;
     }
 
     if (tryResolvePendingEchoChannelMessage(callbacks, sid, channel, active, event)) {
+      logChannelMessageRoute(sid, event, "pending-echo-resolved");
       return;
     }
 
@@ -168,10 +170,12 @@ public class MediatorInboundTextEventHandler {
         event.text(),
         event.messageId(),
         event.ircv3Tags())) {
+      logChannelMessageRoute(sid, event, "message-edit-applied");
       return;
     }
     if (shouldSuppressInboundDuplicateByMsgId(
         sid, channel, "channel-message", event.messageId(), event.ircv3Tags())) {
+      logChannelMessageRoute(sid, event, "duplicate-msgid");
       return;
     }
 
@@ -190,6 +194,7 @@ public class MediatorInboundTextEventHandler {
                   event.text(),
                   event.messageId(),
                   event.ircv3Tags()));
+      logChannelMessageRoute(sid, event, "spoiler-ui-submitted");
     } else {
       callbacks.postTo(
           channel,
@@ -216,6 +221,7 @@ public class MediatorInboundTextEventHandler {
                   event.text());
             }
           });
+      logChannelMessageRoute(sid, event, "chat-ui-submitted");
     }
 
     String notificationMessageId = effectiveMessageIdForDedup(event.messageId(), event.ircv3Tags());
@@ -248,6 +254,19 @@ public class MediatorInboundTextEventHandler {
         }
       }
     }
+  }
+
+  private static void logChannelMessageRoute(
+      String sid, IrcEvent.ChannelMessage event, String outcome) {
+    if (!log.isDebugEnabled()) return;
+    log.debug(
+        "[{}] inbound channel message target={} at={} batch={} msgid={} outcome={}",
+        sid,
+        event.channel(),
+        event.at(),
+        event.ircv3Tags() == null ? null : event.ircv3Tags().get("batch"),
+        event.messageId(),
+        outcome);
   }
 
   public void handleChannelAction(

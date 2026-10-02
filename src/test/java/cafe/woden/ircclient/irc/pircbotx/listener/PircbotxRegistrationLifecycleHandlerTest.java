@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
@@ -23,6 +23,10 @@ import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandRequest;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
@@ -31,8 +35,40 @@ import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.output.OutputIRC;
 import org.pircbotx.output.OutputRaw;
+import org.slf4j.LoggerFactory;
 
 class PircbotxRegistrationLifecycleHandlerTest {
+
+  @Test
+  void reportsServerBufferPolicyWhenUpstreamVersionDoesNotIdentifyZnc() {
+    var conn = new PircbotxConnectionState("znc");
+    var handler =
+        newHandler(conn, new ArrayList<>(), ignored -> OptionalLong.of(20L), false, false);
+    Logger logger = (Logger) LoggerFactory.getLogger(PircbotxRegistrationLifecycleHandler.class);
+    Level previous = logger.getLevel();
+    ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    logger.addAppender(logs);
+    logger.setLevel(Level.INFO);
+    try {
+      handler.maybeHandle(4, null, ":irc.example 004 me irc.example solanum-1.0 ao mtov");
+      handler.maybeHandle(376, null, ":irc.example 376 me :End of MOTD");
+      // A duplicate completion must not repeat the bootstrap summary.
+      handler.maybeHandle(422, null, ":irc.example 422 me :No MOTD");
+      List<String> summaries =
+          logs.list.stream()
+              .map(ILoggingEvent::getFormattedMessage)
+              .filter(message -> message.contains("replay bootstrap:"))
+              .toList();
+      assertEquals(1, summaries.size());
+      assertTrue(
+          summaries.getFirst().contains("mode=server-buffer-if-available zncDetected=false"));
+    } finally {
+      logger.detachAppender(logs);
+      logger.setLevel(previous);
+      logs.stop();
+    }
+  }
 
   @Test
   void maybeHandleRegistrationCompleteEmitsReadyAndRequestsBootstrap() {
@@ -103,6 +139,7 @@ class PircbotxRegistrationLifecycleHandlerTest {
     verify(outputIrc, never()).message("*playback", "play * 29");
 
     conn.clearZncPlaybackRequest();
+    handler = newHandler(conn, new ArrayList<>(), cursorProvider, false, false);
     assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
 
     verify(outputIrc).message("*playback", "play * 29");
@@ -112,14 +149,34 @@ class PircbotxRegistrationLifecycleHandlerTest {
   void registrationDoesNotRequestPlaybackWithoutNegotiatedCapability() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     PlaybackCursorProvider cursorProvider = mock(PlaybackCursorProvider.class);
+    when(cursorProvider.lastSeenEpochSeconds("libera")).thenReturn(OptionalLong.empty());
     PircbotxRegistrationLifecycleHandler handler =
         newHandler(conn, new ArrayList<>(), cursorProvider, false, false);
     PircBotX bot = mock(PircBotX.class);
 
     assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
 
-    verifyNoInteractions(cursorProvider);
+    verify(cursorProvider, times(1)).lastSeenEpochSeconds("libera");
     verify(bot, never()).sendIRC();
+  }
+
+  @Test
+  void registrationRequestsRetainedBufferWhenCursorSnapshotFails() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    conn.setZncPlaybackCapAcked(true);
+    PlaybackCursorProvider cursorProvider = mock(PlaybackCursorProvider.class);
+    when(cursorProvider.lastSeenEpochSeconds("libera"))
+        .thenThrow(new IllegalStateException("DB unavailable"));
+    PircbotxRegistrationLifecycleHandler handler =
+        newHandler(conn, new ArrayList<>(), cursorProvider, false, false);
+    PircBotX bot = mock(PircBotX.class);
+    OutputIRC outputIrc = mock(OutputIRC.class);
+    when(bot.sendIRC()).thenReturn(outputIrc);
+
+    assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
+
+    verify(outputIrc).message("*playback", "play * 0");
+    verify(cursorProvider, times(1)).lastSeenEpochSeconds("libera");
   }
 
   @Test

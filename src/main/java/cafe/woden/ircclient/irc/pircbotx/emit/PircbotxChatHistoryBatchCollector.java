@@ -10,6 +10,7 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
 public final class PircbotxChatHistoryBatchCollector {
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxChatHistoryBatchCollector.class);
+  private static final int MAX_PLAYBACK_DIAGNOSTIC_BATCHES = 64;
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> emit;
@@ -37,6 +39,9 @@ public final class PircbotxChatHistoryBatchCollector {
   private final Ircv3ServerTimeRuntimeSupport serverTimeRuntimeSupport;
   private final Ircv3MessageTagsRuntimeSupport messageTagsRuntimeSupport;
   private final Map<String, ChatHistoryBatchBuffer> activeBatches = new HashMap<>();
+  // Metadata only; messages in native ZNC batches continue through the regular event path.
+  private final LinkedHashMap<String, PlaybackBatchDiagnostics> playbackBatches =
+      new LinkedHashMap<>();
 
   public PircbotxChatHistoryBatchCollector(
       String serverId,
@@ -66,6 +71,22 @@ public final class PircbotxChatHistoryBatchCollector {
 
     for (Ircv3InboundCommandSignal signal : signals) {
       if (signal instanceof Ircv3InboundCommandSignal.HistoryBatchStarted start) {
+        if ("znc.in/playback".equalsIgnoreCase(start.type())) {
+          if (playbackBatches.size() >= MAX_PLAYBACK_DIAGNOSTIC_BATCHES
+              && !playbackBatches.containsKey(start.batchId())) {
+            var evicted = playbackBatches.pollFirstEntry();
+            log.warn(
+                "[{}] ZNC playback diagnostics evicted unfinished batch id={}",
+                serverId,
+                evicted.getKey());
+          }
+          playbackBatches.put(start.batchId(), new PlaybackBatchDiagnostics(start.target()));
+          log.info(
+              "[{}] ZNC playback batch started id={} target={}",
+              serverId,
+              start.batchId(),
+              start.target());
+        }
         if (isChatHistoryBatch(start.type())) {
           activeBatches.put(start.batchId(), new ChatHistoryBatchBuffer(start.target()));
           log.debug(
@@ -79,6 +100,17 @@ public final class PircbotxChatHistoryBatchCollector {
       }
 
       if (signal instanceof Ircv3InboundCommandSignal.HistoryBatchEnded end) {
+        PlaybackBatchDiagnostics playback = playbackBatches.remove(end.batchId());
+        if (playback != null) {
+          log.info(
+              "[{}] ZNC playback batch ended id={} target={} observedMessages={} earliest={} latest={}",
+              serverId,
+              end.batchId(),
+              playback.target,
+              playback.observedMessages,
+              playback.earliest,
+              playback.latest);
+        }
         ChatHistoryBatchBuffer buf = activeBatches.remove(end.batchId());
         if (buf != null) {
           int n = buf.entries.size();
@@ -121,6 +153,20 @@ public final class PircbotxChatHistoryBatchCollector {
       String messageId,
       Map<String, String> ircv3Tags) {
     if (batchId == null || batchId.isBlank()) return false;
+    PlaybackBatchDiagnostics playback = playbackBatches.get(batchId);
+    if (playback != null) {
+      playback.observe(at);
+      if (log.isDebugEnabled()) {
+        log.debug(
+            "[{}] ZNC playback message observed batch={} target={} kind={} at={} msgid={}",
+            serverId,
+            batchId,
+            playback.target.isBlank() ? fallbackTarget : playback.target,
+            kind,
+            at,
+            messageId);
+      }
+    }
     ChatHistoryBatchBuffer buf = activeBatches.get(batchId);
     if (buf == null) return false;
 
@@ -199,6 +245,31 @@ public final class PircbotxChatHistoryBatchCollector {
 
   public void clear() {
     activeBatches.clear();
+    if (!playbackBatches.isEmpty()) {
+      log.info(
+          "[{}] ZNC playback diagnostics cleared unfinishedBatches={}",
+          serverId,
+          playbackBatches.size());
+    }
+    playbackBatches.clear();
+  }
+
+  private static final class PlaybackBatchDiagnostics {
+    private final String target;
+    private long observedMessages;
+    private Instant earliest;
+    private Instant latest;
+
+    private PlaybackBatchDiagnostics(String target) {
+      this.target = Objects.toString(target, "");
+    }
+
+    private void observe(Instant at) {
+      observedMessages++;
+      if (at == null) return;
+      if (earliest == null || at.isBefore(earliest)) earliest = at;
+      if (latest == null || at.isAfter(latest)) latest = at;
+    }
   }
 
   private static final class ChatHistoryBatchBuffer {

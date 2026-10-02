@@ -1,0 +1,17 @@
+# Enable with --spring.profiles.active=znc-debug for a targeted reconnect capture.
+# Raw incoming IRC lines include message text. Outbound raw logging remains disabled.
+logging:
+  file:
+    name: "${java.io.tmpdir}/ircafe-znc.log"
+  logback:
+    rollingpolicy:
+      max-file-size: 5MB
+      max-history: 2
+      total-size-cap: 15MB
+      clean-history-on-start: true
+  level:
+    org.pircbotx.InputParser: DEBUG
+    cafe.woden.ircclient.irc.pircbotx.listener.PircbotxRegistrationLifecycleHandler: DEBUG
+    cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector: DEBUG
+    cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter: DEBUG
+    cafe.woden.ircclient.app.core.MediatorInboundTextEventHandler: DEBUG
