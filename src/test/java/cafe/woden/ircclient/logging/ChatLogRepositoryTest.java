@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.logging;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.TargetRef;
@@ -20,6 +22,79 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 class ChatLogRepositoryTest {
 
   @TempDir Path tempDir;
+
+  @Test
+  void playbackCursorDoesNotAdvanceWhenReconnectStatusIsPersisted() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-playback-reconnect"))) {
+      long lastMessageMs = 1_700_000_000_000L;
+      long reconnectMs = lastMessageMs + 3_600_000L;
+      LogLineFactory factory = new LogLineFactory(fixedClock(reconnectMs));
+      fixture.repo.insert(
+          factory.chatAt(
+              new TargetRef("srv", "#chan"), "alice", "before disconnect", false, lastMessageMs));
+      fixture.repo.insert(
+          factory.statusAt(new TargetRef("srv", "status"), "(conn)", "Connected", reconnectMs));
+      fixture.repo.insertBatch(
+          List.of(
+              factory.status(new TargetRef("srv", "#chan"), "(join)", "Joined #chan"),
+              factory.error(new TargetRef("srv", "#chan"), "(conn)", "Disconnected"),
+              factory.presence(new TargetRef("srv", "#chan"), PresenceEvent.join("me")),
+              factory.chat(new TargetRef("srv", "#chan"), "me", "local echo", true),
+              factory.notice(new TargetRef("srv", "STATUS"), "server", "Welcome"),
+              factory.notice(new TargetRef("srv", "status{net:libera}"), "server", "MOTD"),
+              factory.chat(new TargetRef("srv", "*status"), "*status", "Connected", false),
+              factory.notice(new TargetRef("srv", "*playback"), "*playback", "Playback complete"),
+              factory.chat(TargetRef.notifications("srv"), "alice", "UI copy", false),
+              factory.chat(new TargetRef("other-server", "#chan"), "bob", "newer message", false)));
+
+      long cursor =
+          new ChatLogPlaybackCursorProvider(fixture.repo).lastSeenEpochSeconds("srv").orElseThrow();
+
+      assertEquals(lastMessageMs / 1000L, cursor);
+    }
+  }
+
+  @Test
+  void playbackCursorTracksReceivedChatActionsNoticesAndSpoilers() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-playback-message-kinds"))) {
+      long timestampMs = 1_700_000_000_000L;
+      TargetRef channel = new TargetRef("srv", "#chan");
+      TargetRef query = new TargetRef("srv", "alice");
+      ChatLogPlaybackCursorProvider provider = new ChatLogPlaybackCursorProvider(fixture.repo);
+      List<LogLine> messages =
+          List.of(
+              new LogLineFactory(fixedClock(timestampMs)).chat(channel, "alice", "chat", false),
+              new LogLineFactory(fixedClock(timestampMs + 1_000L))
+                  .action(query, "alice", "waves", false),
+              new LogLineFactory(fixedClock(timestampMs + 2_000L))
+                  .notice(channel, "alice", "notice"),
+              new LogLineFactory(fixedClock(timestampMs + 3_000L))
+                  .softIgnoredSpoiler(query, "alice", "ignored"));
+
+      for (LogLine message : messages) {
+        fixture.repo.insert(message);
+        assertEquals(
+            message.tsEpochMs() / 1000L, provider.lastSeenEpochSeconds("srv").orElseThrow());
+      }
+    }
+  }
+
+  @Test
+  void playbackCursorIsEmptyWithoutReceivedConversationMessages() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-playback-no-messages"))) {
+      ChatLogPlaybackCursorProvider provider = new ChatLogPlaybackCursorProvider(fixture.repo);
+      assertTrue(provider.lastSeenEpochSeconds("srv").isEmpty());
+      LogLineFactory factory = new LogLineFactory(fixedClock(1_700_000_000_000L));
+      fixture.repo.insertBatch(
+          List.of(
+              factory.status(new TargetRef("srv", "status"), "(conn)", "Connected"),
+              factory.notice(new TargetRef("srv", "status"), "server", "Welcome"),
+              factory.chat(new TargetRef("srv", "#chan"), "me", "local echo", true)));
+
+      assertTrue(provider.lastSeenEpochSeconds("srv").isEmpty());
+      assertTrue(provider.lastSeenEpochSeconds("other-server").isEmpty());
+    }
+  }
 
   @Test
   void chatLogTableUsesCachedStorageAfterMigrations() {

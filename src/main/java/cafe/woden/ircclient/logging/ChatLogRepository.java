@@ -156,11 +156,17 @@ public class ChatLogRepository {
          )
       """;
 
-  private static final String SELECT_MAX_TS_FOR_SERVER_SQL =
+  private static final String SELECT_MAX_MESSAGE_TS_FOR_SERVER_SQL =
       """
       SELECT MAX(ts_epoch_ms)
         FROM chat_log
        WHERE server_id = ?
+         AND direction = 'IN'
+         AND kind IN ('CHAT', 'ACTION', 'NOTICE', 'SPOILER')
+         AND LOWER(target) <> 'status'
+         AND LOWER(target) NOT LIKE 'status{net:%'
+         AND SUBSTRING(target FROM 1 FOR 2) <> '__'
+         AND target NOT LIKE '*%'
       """;
 
   private static final String SELECT_MAX_ROW_ID_SQL =
@@ -372,11 +378,16 @@ public class ChatLogRepository {
     return jdbc.query(SELECT_RECENT_SQL, ROW_MAPPER, serverId, target, limit);
   }
 
-  /** Fetch the newest persisted timestamp (epoch ms) for a server (if any). */
-  public OptionalLong maxTimestampForServer(String serverId) {
+  /**
+   * Fetch the newest received conversation message timestamp (epoch ms) for a server.
+   *
+   * <p>Connection status, local echoes, UI copies, and bouncer control messages must not advance
+   * the playback cursor: they can be written during reconnect before any backlog is received.
+   */
+  public OptionalLong maxMessageTimestampForServer(String serverId) {
     if (serverId == null || serverId.isBlank()) return OptionalLong.empty();
     try {
-      Long v = jdbc.queryForObject(SELECT_MAX_TS_FOR_SERVER_SQL, Long.class, serverId);
+      Long v = jdbc.queryForObject(SELECT_MAX_MESSAGE_TS_FOR_SERVER_SQL, Long.class, serverId);
       if (v == null) return OptionalLong.empty();
       return OptionalLong.of(v);
     } catch (Exception ex) {

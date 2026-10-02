@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
@@ -65,6 +67,59 @@ class PircbotxRegistrationLifecycleHandlerTest {
     verify(outputIrc).message("*status", "ListNetworks");
     verify(outputIrc).message("*playback", "play * 19");
     verify(outputRaw).rawLine("BOUNCER LISTNETWORKS");
+  }
+
+  @Test
+  void registrationRequestsAllPlaybackWhenCursorIsUnknown() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    conn.setZncPlaybackCapAcked(true);
+    PircbotxRegistrationLifecycleHandler handler =
+        newHandler(conn, new ArrayList<>(), serverId -> OptionalLong.empty(), false, false);
+    PircBotX bot = mock(PircBotX.class);
+    OutputIRC outputIrc = mock(OutputIRC.class);
+    when(bot.sendIRC()).thenReturn(outputIrc);
+
+    assertTrue(handler.maybeHandle(422, bot, ":server 422 me :MOTD File is missing"));
+
+    verify(outputIrc).message("*playback", "play * 0");
+  }
+
+  @Test
+  void registrationRequestsPlaybackOncePerSessionAndAgainAfterReconnectReset() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    conn.setZncPlaybackCapAcked(true);
+    PlaybackCursorProvider cursorProvider = mock(PlaybackCursorProvider.class);
+    when(cursorProvider.lastSeenEpochSeconds("libera"))
+        .thenReturn(OptionalLong.of(20L), OptionalLong.of(30L));
+    PircbotxRegistrationLifecycleHandler handler =
+        newHandler(conn, new ArrayList<>(), cursorProvider, false, false);
+    PircBotX bot = mock(PircBotX.class);
+    OutputIRC outputIrc = mock(OutputIRC.class);
+    when(bot.sendIRC()).thenReturn(outputIrc);
+
+    assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
+    assertTrue(handler.maybeHandle(422, bot, ":server 422 me :MOTD File is missing"));
+    verify(outputIrc).message("*playback", "play * 19");
+    verify(outputIrc, never()).message("*playback", "play * 29");
+
+    conn.clearZncPlaybackRequest();
+    assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
+
+    verify(outputIrc).message("*playback", "play * 29");
+  }
+
+  @Test
+  void registrationDoesNotRequestPlaybackWithoutNegotiatedCapability() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    PlaybackCursorProvider cursorProvider = mock(PlaybackCursorProvider.class);
+    PircbotxRegistrationLifecycleHandler handler =
+        newHandler(conn, new ArrayList<>(), cursorProvider, false, false);
+    PircBotX bot = mock(PircBotX.class);
+
+    assertTrue(handler.maybeHandle(376, bot, ":server 376 me :End of /MOTD command."));
+
+    verifyNoInteractions(cursorProvider);
+    verify(bot, never()).sendIRC();
   }
 
   @Test
