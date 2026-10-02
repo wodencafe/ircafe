@@ -4,6 +4,8 @@ import static cafe.woden.ircclient.irc.pircbotx.PircbotxRuntimeTestFixtures.serv
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -14,8 +16,46 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.pircbotx.PircBotX;
 
 class PircbotxServerResponseEmitterTest {
+
+  @Test
+  void bannedNickChangePreservesRequestedNickAndBlockingChannel() {
+    List<ServerIrcEvent> events = new ArrayList<>();
+    PircbotxServerResponseEmitter emitter = serverResponses("libera", events::add);
+    PircBotX bot = mock(PircBotX.class);
+    when(bot.getNick()).thenReturn("wodencafe");
+    String reason =
+        "Cannot change nickname because you are banned or quieted while in this channel.";
+    String rawLine =
+        "@time=2026-10-02T16:19:09Z :server 435 wodencafe wodemoncafe ##restricted :" + reason;
+
+    emitter.emitServerResponseLine(bot, 435, rawLine);
+
+    assertEquals(1, events.size());
+    IrcEvent.ServerResponseLine line =
+        assertInstanceOf(IrcEvent.ServerResponseLine.class, events.getFirst().event());
+    assertEquals(reason + " (wodemoncafe ##restricted)", line.message());
+    assertEquals(rawLine, line.rawLine());
+    assertEquals(Instant.parse("2026-10-02T16:19:09Z"), line.at());
+  }
+
+  @Test
+  void bannedNickChangeWithoutChannelStillDisplaysReasonAndRequestedNick() {
+    List<ServerIrcEvent> events = new ArrayList<>();
+    PircbotxServerResponseEmitter emitter = serverResponses("libera", events::add);
+    PircBotX bot = mock(PircBotX.class);
+    when(bot.getNick()).thenReturn("wodencafe");
+
+    emitter.emitServerResponseLine(
+        bot, 435, ":server 435 wodencafe wodemoncafe :Cannot change nickname");
+
+    assertEquals(1, events.size());
+    IrcEvent.ServerResponseLine line =
+        assertInstanceOf(IrcEvent.ServerResponseLine.class, events.getFirst().event());
+    assertEquals("Cannot change nickname (wodemoncafe)", line.message());
+  }
 
   @Test
   void emitServerResponseLinePublishesListEntryAndStatusLine() {

@@ -61,7 +61,7 @@ final class PartCommandSupport {
     }
 
     if (target.isChannel()) {
-      targetCoordinator.closeChannel(target, message);
+      targetCoordinator.partChannel(target, message);
       return;
     }
 

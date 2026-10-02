@@ -85,7 +85,7 @@ class PircbotxConnectPreparationSupportTest {
     assertEquals(secured, prepared.server());
     assertFalse(prepared.disconnectOnSaslFailure());
     assertFalse(connection.manualDisconnectRequested());
-    assertEquals(0L, connection.reconnectAttempts());
+    assertEquals(5L, connection.reconnectAttempts());
     assertFalse(connection.capabilitySnapshot().batchCapAcked());
     assertFalse(connection.capabilitySnapshot().messageTagsCapAcked());
     assertEquals("irc.secure.example.net", connection.connectedHost());

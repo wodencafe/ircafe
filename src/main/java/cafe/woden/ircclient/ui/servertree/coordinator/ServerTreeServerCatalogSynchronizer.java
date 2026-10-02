@@ -313,21 +313,25 @@ public final class ServerTreeServerCatalogSynchronizer {
       target.putAll(entry.getValue());
     }
 
+    boolean serverStructureChanged = false;
     for (String id : newIds) {
       if (ServerTreeBouncerBackends.isBouncerServerId(id)) continue;
       if (!in.hasServer(id)) {
         in.addServerRoot(id);
+        serverStructureChanged = true;
       }
     }
     for (String id : newIds) {
       if (!in.hasServer(id)) {
         in.addServerRoot(id);
+        serverStructureChanged = true;
       }
     }
 
     for (String existing : List.copyOf(in.currentServerIds())) {
       if (!newIds.contains(existing)) {
         in.removeServerRoot(existing);
+        serverStructureChanged = true;
         serverDisplayNames.remove(existing);
         ephemeralServerIds.remove(existing);
         for (Set<String> controlServerIds : bouncerControlServerIdsByBackendId.values()) {
@@ -357,9 +361,11 @@ public final class ServerTreeServerCatalogSynchronizer {
       }
     }
 
-    Set<TreePath> expandedBeforeReload = in.snapshotExpandedTreePaths();
-    in.reloadTreeModel();
-    in.restoreExpandedTreePaths(expandedBeforeReload);
+    if (serverStructureChanged) {
+      Set<TreePath> expandedBeforeReload = in.snapshotExpandedTreePaths();
+      in.reloadTreeModel();
+      in.restoreExpandedTreePaths(expandedBeforeReload);
+    }
 
     in.runLater(
         () -> {

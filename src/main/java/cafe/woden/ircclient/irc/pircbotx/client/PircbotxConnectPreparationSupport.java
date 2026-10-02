@@ -43,7 +43,6 @@ final class PircbotxConnectPreparationSupport {
 
     timers.cancelReconnect(connection);
     connection.clearManualDisconnect();
-    connection.resetReconnectAttempts();
 
     IrcProperties.Server configured = serverCatalog.require(serverId);
     IrcProperties.Server server = stsPolicies.applyPolicy(configured);

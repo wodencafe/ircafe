@@ -26,7 +26,7 @@ DOCKER_RUN = $(DOCKER) run --rm $(DOCKER_TTY) \
 
 GRADLE_RUN = GRADLE_USER_HOME="$(LOCAL_GRADLE_USER_HOME)" $(GRADLEW)
 
-.PHONY: help gradle bootrun build jar check quick-check lint test integration-test architecture-test functional-test \
+.PHONY: help gradle bootrun build jar check quick-check lint test integration-test architecture-test architecture-report functional-test \
 	verify-ui-change verify-spring-change verify-architecture-change verify-refactor strict-analysis coverage-report \
 	mutation-test jmh clean jpackage \
 	docker-image docker-image-if-missing \
@@ -65,6 +65,9 @@ integration-test: ## Run IntegrationTest suite from src/test
 
 architecture-test: ## Run module boundary/architecture guardrail tests
 	$(GRADLE_RUN) architectureTest $(GRADLE_FLAGS)
+
+architecture-report: ## Report ranked architecture refactoring candidates (Markdown + JSON)
+	$(GRADLE_RUN) architectureReport $(GRADLE_FLAGS)
 
 functional-test: ## Run Swing FunctionalTest suite from src/functionalTest
 	$(GRADLE_RUN) functionalTest $(GRADLE_FLAGS)

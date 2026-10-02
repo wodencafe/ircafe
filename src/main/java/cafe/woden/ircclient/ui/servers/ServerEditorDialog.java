@@ -56,6 +56,8 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField hostField = new JTextField();
   private final JTextField portField = new JTextField();
   private final JCheckBox tlsBox = new JCheckBox(MESSAGES.text("servers.editor.connection.useTls"));
+  private final JCheckBox trustAllCertificatesBox =
+      new JCheckBox(MESSAGES.text("servers.editor.connection.trustAllCertificates"));
   private final JPasswordField serverPassField = new JPasswordField();
   private final JCheckBox autoConnectOnStartBox =
       new JCheckBox(MESSAGES.text("servers.editor.connection.autoConnectOnStartup"));
@@ -279,6 +281,7 @@ public class ServerEditorDialog extends JDialog {
     hostField.setText(Objects.toString(seed.host(), ""));
     portField.setText(String.valueOf(seed.port()));
     tlsBox.setSelected(seed.tls());
+    trustAllCertificatesBox.setSelected(seed.trustAllCertificates());
     serverPassField.setText(Objects.toString(seed.serverPassword(), ""));
 
     nickField.setText(Objects.toString(seed.nick(), ""));
@@ -374,7 +377,11 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void installInteractionHandlers() {
-    tlsBox.addActionListener(e -> maybeAdjustPortForBackendAndTls());
+    tlsBox.addActionListener(
+        e -> {
+          maybeAdjustPortForBackendAndTls();
+          updateCertificateUi();
+        });
     portField.getDocument().addDocumentListener(new PortTrackingListener());
 
     authModeCombo.addActionListener(e -> refreshAuthPanelUiAndValidation());
@@ -558,6 +565,7 @@ public class ServerEditorDialog extends JDialog {
     updateValidation();
 
     final boolean tls = tlsBox.isSelected();
+    final boolean trustAllCertificates = trustAllCertificatesBox.isSelected();
 
     final IrcProperties.Proxy cfg;
     try {
@@ -592,7 +600,7 @@ public class ServerEditorDialog extends JDialog {
       protected TestResult doInBackground() {
         long start = System.nanoTime();
         try {
-          testConnect(endpoint.host(), endpoint.port(), tls, cfg);
+          testConnect(endpoint.host(), endpoint.port(), tls, trustAllCertificates, cfg);
           long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
           return TestResult.ok(elapsedMs);
         } catch (Exception e) {
@@ -675,44 +683,40 @@ public class ServerEditorDialog extends JDialog {
     return override != null ? override : global;
   }
 
-  private static void testConnect(String host, int port, boolean tls, IrcProperties.Proxy cfg)
+  static void testConnect(
+      String host, int port, boolean tls, boolean trustAllCertificates, IrcProperties.Proxy cfg)
       throws Exception {
     long connectTimeoutMs = Math.max(1, cfg.connectTimeoutMs());
     int readTimeoutMs = (int) Math.max(1, Math.min(Integer.MAX_VALUE, cfg.readTimeoutMs()));
 
     if (cfg.enabled()) {
       // Proxy path
-      Socket s;
-      if (tls) {
-        s =
-            new SocksProxySslSocketFactory(cfg, NetTlsContext.sslSocketFactory())
-                .createSocket(host, port);
-      } else {
-        s = new SocksProxySocketFactory(cfg).createSocket(host, port);
+      try (Socket s =
+          tls
+              ? new SocksProxySslSocketFactory(
+                      cfg, NetTlsContext.sslSocketFactory(trustAllCertificates))
+                  .createSocket(host, port)
+              : new SocksProxySocketFactory(cfg).createSocket(host, port)) {
+        s.setSoTimeout(readTimeoutMs);
+        if (s instanceof SSLSocket ssl) {
+          ssl.startHandshake();
+        }
       }
-      s.setSoTimeout(readTimeoutMs);
-      if (s instanceof SSLSocket ssl) {
-        ssl.startHandshake();
-      }
-      s.close();
       return;
     }
 
     // Direct path: explicitly bypass any JVM-level SOCKS properties.
-    Socket tcp = new Socket(Proxy.NO_PROXY);
-    tcp.connect(
-        new InetSocketAddress(host, port), (int) Math.min(Integer.MAX_VALUE, connectTimeoutMs));
-    tcp.setSoTimeout(readTimeoutMs);
+    try (Socket tcp = new Socket(Proxy.NO_PROXY)) {
+      tcp.connect(
+          new InetSocketAddress(host, port), (int) Math.min(Integer.MAX_VALUE, connectTimeoutMs));
+      tcp.setSoTimeout(readTimeoutMs);
+      if (!tls) return;
 
-    if (!tls) {
-      tcp.close();
-      return;
-    }
-
-    SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
-    try (SSLSocket sock = (SSLSocket) ssl.createSocket(tcp, host, port, true)) {
-      sock.setSoTimeout(readTimeoutMs);
-      sock.startHandshake();
+      SSLSocketFactory ssl = NetTlsContext.sslSocketFactory(trustAllCertificates);
+      try (SSLSocket sock = (SSLSocket) ssl.createSocket(tcp, host, port, true)) {
+        sock.setSoTimeout(readTimeoutMs);
+        sock.startHandshake();
+      }
     }
   }
 
@@ -775,13 +779,17 @@ public class ServerEditorDialog extends JDialog {
     portRow.add(tlsBox, pg);
 
     addRow(p, g, 3, MESSAGES.text("servers.editor.connection.port"), portRow);
-    addRow(p, g, 4, MESSAGES.text("servers.editor.connection.startup"), autoConnectOnStartBox);
+    trustAllCertificatesBox.setToolTipText(
+        MESSAGES.text("servers.editor.connection.trustAllCertificates.tooltip"));
+    addRow(
+        p, g, 4, MESSAGES.text("servers.editor.connection.certificates"), trustAllCertificatesBox);
+    addRow(p, g, 5, MESSAGES.text("servers.editor.connection.startup"), autoConnectOnStartBox);
     connectionBackendHintLabel.putClientProperty(
         FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     addRow(
         p,
         g,
-        5,
+        6,
         MESSAGES.text("servers.editor.connection.backendHint"),
         connectionBackendHintLabel);
 
@@ -873,7 +881,13 @@ public class ServerEditorDialog extends JDialog {
 
   private void refreshBackendAndAuthUi() {
     updateBackendUi();
+    updateCertificateUi();
     refreshAuthPanelUiAndValidation();
+  }
+
+  private void updateCertificateUi() {
+    trustAllCertificatesBox.setEnabled(
+        tlsBox.isSelected() && !selectedBackendProfile().matrixAuthSupported());
   }
 
   private void refreshAuthPanelUi() {
@@ -1112,7 +1126,8 @@ public class ServerEditorDialog extends JDialog {
             new String(proxyPassField.getPassword()),
             proxyRemoteDnsBox.isSelected(),
             proxyConnectTimeoutMsField.getText(),
-            proxyReadTimeoutMsField.getText()));
+            proxyReadTimeoutMsField.getText(),
+            trustAllCertificatesBox.isSelected()));
   }
 
   private String serverPasswordValue() {

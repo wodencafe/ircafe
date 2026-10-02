@@ -24,6 +24,7 @@ public final class IrcPropertiesTestFixtures {
     private String host = "irc.example.net";
     private int port = 6697;
     private boolean tls = true;
+    private boolean trustAllCertificates;
     private String serverPassword = "";
     private String nick = "ircafe";
     private String login = "ircafe";
@@ -52,6 +53,11 @@ public final class IrcPropertiesTestFixtures {
 
     public ServerBuilder tls(boolean tls) {
       this.tls = tls;
+      return this;
+    }
+
+    public ServerBuilder trustAllCertificates(boolean trustAllCertificates) {
+      this.trustAllCertificates = trustAllCertificates;
       return this;
     }
 
@@ -125,7 +131,8 @@ public final class IrcPropertiesTestFixtures {
           autoJoin,
           perform,
           proxy,
-          backendId);
+          backendId,
+          trustAllCertificates);
     }
   }
 }

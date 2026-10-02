@@ -174,7 +174,11 @@ public final class PircbotxServerResponseEmitter {
 
     String subject = "";
     if (params != null && idx < params.size()) {
-      subject = params.get(idx);
+      // ERR_BANNICKCHANGE includes both the requested nick and the blocking channel.
+      subject =
+          "435".equals(pl.command())
+              ? String.join(" ", params.subList(idx, params.size()))
+              : params.get(idx);
       if (subject == null) subject = "";
     }
 

@@ -61,6 +61,70 @@ class OutboundJoinPartCommandServiceTest {
   }
 
   @Test
+  void joinAlreadyAttachedChannelSelectsItWithoutSendingJoin() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef channel = new TargetRef("libera", "##channel");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(ui.hasTarget(channel)).thenReturn(true);
+    when(irc.joinChannel("libera", "##channel")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "  ##channel  ", "");
+
+    verify(targetCoordinator).joinChannel(channel);
+    verify(irc, never()).joinChannel(anyString(), anyString());
+    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(joinRoutingState, never()).rememberOrigin(anyString(), anyString(), any());
+  }
+
+  @Test
+  void joinAlreadyAttachedChannelWithKeySelectsItWithoutSendingJoin() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef channel = new TargetRef("libera", "##channel");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(ui.hasTarget(channel)).thenReturn(true);
+    when(irc.sendRaw("libera", "JOIN ##channel secret")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "##channel", "secret");
+
+    verify(targetCoordinator).joinChannel(channel);
+    verify(irc, never()).joinChannel(anyString(), anyString());
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
+  void joinDetachedChannelStillRequestsJoinAndWaitsForConfirmation() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef channel = new TargetRef("libera", "##channel");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(ui.hasTarget(channel)).thenReturn(true);
+    when(ui.isChannelDisconnected(channel)).thenReturn(true);
+    when(irc.joinChannel("libera", "##channel")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "##channel", "");
+
+    verify(irc).joinChannel("libera", "##channel");
+    verify(targetCoordinator, never()).joinChannel(any());
+    verify(ui, never()).selectTarget(any());
+  }
+
+  @Test
+  void joinWhileDisconnectedQueuesChannelInsteadOfSelectingStaleTarget() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(ui.hasTarget(new TargetRef("libera", "##channel"))).thenReturn(true);
+
+    service.handleJoin(disposables, "##channel", "");
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "##channel");
+    verify(targetCoordinator, never()).joinChannel(any());
+    verify(irc, never()).joinChannel(anyString(), anyString());
+    verify(ui).appendStatus(status, "(conn)", "Not connected (join queued in config only)");
+  }
+
+  @Test
   void joinWithKeySendsRawJoinLine() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
@@ -135,7 +199,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handlePart(disposables, "", "");
 
     verify(ui).appendStatus(status, "(part)", "Select a server first.");
-    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).partChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -145,7 +209,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "  be right back  ");
 
-    verify(targetCoordinator).closeChannel(chan, "be right back");
+    verify(targetCoordinator).partChannel(chan, "be right back");
   }
 
   @Test
@@ -158,7 +222,7 @@ class OutboundJoinPartCommandServiceTest {
     verify(ui)
         .appendStatus(
             status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).partChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -169,7 +233,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "  #ircafe ", "  later ");
 
-    verify(targetCoordinator).closeChannel(expected, "later");
+    verify(targetCoordinator).partChannel(expected, "later");
   }
 
   @Test
@@ -182,7 +246,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "!abc123:matrix.org", "later");
 
-    verify(targetCoordinator).closeChannel(room, "later");
+    verify(targetCoordinator).partChannel(room, "later");
   }
 
   @Test
@@ -195,7 +259,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "!abc123:matrix.org later");
 
-    verify(targetCoordinator).closeChannel(room, "later");
+    verify(targetCoordinator).partChannel(room, "later");
   }
 
   @Test
@@ -208,7 +272,7 @@ class OutboundJoinPartCommandServiceTest {
     verify(ui)
         .appendStatus(
             status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).partChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -220,7 +284,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "later");
 
-    verify(targetCoordinator).closeChannel(room, "later");
+    verify(targetCoordinator).partChannel(room, "later");
   }
 
   @Test
@@ -233,8 +297,8 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "!other:matrix.org later");
 
-    verify(targetCoordinator).closeChannel(explicitRoom, "later");
-    verify(targetCoordinator, never()).closeChannel(activeRoom, "!other:matrix.org later");
+    verify(targetCoordinator).partChannel(explicitRoom, "later");
+    verify(targetCoordinator, never()).partChannel(activeRoom, "!other:matrix.org later");
   }
 
   @Test
@@ -245,7 +309,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handlePart(disposables, "alice", "bye");
 
     verify(ui).appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
-    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).partChannel(any(TargetRef.class), anyString());
   }
 
   private static IrcProperties.Server serverWithBackend(

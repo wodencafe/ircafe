@@ -513,6 +513,9 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
+    // Append before displaying status: Swing rebuilds complex-text views on the first insert
+    // after a document swap, which would reshape the entire status history a second time.
+    ui.appendStatus(status, "(ui)", "Closed " + target.target());
     if (Objects.equals(activeTarget, target)) {
       // Make close deterministic for an active PM/channel: switch coordinator + chat context
       // to status before events from focus/selection can replay the closing target.
@@ -523,7 +526,6 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     markClosedPrivateTargetByUser(target);
     targetChatHistoryPort.reset(target);
-    ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
   }
 
@@ -538,6 +540,15 @@ public class TargetCoordinator implements ActiveTargetPort {
   }
 
   public void closeChannel(TargetRef target, String reason) {
+    closeChannel(target, reason, false);
+  }
+
+  /** Requests an upstream PART even when the local buffer is detached or disconnected. */
+  public void partChannel(TargetRef target, String reason) {
+    closeChannel(target, reason, true);
+  }
+
+  private void closeChannel(TargetRef target, String reason, boolean explicitPart) {
     if (target == null || !target.isChannel()) return;
 
     String sid = Objects.toString(target.serverId(), "").trim();
@@ -549,11 +560,11 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
     boolean detached = ui.isChannelDisconnected(target);
     boolean connected = connectionCoordinator.isConnected(sid);
-    boolean shouldPart = !detached && connected;
+    boolean shouldPart = connected && (explicitPart || !detached);
 
     // Guard against stale tree selection/activation events racing behind the close action only
-    // when a live PART is still in flight. Detached/offline closes are local-only and may be
-    // deliberately reopened by a later explicit selection.
+    // when a live PART is still in flight. Local-only closes may be deliberately reopened by a
+    // later explicit selection.
     if (shouldPart) {
       channelsClosedByUser.add(target);
     } else {
@@ -561,6 +572,9 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
     locallyDetachedChannelsByUser.remove(target);
 
+    // Prepare the status line while its transcript is still hidden to avoid a second full
+    // complex-text layout immediately after switching away from the closing channel.
+    ui.appendStatus(status, "(ui)", "Closed " + target.target());
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(status);
       ui.setChatActiveTarget(status);
@@ -573,7 +587,6 @@ public class TargetCoordinator implements ActiveTargetPort {
     syncRuntimeAutoJoinForReconnect(sid);
     userListStore.clear(sid, target.target());
     targetChatHistoryPort.reset(target);
-    ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
 
     if (!shouldPart) return;

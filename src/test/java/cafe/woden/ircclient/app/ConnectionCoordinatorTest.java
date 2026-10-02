@@ -900,6 +900,20 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void controlledReconnectTriggersWhenCertificatePolicyChanges() throws Exception {
+    var method =
+        ConnectionCoordinator.class.getDeclaredMethod(
+            "requiresControlledReconnect", IrcProperties.Server.class, IrcProperties.Server.class);
+    method.setAccessible(true);
+    IrcProperties.Server strict = IrcPropertiesTestFixtures.server("znc");
+    IrcProperties.Server insecure =
+        IrcPropertiesTestFixtures.serverBuilder("znc").trustAllCertificates(true).build();
+    assertEquals(true, method.invoke(null, strict, insecure));
+    assertEquals(true, method.invoke(null, insecure, strict));
+    assertEquals(false, method.invoke(null, strict, strict));
+  }
+
+  @Test
   void controlledReconnectTriggersWhenCustomBackendIdChanges() throws Exception {
     var method =
         ConnectionCoordinator.class.getDeclaredMethod(

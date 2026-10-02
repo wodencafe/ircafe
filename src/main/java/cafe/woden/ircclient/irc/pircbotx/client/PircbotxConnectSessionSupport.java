@@ -10,10 +10,12 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import lombok.extern.slf4j.Slf4j;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.ListenerAdapter;
 
 /** Opens and supervises a single bot session for a connection attempt. */
+@Slf4j
 final class PircbotxConnectSessionSupport {
 
   private final FlowableProcessor<ServerIrcEvent> bus;
@@ -47,6 +49,13 @@ final class PircbotxConnectSessionSupport {
       PircbotxCtcpRequestHandler ctcpHandler,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
       boolean disconnectOnSaslFailure) {
+    log.info(
+        "IRC connection attempt: server={} endpoint={}:{} tls={} trustAllCertificatesForServer={}",
+        serverId,
+        server.host(),
+        server.port(),
+        server.tls(),
+        server.trustAllCertificates());
     bus.onNext(
         new ServerIrcEvent(
             serverId,
@@ -82,12 +91,16 @@ final class PircbotxConnectSessionSupport {
       bot.startBot();
     } catch (Exception e) {
       crashed = true;
+      log.warn("IRC session failed: server={}", serverId, e);
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
     } finally {
       if (connection.clearBotIf(bot)) {
         timers.stopHeartbeat(connection);
       }
-      if (crashed && !connection.manualDisconnectRequested()) {
+      if (crashed
+          && !connection.manualDisconnectRequested()
+          && connection.claimReconnectFor(bot)
+          && !connection.consumeSuppressAutoReconnectOnce()) {
         reconnectScheduler.accept(connection, "Bot crashed");
       }
     }

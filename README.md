@@ -36,9 +36,10 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 - Global SOCKS5 proxy plus per-server proxy override (auth, remote DNS, connect/read timeouts, proxy test).
 - Auto-join channels or PM targets and per-server perform-on-connect commands.
 - Native IRC flood protection in Preferences > Network > Flood protection is enabled by default
-  for new and existing configurations. Ordinary commands share a Guava rate limiter targeting
-  a 1500 ms interval, with conservative warm-up instead of burst credit after idle time. Auto-joins start
-  five seconds after registration (and NickServ identification when required), run in the
+  for new and existing configurations. Ordinary commands share a two-command burst allowance per
+  connection, starting full and rebuilding one credit every 1500 ms, capped at two. Once the
+  allowance is spent, further commands wait for credit to rebuild, without a warm-up penalty.
+  Auto-joins start five seconds after registration (and NickServ identification when required), run in the
   background, and stop on disconnect. Both timings are configurable. Uncheck "Enable outgoing
   rate limiting" to completely bypass command pacing; the separate auto-join startup delay still
   applies (set it to zero to join immediately). Changes apply on reconnect. Protocol negotiation,
@@ -208,6 +209,7 @@ If you prefer a Make-first workflow, these cover most tasks:
 | Run unit/non-functional tests | `make test` | `./gradlew test` |
 | Run integration tests | `make integration-test` | `./gradlew integrationTest` |
 | Run architecture guardrails | `make architecture-test` | `./gradlew architectureTest` |
+| Find architecture refactoring candidates | `make architecture-report` | `./gradlew architectureReport` |
 | Run Swing functional tests | `make functional-test` | `./gradlew functionalTest` |
 | Verify UI changes | `make verify-ui-change` | `./gradlew verifyUiChange` |
 | Verify Spring changes | `make verify-spring-change` | `./gradlew verifySpringChange` |
@@ -458,9 +460,15 @@ Targeted suites:
 # Modulith/jMolecules/ArchUnit guardrails
 ./gradlew architectureTest
 
+# Advisory refactoring candidates, with Markdown/JSON reports
+./gradlew architectureReport
+
 # Swing UI functional tests from src/functionalTest (classes ending with FunctionalTest)
 ./gradlew functionalTest
 ```
+
+See [architecture report tooling](ARCHITECTURE_REPORT.md) for the rules, thresholds,
+baseline comparison, and interpretation limits.
 
 Functional tests default to headless mode, which skips tests requiring a dialog.
 Use `-PfunctionalTestHeadless=false` with a display to exercise those interactions.
@@ -728,6 +736,7 @@ To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `I
 ### Security notes
 
 - Keep `irc.client.tls.trustAllCertificates: false` unless you are intentionally testing with self-signed certs in a trusted environment.
+- For an IRC server, ZNC/other bouncer, or Quassel Core with a self-signed certificate, enable **Allow self-signed and insecure certificates** on the **Connection** tab of Add/Edit Server. This persists as `irc.servers[].trustAllCertificates` (default `false`) and skips certificate validation for that server's TLS connections, including SOCKS connections and discovered bouncer networks. The existing global trust-all setting still applies when enabled.
 - Interceptor and notification rule script actions execute local scripts. Only use scripts and paths you trust.
 
 ### Platform notes

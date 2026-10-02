@@ -15,8 +15,10 @@ import cafe.woden.ircclient.config.properties.UiProperties;
 import cafe.woden.ircclient.notify.api.NotificationSoundPort;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -89,19 +91,46 @@ class AssertjSwingDiagnosticsServiceTest {
         new AssertjSwingDiagnosticsService(
             diagnostics, uiProps, runtimeConfig, soundProvider, trayProvider, watchdogExec);
 
-    // Ensure the EDT thread exists in this JVM before capturing snapshot.
-    SwingUtilities.invokeAndWait(() -> {});
-
     // Keep this unit test from starting asynchronous auto-capture threads.
     AtomicLong nextAutoCaptureAtMs = atomicLongField(service, "nextAutoCaptureAtMs");
     nextAutoCaptureAtMs.set(System.currentTimeMillis() + 60_000L);
 
-    invokeMarkFrozen(service, 2503L);
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    SwingUtilities.invokeLater(() -> startupCallerForCapture(entered, release));
+    try {
+      assertTrue(entered.await(5, TimeUnit.SECONDS));
+      invokeMarkFrozen(service, 2503L);
 
-    verify(diagnostics).appendAssertjSwingError("EDT freeze detected (~2503ms).");
-    verify(diagnostics, atLeastOnce())
-        .appendAssertjSwingStatus(
-            argThat(msg -> msg != null && msg.startsWith("(edt-freeze-stack)")));
+      verify(diagnostics).appendAssertjSwingError("EDT freeze detected (~2503ms).");
+      verify(diagnostics, atLeastOnce())
+          .appendAssertjSwingStatus(
+              argThat(msg -> msg != null && msg.startsWith("(edt-freeze-stack)")));
+      verify(diagnostics, atLeastOnce())
+          .appendAssertjSwingStatus(
+              argThat(msg -> msg != null && msg.contains("startupCallerForCapture")));
+    } finally {
+      release.countDown();
+      SwingUtilities.invokeAndWait(() -> {});
+    }
+  }
+
+  private static void startupCallerForCapture(CountDownLatch entered, CountDownLatch release) {
+    deepRendererForCapture(32, entered, release);
+  }
+
+  private static void deepRendererForCapture(
+      int depth, CountDownLatch entered, CountDownLatch release) {
+    if (depth > 0) {
+      deepRendererForCapture(depth - 1, entered, release);
+      return;
+    }
+    entered.countDown();
+    try {
+      release.await(5, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   @Test

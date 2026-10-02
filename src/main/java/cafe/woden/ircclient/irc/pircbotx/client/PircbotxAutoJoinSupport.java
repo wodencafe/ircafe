@@ -52,11 +52,21 @@ final class PircbotxAutoJoinSupport extends ListenerAdapter implements AutoClose
           delayMs,
           bot.getConfiguration().getMessageDelay().getDelay());
       Thread.sleep(delayMs);
+      int skipped = 0;
       for (String channel : channels) {
         if (Thread.currentThread().isInterrupted() || !bot.isConnected()) return;
+        String channelName = channel.split("\\s+", 2)[0];
+        if (bot.getUserChannelDao().containsChannel(channelName)) {
+          skipped++;
+          continue;
+        }
         bot.sendIRC().joinChannel(channel);
       }
-      log.debug("[{}] auto-join plan sent ({} channels)", serverId, channels.size());
+      log.info(
+          "[{}] auto-join plan complete: sent={}, alreadyJoined={}",
+          serverId,
+          channels.size() - skipped,
+          skipped);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } catch (RuntimeException e) {

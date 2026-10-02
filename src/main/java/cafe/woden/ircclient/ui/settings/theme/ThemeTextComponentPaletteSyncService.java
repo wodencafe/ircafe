@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.settings.theme;
 
+import cafe.woden.ircclient.ui.SingleLineEmojiTextPane;
 import cafe.woden.ircclient.ui.util.UiColorKeys;
 import java.awt.Color;
 import java.awt.Component;
@@ -78,7 +79,7 @@ class ThemeTextComponentPaletteSyncService {
     }
   }
 
-  private static int syncComponentTree(
+  static int syncComponentTree(
       Component component,
       Color fieldBg,
       Color fieldFg,
@@ -123,17 +124,19 @@ class ThemeTextComponentPaletteSyncService {
 
   private static void applyPalette(
       JTextComponent c, Color bg, Color fg, Color selectionBg, Color selectionFg) {
-    // Non-focusable read-only text is used as a wrapping label in preferences.
-    // Preserve its intentional transparency across theme changes.
-    boolean transparentLabel = !c.isEditable() && !c.isFocusable() && !c.isOpaque();
-    if (bg != null && !transparentLabel) c.setBackground(bg);
+    // Wrapping preference labels and the compose editor let their parent paint the surface.
+    // Preserve that intentional transparency across theme changes.
+    boolean transparentSurface =
+        !c.isOpaque()
+            && (c instanceof SingleLineEmojiTextPane || (!c.isEditable() && !c.isFocusable()));
+    if (bg != null && !transparentSurface) c.setBackground(bg);
     if (fg != null) {
       c.setForeground(fg);
       c.setCaretColor(fg);
     }
     if (selectionBg != null) c.setSelectionColor(selectionBg);
     if (selectionFg != null) c.setSelectedTextColor(selectionFg);
-    if (!transparentLabel) c.setOpaque(true);
+    if (!transparentSurface) c.setOpaque(true);
   }
 
   private static Color firstUiColor(String... keys) {

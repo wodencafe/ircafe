@@ -22,6 +22,18 @@ class RuntimeConfigServerListCodecTest {
   }
 
   @Test
+  void serverMapsPersistCertificatePolicyForEachServer() {
+    List<Map<String, Object>> maps =
+        RuntimeConfigServerListCodec.serverMaps(
+            List.of(
+                IrcPropertiesTestFixtures.serverBuilder("znc").trustAllCertificates(true).build(),
+                IrcPropertiesTestFixtures.server("libera")));
+
+    assertEquals(true, maps.getFirst().get("trustAllCertificates"));
+    assertEquals(false, maps.get(1).get("trustAllCertificates"));
+  }
+
+  @Test
   void readServerIdsNormalizesDedupesAndFallsBackToDefaults() {
     IrcProperties defaults =
         IrcPropertiesTestFixtures.properties(

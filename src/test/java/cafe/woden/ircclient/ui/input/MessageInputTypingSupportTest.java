@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.settings.UiSettingsTestFixtures;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -108,6 +109,8 @@ class MessageInputTypingSupportTest {
           assertTrue(f.signal.isArrowVisible());
 
           f.support.setTypingSignalAvailable(true);
+          f.input.setText("hello");
+          f.support.onUserEdit(false);
           f.support.onLocalTypingIndicatorSent("active");
           assertTrue(f.signal.isVisible());
           assertTrue(f.signal.isArrowVisible());
@@ -175,6 +178,102 @@ class MessageInputTypingSupportTest {
           f.support.onUserEdit(false);
           assertTrue(states.contains("active"));
           assertFalse(f.banner.isVisible());
+        });
+  }
+
+  @Test
+  void messageSubmissionResetsTypingWithoutDoneAndNextDraftEmitsActive() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          try {
+            f.support.setOnTypingStateChanged(states::add);
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("hello");
+            f.support.onUserEdit(false);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(300);
+            assertNotEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+            f.support.onMessageSubmitted();
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(500);
+            assertEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+            f.input.setText("");
+            f.support.onUserEdit(true);
+            f.support.flushTypingDone();
+            assertEquals(List.of("active"), states);
+
+            f.input.setText("another message");
+            f.support.onUserEdit(false);
+            assertEquals(List.of("active", "active"), states);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
+  void latePausedAcknowledgementDoesNotInterruptResumedTyping() throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(300);
+            f.support.flushTypingForBufferSwitch();
+            f.support.onUserEdit(false);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.support.onLocalTypingIndicatorSent("paused");
+            f.clock.addAndGet(500);
+            assertTrue(f.signal.debugArrowColorForTest().getBlue() > 200);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
+  void bufferSwitchReturnsArrowToGreenWithoutSendAcknowledgement() throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("unfinished draft");
+            f.support.onUserEdit(false);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(300);
+            assertNotEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+            f.support.flushTypingForBufferSwitch();
+            f.clock.addAndGet(500);
+            assertEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
+  void clearingDraftWithoutSendingEmitsDoneOnce() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          try {
+            f.support.setOnTypingStateChanged(states::add);
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.input.setText("");
+            f.support.onUserEdit(false);
+            f.support.flushTypingDone();
+            assertEquals(List.of("active", "done"), states);
+          } finally {
+            f.support.onRemoveNotify();
+          }
         });
   }
 
@@ -282,7 +381,8 @@ class MessageInputTypingSupportTest {
           banner.setVisible(false);
           JLabel label = new JLabel();
           TypingDotsIndicator dots = new TypingDotsIndicator();
-          TypingSignalIndicator signal = new TypingSignalIndicator();
+          AtomicLong clock = new AtomicLong();
+          TypingSignalIndicator signal = new TypingSignalIndicator(clock::get);
           MessageInputTypingSupport support =
               new MessageInputTypingSupport(
                   input,
@@ -292,7 +392,7 @@ class MessageInputTypingSupportTest {
                   signal,
                   settingsSupplier != null ? settingsSupplier : () -> null,
                   new NoOpHooks());
-          out[0] = new Fixture(support, input, banner, label, dots, signal);
+          out[0] = new Fixture(support, input, banner, label, dots, signal, clock);
         });
     return out[0];
   }
@@ -334,7 +434,8 @@ class MessageInputTypingSupportTest {
       JPanel banner,
       JLabel label,
       TypingDotsIndicator dots,
-      TypingSignalIndicator signal) {}
+      TypingSignalIndicator signal,
+      AtomicLong clock) {}
 
   private static final class NoOpHooks implements MessageInputUiHooks {
     @Override

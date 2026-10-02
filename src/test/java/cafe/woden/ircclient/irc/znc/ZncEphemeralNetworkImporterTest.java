@@ -31,6 +31,7 @@ class ZncEphemeralNetworkImporterTest {
         IrcPropertiesTestFixtures.serverBuilder("znc")
             .host("bouncer.example")
             .serverPassword("pass")
+            .trustAllCertificates(true)
             .nick("nick")
             .login("user@ircafe")
             .realName("Real")
@@ -62,6 +63,7 @@ class ZncEphemeralNetworkImporterTest {
 
     assertTrue(ephemeral.containsId("znc:znc:libera.chat"));
     IrcProperties.Server imported = ephemeral.require("znc:znc:libera.chat");
+    assertTrue(imported.trustAllCertificates());
     assertEquals("user@ircafe/Libera.Chat", imported.login());
     assertEquals("user@ircafe/Libera.Chat", imported.sasl().username());
     assertEquals("znc", ephemeral.originOf(imported.id()).orElseThrow());

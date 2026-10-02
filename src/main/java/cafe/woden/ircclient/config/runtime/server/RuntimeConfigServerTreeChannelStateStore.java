@@ -36,9 +36,22 @@ public class RuntimeConfigServerTreeChannelStateStore {
 
   private final RuntimeConfigServerYamlSection servers;
   private final RuntimeConfigYamlSection channelsByServerSection;
+  private final RuntimeConfigDocumentStore documentStore;
+
+  // Retain only the most recently read server, rather than growing with every server/channel.
+  private ChannelStateSnapshot cachedState;
+
+  private record ChannelStateSnapshot(
+      String serverId,
+      long revision,
+      ServerTreeChannelState state,
+      Map<String, ServerTreeChannelPreference> preferences,
+      List<String> joinedChannels,
+      boolean canonical) {}
 
   public RuntimeConfigServerTreeChannelStateStore(
       Path file, RuntimeConfigDocumentStore documentStore) {
+    this.documentStore = documentStore;
     this.servers =
         new RuntimeConfigServerYamlSection(file, documentStore, log, "joined-channel list");
     this.channelsByServerSection =
@@ -55,7 +68,8 @@ public class RuntimeConfigServerTreeChannelStateStore {
   }
 
   public synchronized List<String> readJoinedChannels(String serverId) {
-    return readServerAutoJoinChannels(serverId);
+    String sid = Objects.toString(serverId, "").trim();
+    return sid.isEmpty() ? List.of() : readChannelStateSnapshot(sid).joinedChannels();
   }
 
   /** Returns known channels for this server (attached + detached). */
@@ -100,7 +114,9 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String chan = normalizeChannelName(channel);
     if (sid.isEmpty() || chan.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    if (snapshot.canonical() && snapshot.preferences().containsKey(foldChannelKey(chan))) return;
+    ServerTreeChannelState state = snapshot.state();
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     String key = foldChannelKey(chan);
     if (!byKey.containsKey(key)) {
@@ -144,7 +160,13 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String chan = normalizeChannelName(channel);
     if (sid.isEmpty() || chan.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    ServerTreeChannelPreference existing = snapshot.preferences().get(foldChannelKey(chan));
+    if (snapshot.canonical()
+        && existing != null
+        && existing.channel().equals(chan)
+        && existing.autoReattach() == autoReattach) return;
+    ServerTreeChannelState state = snapshot.state();
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     String key = foldChannelKey(chan);
     ServerTreeChannelPreference current = byKey.get(key);
@@ -193,7 +215,13 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String chan = normalizeChannelName(channel);
     if (sid.isEmpty() || chan.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    ServerTreeChannelPreference existing = snapshot.preferences().get(foldChannelKey(chan));
+    if (snapshot.canonical()
+        && existing != null
+        && existing.channel().equals(chan)
+        && existing.pinned() == pinned) return;
+    ServerTreeChannelState state = snapshot.state();
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     String key = foldChannelKey(chan);
     ServerTreeChannelPreference current = byKey.get(key);
@@ -240,7 +268,13 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String chan = normalizeChannelName(channel);
     if (sid.isEmpty() || chan.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    ServerTreeChannelPreference existing = snapshot.preferences().get(foldChannelKey(chan));
+    if (snapshot.canonical()
+        && existing != null
+        && existing.channel().equals(chan)
+        && existing.muted() == muted) return;
+    ServerTreeChannelState state = snapshot.state();
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     String key = foldChannelKey(chan);
     ServerTreeChannelPreference current = byKey.get(key);
@@ -273,8 +307,10 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    ServerTreeChannelState state = snapshot.state();
     ServerTreeChannelSortMode nextMode = (mode == null) ? ServerTreeChannelSortMode.CUSTOM : mode;
+    if (snapshot.canonical() && state.sortMode() == nextMode) return;
 
     writeServerTreeChannelState(
         sid, new ServerTreeChannelState(nextMode, state.customOrder(), state.channels()));
@@ -290,9 +326,11 @@ public class RuntimeConfigServerTreeChannelStateStore {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ChannelStateSnapshot snapshot = readChannelStateSnapshot(sid);
+    ServerTreeChannelState state = snapshot.state();
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     ArrayList<String> nextCustomOrder = sanitizeCustomOrder(customOrder, byKey);
+    if (snapshot.canonical() && state.customOrder().equals(nextCustomOrder)) return;
 
     writeServerTreeChannelState(
         sid,
@@ -303,22 +341,35 @@ public class RuntimeConfigServerTreeChannelStateStore {
   public synchronized ServerTreeChannelState readServerTreeChannelState(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return ServerTreeChannelState.defaults();
-
-    List<String> joinedChannels = readServerAutoJoinChannels(sid);
-    Map<String, Object> raw = readServerTreeChannelStateMap(sid);
-    return parseServerTreeChannelState(raw, joinedChannels);
+    return readChannelStateSnapshot(sid).state();
   }
 
-  private synchronized List<String> readServerAutoJoinChannels(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return List.of();
-
-    return servers
-        .readExistingServer(sid)
-        .map(server -> sanitizeStringList(server.get("autoJoin")))
-        .map(AutoJoinEntryCodec::channelEntries)
-        .map(List::copyOf)
-        .orElse(List.of());
+  private ChannelStateSnapshot readChannelStateSnapshot(String serverId) {
+    long revision = documentStore.cachedReadRevision();
+    if (revision >= 0
+        && cachedState != null
+        && cachedState.revision() == revision
+        && cachedState.serverId().equals(serverId)) {
+      return cachedState;
+    }
+    cachedState = null;
+    Map<String, Object> server = servers.readExistingServer(serverId).orElse(Map.of());
+    List<String> autoJoin = sanitizeStringList(server.get("autoJoin"));
+    List<String> joinedChannels = List.copyOf(AutoJoinEntryCodec.channelEntries(autoJoin));
+    Map<String, Object> raw = readServerTreeChannelStateMap(serverId);
+    ServerTreeChannelState state = parseServerTreeChannelState(raw, joinedChannels);
+    LinkedHashMap<String, ServerTreeChannelPreference> preferences = channelPreferencesByKey(state);
+    boolean canonical =
+        raw.equals(serializeChannelState(preferences, state.customOrder(), state.sortMode()))
+            && (server.isEmpty()
+                || Objects.equals(server.get("autoJoin"), autoJoinEntries(preferences, autoJoin)));
+    ChannelStateSnapshot snapshot =
+        new ChannelStateSnapshot(
+            serverId, revision, state, Map.copyOf(preferences), joinedChannels, canonical);
+    if (revision >= 0 && revision == documentStore.cachedReadRevision()) {
+      cachedState = snapshot;
+    }
+    return snapshot;
   }
 
   private void writeServerTreeChannelState(String serverId, ServerTreeChannelState state) {
@@ -331,12 +382,14 @@ public class RuntimeConfigServerTreeChannelStateStore {
     ServerTreeChannelSortMode sortMode =
         nextState.sortMode() == null ? ServerTreeChannelSortMode.CUSTOM : nextState.sortMode();
 
+    cachedState = null;
     channelsByServerSection.mutateDocument(
         "server-tree channel state",
         doc -> {
-          writeLegacyAutoJoinState(doc, sid, byKey);
-          writeServerTreeChannelStateMap(doc, sid, byKey, customOrder, sortMode);
-          return true;
+          boolean legacyChanged = writeLegacyAutoJoinState(doc, sid, byKey);
+          boolean treeChanged =
+              writeServerTreeChannelStateMap(doc, sid, byKey, customOrder, sortMode);
+          return legacyChanged || treeChanged;
         });
   }
 
@@ -347,16 +400,27 @@ public class RuntimeConfigServerTreeChannelStateStore {
         .orElse(Map.of());
   }
 
-  private static void writeLegacyAutoJoinState(
+  private static boolean writeLegacyAutoJoinState(
       Map<String, Object> doc,
       String serverId,
       Map<String, ServerTreeChannelPreference> channelsByKey) {
     Map<String, Object> irc = getOrCreateMap(doc, "irc");
     List<Map<String, Object>> servers = readServerList(irc).orElseGet(ArrayList::new);
     Map<String, Object> serverMap = findServerById(servers, serverId).orElse(null);
-    if (serverMap == null) return;
+    if (serverMap == null) return false;
 
-    List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
+    List<String> nextAutoJoin =
+        autoJoinEntries(channelsByKey, sanitizeStringList(serverMap.get("autoJoin")));
+    // Keep an explicit empty override so restart logic doesn't fall back to seeded defaults
+    // after the user closes-and-parts their last auto-reattach channel.
+    if (Objects.equals(serverMap.get("autoJoin"), nextAutoJoin)) return false;
+    serverMap.put("autoJoin", nextAutoJoin);
+    irc.put("servers", servers);
+    return true;
+  }
+
+  private static List<String> autoJoinEntries(
+      Map<String, ServerTreeChannelPreference> channelsByKey, List<String> previousAutoJoin) {
     List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
 
     ArrayList<String> nextAutoJoin = new ArrayList<>();
@@ -375,13 +439,10 @@ public class RuntimeConfigServerTreeChannelStateStore {
       if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded))) continue;
       nextAutoJoin.add(encoded);
     }
-    // Keep an explicit empty override so restart logic doesn't fall back to seeded defaults
-    // after the user closes-and-parts their last auto-reattach channel.
-    serverMap.put("autoJoin", nextAutoJoin);
-    irc.put("servers", servers);
+    return nextAutoJoin;
   }
 
-  private static void writeServerTreeChannelStateMap(
+  private static boolean writeServerTreeChannelStateMap(
       Map<String, Object> doc,
       String serverId,
       Map<String, ServerTreeChannelPreference> channelsByKey,
@@ -397,21 +458,14 @@ public class RuntimeConfigServerTreeChannelStateStore {
             || !customOrder.isEmpty()
             || sortMode != ServerTreeChannelSortMode.CUSTOM;
 
+    boolean changed;
     if (!shouldKeepState) {
-      channelsByServer.remove(serverId);
+      changed = channelsByServer.remove(serverId) != null;
     } else {
-      Map<String, Object> out = new LinkedHashMap<>();
-      if (sortMode != ServerTreeChannelSortMode.CUSTOM) {
-        out.put("sortMode", sortMode.token());
-      }
-      if (!customOrder.isEmpty()) {
-        out.put("customOrder", List.copyOf(customOrder));
-      }
-      List<Map<String, Object>> channelsOut = serializeChannelPreferences(channelsByKey.values());
-      if (!channelsOut.isEmpty()) {
-        out.put("channels", channelsOut);
-      }
+      Map<String, Object> out = serializeChannelState(channelsByKey, customOrder, sortMode);
+      if (Objects.equals(channelsByServer.get(serverId), out)) return false;
       channelsByServer.put(serverId, out);
+      changed = true;
     }
 
     if (channelsByServer.isEmpty()) {
@@ -420,5 +474,24 @@ public class RuntimeConfigServerTreeChannelStateStore {
     if (serverTree.isEmpty()) {
       ui.remove("serverTree");
     }
+    return changed;
+  }
+
+  private static Map<String, Object> serializeChannelState(
+      Map<String, ServerTreeChannelPreference> channelsByKey,
+      List<String> customOrder,
+      ServerTreeChannelSortMode sortMode) {
+    Map<String, Object> out = new LinkedHashMap<>();
+    if (sortMode != ServerTreeChannelSortMode.CUSTOM) {
+      out.put("sortMode", sortMode.token());
+    }
+    if (!customOrder.isEmpty()) {
+      out.put("customOrder", List.copyOf(customOrder));
+    }
+    List<Map<String, Object>> channelsOut = serializeChannelPreferences(channelsByKey.values());
+    if (!channelsOut.isEmpty()) {
+      out.put("channels", channelsOut);
+    }
+    return out;
   }
 }

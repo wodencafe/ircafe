@@ -1,0 +1,75 @@
+// Advisory analysis uses the existing test tooling and never enters the application artifact.
+def reportResources = tasks.register('prepareArchitectureReportResources', Sync) {
+    dependsOn(tasks.named('processResources'))
+    from(sourceSets.main.output.resourcesDir) {
+        // Spring Boot regenerates this timestamp on every build; it does not affect architecture.
+        exclude 'META-INF/build-info.properties'
+    }
+    into(layout.buildDirectory.dir('tmp/architecture-report-resources'))
+}
+
+tasks.register('architectureReport', JavaExec) {
+    group = 'verification'
+    description = 'Reports ranked Modulith, jMolecules, SPI, and coupling refactoring candidates.'
+    dependsOn(tasks.named('testClasses'), reportResources)
+    classpath = sourceSets.test.runtimeClasspath.filter {
+        it != sourceSets.main.output.resourcesDir
+    } + files(reportResources)
+    mainClass = 'cafe.woden.ircclient.architecture.ArchitectureReport'
+    maxHeapSize = '1536m'
+    systemProperty 'java.awt.headless', 'true'
+
+    def analyzedProjects = providers.provider {
+        rootProject.allprojects.findAll { it.plugins.hasPlugin('java') }.sort { it.path }
+    }
+    def mainOutputs = analyzedProjects.map { projects ->
+        projects.collect { it.sourceSets.main.output.classesDirs }
+    }
+    def mainSources = analyzedProjects.map { projects ->
+        projects.collect { it.sourceSets.main.allSource }
+    }
+    def reportDirectory = layout.buildDirectory.dir('reports/architecture')
+    def baseline = providers.gradleProperty('architectureBaseline')
+    def fanOut = providers.gradleProperty('architectureFanOut').getOrElse('25')
+    def constructorSize = providers.gradleProperty('architectureConstructorSize').getOrElse('10')
+    dependsOn(mainOutputs)
+    inputs.files(mainOutputs).withPropertyName('analyzedClasses')
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(mainSources).withPropertyName('analyzedSources')
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    // Ownership and source locations affect advice even when bytecode content is unchanged.
+    inputs.property('projectLayout', analyzedProjects.map { projects ->
+        projects.collect { analyzedProject ->
+            [
+                analyzedProject.path,
+                analyzedProject.sourceSets.main.output.classesDirs.files.collect { rootProject.relativePath(it) }.sort(),
+                analyzedProject.sourceSets.main.java.srcDirs.collect { rootProject.relativePath(it) }.sort(),
+                analyzedProject.sourceSets.main.resources.srcDirs.collect { rootProject.relativePath(it) }.sort()
+            ]
+        }
+    })
+    inputs.property('fanOut', fanOut)
+    inputs.property('constructorSize', constructorSize)
+    if (baseline.isPresent()) {
+        inputs.file(baseline).withPropertyName('baseline')
+            .withPathSensitivity(PathSensitivity.NONE)
+    }
+    outputs.dir(reportDirectory)
+    doFirst {
+        args = [rootProject.projectDir.absolutePath, reportDirectory.get().asFile.absolutePath]
+        systemProperty 'ircafe.advisor.fanOut', fanOut
+        systemProperty 'ircafe.advisor.constructorSize', constructorSize
+        if (baseline.isPresent()) {
+            systemProperty 'ircafe.advisor.baseline', rootProject.file(baseline.get()).absolutePath
+        }
+        analyzedProjects.get().each { analyzedProject ->
+            String name = analyzedProject == rootProject ? 'root' : analyzedProject.name
+            systemProperty "ircafe.advisor.classes.${name}",
+                analyzedProject.sourceSets.main.output.classesDirs.asPath
+            systemProperty "ircafe.advisor.sources.${name}",
+                files(analyzedProject.sourceSets.main.java.srcDirs).asPath
+            systemProperty "ircafe.advisor.resources.${name}",
+                files(analyzedProject.sourceSets.main.resources.srcDirs).asPath
+        }
+    }
+}

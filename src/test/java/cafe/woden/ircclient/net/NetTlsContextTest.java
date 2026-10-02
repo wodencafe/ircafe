@@ -44,6 +44,27 @@ class NetTlsContextTest {
   }
 
   @Test
+  void perServerOptOutDoesNotChangeGlobalTlsPolicy() {
+    SSLSocketFactory strictFactory = NetTlsContext.sslSocketFactory();
+    HostnameVerifier strictVerifier = NetTlsContext.hostnameVerifier();
+
+    SSLSocketFactory insecureFactory = NetTlsContext.sslSocketFactory(true);
+
+    assertNotSame(strictFactory, insecureFactory);
+    assertSame(insecureFactory, NetTlsContext.sslSocketFactory(true));
+    assertSame(strictFactory, NetTlsContext.sslSocketFactory(false));
+    assertSame(strictFactory, NetTlsContext.sslSocketFactory());
+    assertSame(strictVerifier, NetTlsContext.hostnameVerifier());
+    assertFalse(NetTlsContext.trustAllCertificates());
+  }
+
+  @Test
+  void globalOptOutStillAppliesToServersWithoutTheirOwnOptOut() {
+    NetTlsContext.configure(true);
+    assertSame(NetTlsContext.sslSocketFactory(), NetTlsContext.sslSocketFactory(false));
+  }
+
+  @Test
   void normalizeAndConfigureHandleNullAsSafeDefault() {
     assertFalse(NetTlsContext.normalize(null).trustAllCertificates());
 

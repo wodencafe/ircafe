@@ -48,6 +48,7 @@ class BackendRoutingIrcClientServiceTest {
     when(serverCatalog.find("quassel"))
         .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(ircBackend.connect("irc")).thenReturn(Completable.complete());
+    when(ircBackend.sendAutomaticWho("irc", "WHO #one")).thenReturn(Completable.complete());
     when(quasselBackend.connect("quassel")).thenReturn(Completable.complete());
 
     BackendRoutingIrcClientService service =
@@ -55,9 +56,12 @@ class BackendRoutingIrcClientServiceTest {
             serverCatalog, BackendMetadataPort.builtInsOnly(), List.of(ircBackend, quasselBackend));
 
     service.connect("irc").blockingAwait();
+    service.sendAutomaticWho("irc", "WHO #one").blockingAwait();
     service.connect("quassel").blockingAwait();
 
     verify(ircBackend).connect("irc");
+    verify(ircBackend).sendAutomaticWho("irc", "WHO #one");
+    verify(ircBackend, never()).sendRaw("irc", "WHO #one");
     verify(quasselBackend).connect("quassel");
   }
 

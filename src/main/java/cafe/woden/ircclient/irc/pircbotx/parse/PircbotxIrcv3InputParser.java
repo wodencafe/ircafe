@@ -6,17 +6,20 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityLine;
 import cafe.woden.ircclient.irc.ircv3.spi.*;
 import cafe.woden.ircclient.irc.mode.*;
+import cafe.woden.ircclient.irc.pircbotx.client.PircbotxJoinInputParser;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
+import org.pircbotx.User;
 import org.pircbotx.UserHostmask;
+import org.pircbotx.UserLevel;
 import org.pircbotx.exception.DaoException;
 import org.pircbotx.exception.IrcException;
 import org.slf4j.Logger;
@@ -33,7 +36,7 @@ import org.slf4j.LoggerFactory;
  *   <li><code>:nick!user@host AWAY</code>
  * </ul>
  */
-final class PircbotxIrcv3InputParser extends InputParser {
+final class PircbotxIrcv3InputParser extends PircbotxJoinInputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcv3InputParser.class);
 
@@ -162,6 +165,14 @@ final class PircbotxIrcv3InputParser extends InputParser {
     // resolve the destination even when PircBotX doesn't expose recipient accessors.
     captureSelfPrivateMessageTargetHint(now, sourceNick, target, command, line, parsedLine, tags);
     emitLabeledResponseObservation(now, command, tags);
+
+    // Bouncers can replay a QUIT after the user has already disappeared from the live roster.
+    // PircBotX dereferences the missing user while constructing its snapshot.
+    if ("QUIT".equalsIgnoreCase(command)
+        && (source == null || !bot.getUserChannelDao().containsUser(source))) {
+      log.debug("[{}] ignoring QUIT for user absent from roster: nick={}", serverId, sourceNick);
+      return;
+    }
 
     // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
     super.processCommand(target, source, command, line, parsedLine, tags);
@@ -328,6 +339,18 @@ final class PircbotxIrcv3InputParser extends InputParser {
       conn.markRegistrationComplete();
     }
     try {
+      if (code == 353 && parsedLine != null && parsedLine.size() >= 4) {
+        String channel = channelForIgnorableMissingChannelNumeric(code, parsedLine);
+        if (!bot.getUserChannelDao().containsChannel(channel)) {
+          log.debug(
+              "[{}] ignoring late NAMES reply for channel already removed from DAO: channel={} line={}",
+              serverId,
+              channel,
+              Objects.toString(line, ""));
+          return;
+        }
+        parsedLine = normalizeNamesReply(parsedLine);
+      }
       super.processServerResponse(code, line, parsedLine);
       return;
     } catch (RuntimeException ex) {
@@ -337,14 +360,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
             serverId,
             code,
             channelForIgnorableMissingChannelNumeric(code, parsedLine),
-            Objects.toString(line, ""));
-        return;
-      }
-      if (isIgnorableDuplicateUserHostmaskNumeric(code, ex)) {
-        log.debug(
-            "[{}] ignoring duplicate-user numeric {} from PircBotX DAO: line={}",
-            serverId,
-            code,
             Objects.toString(line, ""));
         return;
       }
@@ -377,6 +392,38 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
+  private List<String> normalizeNamesReply(List<String> parsedLine) {
+    // PircBotX tests a full nick!user@host token as a nick, then creates a duplicate user and
+    // aborts the rest of the reply. Seed/update hostmasks and let its normal parser handle
+    // membership and privilege prefixes using bare nicks. Keep the original raw line for events.
+    String names = stripLeadingColon(parsedLine.get(3));
+    List<String> normalizedNames = new ArrayList<>();
+    for (String entry : names.split(" +")) {
+      int prefixEnd = 0;
+      while (prefixEnd < entry.length() && UserLevel.fromSymbol(entry.charAt(prefixEnd)) != null) {
+        prefixEnd++;
+      }
+      if (prefixEnd == entry.length()) continue;
+
+      String nickOrHostmask = entry.substring(prefixEnd);
+      if (nickOrHostmask.indexOf('!') > 0 && nickOrHostmask.indexOf('@') > 0) {
+        UserHostmask hostmask =
+            bot.getConfiguration().getBotFactory().createUserHostmask(bot, nickOrHostmask);
+        User existing =
+            bot.getUserChannelDao().containsUser(hostmask)
+                ? bot.getUserChannelDao().getUser(hostmask)
+                : null;
+        createUserIfNull(existing, hostmask);
+        normalizedNames.add(entry.substring(0, prefixEnd) + hostmask.getNick());
+      } else {
+        normalizedNames.add(entry);
+      }
+    }
+    List<String> normalized = new ArrayList<>(parsedLine);
+    normalized.set(3, String.join(" ", normalizedNames));
+    return normalized;
+  }
+
   private static boolean isIgnorableMissingChannelNumeric(
       int code, List<String> parsedLine, RuntimeException ex) {
     if (!(ex instanceof DaoException dao)
@@ -384,14 +431,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
       return false;
     }
     return !channelForIgnorableMissingChannelNumeric(code, parsedLine).isBlank();
-  }
-
-  private static boolean isIgnorableDuplicateUserHostmaskNumeric(int code, RuntimeException ex) {
-    if (code != 353 || ex instanceof DaoException) {
-      return false;
-    }
-    String message = Objects.toString(ex.getMessage(), "");
-    return message.contains("Cannot create a user from hostmask that already exists");
   }
 
   private static String channelForIgnorableMissingChannelNumeric(

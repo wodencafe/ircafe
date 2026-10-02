@@ -118,7 +118,7 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     table.setShowHorizontalLines(false);
     table.setShowVerticalLines(false);
-    table.setAutoCreateRowSorter(false);
+    table.setAutoCreateRowSorter(true);
     table.getTableHeader().setReorderingAllowed(false);
     table.getColumnModel().getColumn(COL_TIME).setPreferredWidth(150);
     table.getColumnModel().getColumn(COL_CHANNEL).setPreferredWidth(180);

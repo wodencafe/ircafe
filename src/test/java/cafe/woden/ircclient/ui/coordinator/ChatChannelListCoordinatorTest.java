@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.coordinator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -585,7 +586,7 @@ class ChatChannelListCoordinatorTest {
   }
 
   @Test
-  void bindTreeModeRefreshRequestSelectsChannelListAndEmitsModeCommand() {
+  void bindTreeModeRefreshRequestPreservesSelectionAndEmitsModeCommand() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
     UserListStore userListStore = mock(UserListStore.class);
@@ -612,7 +613,7 @@ class ChatChannelListCoordinatorTest {
     coordinator.bind(disposables);
     modeRefresh.onNext(new TargetRef("libera", "#ircafe"));
 
-    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(serverTree, never()).selectTarget(any(TargetRef.class));
     verify(outboundLineBus).emit("/mode #ircafe");
     disposables.dispose();
   }
@@ -650,7 +651,7 @@ class ChatChannelListCoordinatorTest {
     coordinator.bind(disposables);
     modeRefresh.onNext(new TargetRef("libera", "#ircafe"));
 
-    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(serverTree, never()).selectTarget(any(TargetRef.class));
     verify(modeRoutingState)
         .putPendingModeTarget(eq("libera"), eq("#ircafe"), eq(new TargetRef("libera", "#ircafe")));
     verify(irc).sendRaw("libera", "MODE #ircafe");

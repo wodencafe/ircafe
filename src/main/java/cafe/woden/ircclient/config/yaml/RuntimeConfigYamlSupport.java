@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.config.yaml;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,7 +45,7 @@ public final class RuntimeConfigYamlSupport {
       String... path) {
     try {
       if (file.toString().isBlank()) return Optional.empty();
-      if (!Files.exists(file)) return Optional.empty();
+      if (!documentStore.documentExists()) return Optional.empty();
 
       Map<String, Object> doc = documentStore.load();
       return RuntimeConfigDocumentPathReader.readValue(doc, path);
@@ -84,7 +83,7 @@ public final class RuntimeConfigYamlSupport {
       String... path) {
     try {
       if (file.toString().isBlank()) return;
-      if (!Files.exists(file)) return;
+      if (!documentStore.documentExists()) return;
       if (path.length == 0) {
         throw new IllegalArgumentException("Runtime config YAML path must not be empty");
       }

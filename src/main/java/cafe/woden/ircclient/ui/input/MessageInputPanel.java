@@ -458,7 +458,12 @@ public class MessageInputPanel extends JPanel {
           @Override
           public void focusLost(FocusEvent e) {
             undoSupport.endCompoundEdit();
-            flushTypingDone();
+            // Moving to Send is part of composing, not abandoning the draft.
+            Component opposite = e.getOppositeComponent();
+            if (opposite == null
+                || !SwingUtilities.isDescendingFrom(opposite, MessageInputPanel.this)) {
+              flushTypingForBufferSwitch();
+            }
             hintPopupSupport.updateHint();
             nickCompletionSupport.markUiDirty();
           }
@@ -795,7 +800,12 @@ public class MessageInputPanel extends JPanel {
     String outboundLine = tr.outboundLine();
     boolean consumeReplyCompose = tr.consumeReplyCompose();
 
-    flushTypingDone();
+    if (currentBackendUiProfile().isMatrixServer()) {
+      // Matrix uses an explicit typing=false update rather than IRC's implicit message reset.
+      flushTypingDone();
+    } else {
+      typingSupport.onMessageSubmitted();
+    }
     historySupport.addToHistory(msg);
     // Leaving history-browse mode before clearing ensures draft persistence isn't polluted.
     historySupport.clearBrowseState();

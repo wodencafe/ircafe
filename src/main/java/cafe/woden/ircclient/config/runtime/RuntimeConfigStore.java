@@ -18,6 +18,11 @@ import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.UserCommandAlias;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import java.awt.EventQueue;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -33,7 +38,7 @@ import org.springframework.stereotype.Component;
 @Component
 @SecondaryAdapter
 @InfrastructureLayer
-public class RuntimeConfigStore {
+public class RuntimeConfigStore implements AutoCloseable {
 
   public static final String DEFAULT_QUIT_MESSAGE =
       QuitMessageRuntimeConfigPort.DEFAULT_QUIT_MESSAGE;
@@ -49,6 +54,23 @@ public class RuntimeConfigStore {
     this.stores = new RuntimeConfigStoreDelegates(this.file, defaults);
 
     ensureFileExistsWithServers();
+  }
+
+  /** Starts the owned writer after startup seeding, before dependent UI beans are created. */
+  @PostConstruct
+  public void startPersistence() throws IOException {
+    stores.documentStore.startAsyncPersistence();
+  }
+
+  /** Explicit durability boundary for startup recovery and callers outside the EDT. */
+  public void flushPendingWrites() throws IOException {
+    stores.documentStore.flushPendingWrites();
+  }
+
+  @Override
+  @PreDestroy
+  public void close() throws IOException {
+    stores.documentStore.close();
   }
 
   @Autowired(required = false)
@@ -127,8 +149,8 @@ public class RuntimeConfigStore {
   /**
    * Run a series of mutations with a single final disk write.
    *
-   * <p>Callers should keep the action focused on {@code remember*} methods so EDT stalls are
-   * minimized.
+   * <p>Callers should keep the action focused on {@code remember*} methods. Once persistence has
+   * started, the final disk write is coalesced on the owned background writer.
    */
   public synchronized void runMutationBatch(Runnable action) {
     stores.documentStore.runMutationBatch(action);
@@ -301,8 +323,19 @@ public class RuntimeConfigStore {
   }
 
   /** Persists {@code ircafe.ui.startupThemePending}. Blank values remove the key. */
-  public synchronized void rememberStartupThemePending(String theme) {
-    stores.uiStores.uiSettingsStore.rememberStartupThemePending(theme);
+  public void rememberStartupThemePending(String theme) {
+    synchronized (this) {
+      stores.uiStores.uiSettingsStore.rememberStartupThemePending(theme);
+    }
+    // The startup runner calls this before queuing theme initialization. Make its crash-recovery
+    // marker durable, without holding the facade monitor while waiting for the writer.
+    if (!EventQueue.isDispatchThread()) {
+      try {
+        flushPendingWrites();
+      } catch (IOException e) {
+        throw new UncheckedIOException("Could not persist startup theme recovery marker", e);
+      }
+    }
   }
 
   /** Removes {@code ircafe.ui.startupThemePending}. */

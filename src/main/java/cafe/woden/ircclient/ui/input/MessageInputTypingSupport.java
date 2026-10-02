@@ -114,7 +114,8 @@ final class MessageInputTypingSupport {
   void onLocalTypingIndicatorSent(String state) {
     if (!typingSignalAvailable || !typingSignalDisplayEnabled()) return;
     String s = normalizeTypingState(state);
-    if (s.isEmpty()) return;
+    // A send may complete after the draft was submitted or typing changed state.
+    if (s.isEmpty() || !s.equals(lastEmittedTypingState)) return;
     typingSignalIndicator.pulse(s);
   }
 
@@ -131,6 +132,8 @@ final class MessageInputTypingSupport {
    */
   void onDraftTextSetProgrammatically() {
     typingPauseTimer.stop();
+    lastEmittedTypingState = "done";
+    typingSignalIndicator.pulse("done");
 
     lastActiveSentAtMs = 0L;
   }
@@ -160,6 +163,14 @@ final class MessageInputTypingSupport {
 
     lastActiveSentAtMs = 0L;
     emitTypingState("done");
+  }
+
+  /** An IRC message ends typing remotely; reset locally without a redundant TAGMSG. */
+  void onMessageSubmitted() {
+    typingPauseTimer.stop();
+    lastActiveSentAtMs = 0L;
+    lastEmittedTypingState = "done";
+    typingSignalIndicator.pulse("done");
   }
 
   void onSettingsApplied(UiSettings s) {
@@ -356,6 +367,11 @@ final class MessageInputTypingSupport {
   private void emitTypingState(String state, boolean allowRepeat) {
     String normalized = normalizeTypingState(state);
     if (normalized.isEmpty()) return;
+
+    // Stop the local glow even if the cleanup TAGMSG is skipped or fails to send.
+    if (!"active".equals(normalized)) {
+      typingSignalIndicator.pulse(normalized);
+    }
 
     // Preferences gating: if typing indicators are disabled, never emit ACTIVE/PAUSED.
     // Still allow DONE to flow through as a cleanup signal so we can clear any existing
