@@ -127,3 +127,11 @@ dependencies {
 configurations.configureEach {
     if (canBeResolved) attributes.attribute(processFix, true)
 }
+
+// Project artifacts never need the external OS patch. Bypass the transform so
+// early classpath resolution cannot cache failures for JARs not yet produced.
+subprojects {
+    configurations.configureEach {
+        if (name in ['apiElements', 'runtimeElements']) attributes.attribute(processFix, true)
+    }
+}

@@ -174,7 +174,10 @@ public class RuntimeConfigDocumentStore implements AutoCloseable {
   void writeNow(Map<String, Object> doc) throws IOException {
     Path destination = resolveWriteTarget();
     Path parent = destination.getParent();
-    if (parent != null && !Files.exists(parent)) {
+    if (parent == null) {
+      throw new IOException("Runtime config path must name a file: " + destination);
+    }
+    if (!Files.exists(parent)) {
       Files.createDirectories(parent);
     }
     PosixFileAttributeView attributes =

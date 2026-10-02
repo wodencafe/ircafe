@@ -53,6 +53,17 @@ class RuntimeConfigDocumentStoreTest {
   }
 
   @Test
+  void rejectsFilesystemRootAsConfigFile() throws Exception {
+    Path root = tempDir.toAbsolutePath().getRoot();
+    try (RuntimeConfigDocumentStore store = new RuntimeConfigDocumentStore(root)) {
+      IOException failure =
+          assertThrows(IOException.class, () -> store.write(Map.of("value", "x")));
+
+      assertEquals("Runtime config path must name a file: " + root, failure.getMessage());
+    }
+  }
+
+  @Test
   void mutationBatchDefersDiskWriteUntilBatchEnds() throws Exception {
     Path config = tempDir.resolve("batched.yml");
     RuntimeConfigDocumentStore store = new RuntimeConfigDocumentStore(config);
