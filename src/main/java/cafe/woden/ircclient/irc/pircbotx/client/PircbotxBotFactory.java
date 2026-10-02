@@ -101,7 +101,7 @@ public class PircbotxBotFactory {
     int connectTimeoutMs = Math.max(1, plan.connectTimeoutMs());
     int readTimeoutMs = Math.max(1, plan.readTimeoutMs());
 
-    SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
+    SSLSocketFactory ssl = NetTlsContext.sslSocketFactory(s.trustAllCertificates());
 
     SocketFactory socketFactory;
     if (plan.enabled()) {

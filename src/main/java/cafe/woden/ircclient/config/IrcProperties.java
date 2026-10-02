@@ -365,7 +365,9 @@ public record IrcProperties(Client client, List<Server> servers) {
        * enabled} is {@code false}, the server explicitly disables proxying.
        */
       Proxy proxy,
-      @Name("backend") String backendId) {
+      @Name("backend") String backendId,
+      /** Accept untrusted TLS certificates for this server only. Disabled by default. */
+      boolean trustAllCertificates) {
     /** Transport backend used for this server entry. */
     public enum Backend {
       IRC("irc"),
@@ -449,6 +451,40 @@ public record IrcProperties(Client client, List<Server> servers) {
         perform = List.of();
       }
       backendId = BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(backendId);
+    }
+
+    // Legacy constructor kept for call sites that don't opt out of certificate validation.
+    public Server(
+        String id,
+        String host,
+        int port,
+        boolean tls,
+        String serverPassword,
+        String nick,
+        String login,
+        String realName,
+        Sasl sasl,
+        Nickserv nickserv,
+        List<String> autoJoin,
+        List<String> perform,
+        Proxy proxy,
+        String backendId) {
+      this(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          nickserv,
+          autoJoin,
+          perform,
+          proxy,
+          backendId,
+          false);
     }
 
     // Legacy constructor kept for call sites that don't set backend explicitly.
@@ -561,7 +597,8 @@ public record IrcProperties(Client client, List<Server> servers) {
           value,
           perform,
           proxy,
-          backendId);
+          backendId,
+          trustAllCertificates);
     }
 
     public Server withTransport(int nextPort, boolean nextTls) {
@@ -579,7 +616,8 @@ public record IrcProperties(Client client, List<Server> servers) {
           autoJoin,
           perform,
           proxy,
-          backendId);
+          backendId,
+          trustAllCertificates);
     }
 
     public Backend backend() {

@@ -365,6 +365,8 @@ irc:
       host: "irc.libera.chat"
       port: 6697
       tls: true
+      # Opt out of certificate validation for this server only (e.g. a self-signed ZNC).
+      trustAllCertificates: false
       serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
       nick: "${IRCAFE_NICK:IRCafeUser}"
       login: "${IRCAFE_IDENT:ircafe}"

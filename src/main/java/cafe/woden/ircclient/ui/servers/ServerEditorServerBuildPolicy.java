@@ -82,7 +82,8 @@ final class ServerEditorServerBuildPolicy {
             request.proxyRemoteDns(),
             request.proxyConnectTimeoutMs(),
             request.proxyReadTimeoutMs()),
-        request.backendId());
+        request.backendId(),
+        request.trustAllCertificates());
   }
 
   private static String trim(String value) {
@@ -126,7 +127,8 @@ final class ServerEditorServerBuildPolicy {
       String proxyPassword,
       boolean proxyRemoteDns,
       String proxyConnectTimeoutMs,
-      String proxyReadTimeoutMs) {
+      String proxyReadTimeoutMs,
+      boolean trustAllCertificates) {
     ServerBuildRequest {
       Objects.requireNonNull(profile, "profile");
       Objects.requireNonNull(backendId, "backendId");

@@ -76,7 +76,15 @@ public final class NetTlsContext {
    * enabled, this factory does not validate certificates.
    */
   public static SSLSocketFactory sslSocketFactory() {
-    if (!trustAllCertificates()) return DEFAULT_SSL;
+    return sslSocketFactory(false);
+  }
+
+  /**
+   * Resolves a server's certificate opt-out without changing global TLS settings. The existing
+   * global trust-all setting still applies when enabled.
+   */
+  public static SSLSocketFactory sslSocketFactory(boolean trustAllCertificatesForServer) {
+    if (!trustAllCertificatesForServer && !trustAllCertificates()) return DEFAULT_SSL;
 
     SSLSocketFactory existing = TRUST_ALL_SSL.get();
     if (existing != null) return existing;

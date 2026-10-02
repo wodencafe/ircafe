@@ -31,6 +31,63 @@ import org.junit.jupiter.api.Test;
 class ServerEditorDialogFunctionalTest {
 
   @Test
+  void certificateOptOutDefaultsOffAndSurvivesAddAndEdit() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+    ServerEditorDialog add = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    IrcProperties.Server saved;
+    try {
+      JCheckBox tls = readField(add, "tlsBox", JCheckBox.class);
+      JCheckBox certificates = readField(add, "trustAllCertificatesBox", JCheckBox.class);
+      JTextField id = readField(add, "idField", JTextField.class);
+      JTextField host = readField(add, "hostField", JTextField.class);
+      JTextField nick = readField(add, "nickField", JTextField.class);
+      JButton save = readField(add, "saveBtn", JButton.class);
+      JTabbedPane tabs = onEdtCall(() -> findDescendant(add, JTabbedPane.class));
+      onEdt(
+          () -> {
+            assertTrue(
+                isDescendant(tabs.getComponentAt(tabs.indexOfTab("Connection")), certificates));
+            assertTrue(certificates.isEnabled());
+            assertFalse(certificates.isSelected(), "certificate validation should be the default");
+            certificates.doClick();
+            tls.doClick();
+            assertFalse(certificates.isEnabled(), "plain connections have no certificates");
+            assertTrue(
+                certificates.isSelected(), "temporarily disabling TLS should retain preference");
+            tls.doClick();
+            assertTrue(certificates.isEnabled());
+            id.setText("znc");
+            host.setText("znc.example.net");
+            nick.setText("ircafe");
+            assertTrue(save.isEnabled());
+            save.doClick();
+          });
+      saved = (IrcProperties.Server) readField(add, "result", Optional.class).orElseThrow();
+      assertTrue(saved.trustAllCertificates());
+    } finally {
+      onEdt(add::dispose);
+    }
+
+    ServerEditorDialog edit = onEdtCall(() -> new ServerEditorDialog(null, "Edit Server", saved));
+    try {
+      JCheckBox certificates = readField(edit, "trustAllCertificatesBox", JCheckBox.class);
+      JButton save = readField(edit, "saveBtn", JButton.class);
+      onEdt(
+          () -> {
+            assertTrue(certificates.isSelected(), "edit should load saved certificate preference");
+            certificates.doClick();
+            save.doClick();
+          });
+      IrcProperties.Server updated =
+          (IrcProperties.Server) readField(edit, "result", Optional.class).orElseThrow();
+      assertFalse(updated.trustAllCertificates());
+    } finally {
+      onEdt(edit::dispose);
+      flushEdt();
+    }
+  }
+
+  @Test
   void validationTlsSaslProxyInteractionsAndSaveWork() throws Exception {
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
 

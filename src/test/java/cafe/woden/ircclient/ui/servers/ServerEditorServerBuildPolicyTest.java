@@ -50,9 +50,11 @@ class ServerEditorServerBuildPolicyTest {
                 "proxy-secret",
                 false,
                 "15000",
-                "25000"));
+                "25000",
+                true));
 
     assertEquals("libera", server.id());
+    assertTrue(server.trustAllCertificates());
     assertEquals("ircafe", server.nick());
     assertEquals("ircafe", server.login());
     assertEquals("ircafe", server.realName());
@@ -104,7 +106,8 @@ class ServerEditorServerBuildPolicyTest {
                 "",
                 true,
                 "",
-                ""));
+                "",
+                false));
 
     assertEquals("", server.serverPassword());
     assertEquals("alice", server.login());
@@ -153,7 +156,8 @@ class ServerEditorServerBuildPolicyTest {
                         "",
                         true,
                         "",
-                        "")));
+                        "",
+                        false)));
 
     assertEquals("Server/Core password must not contain newlines", error.getMessage());
   }

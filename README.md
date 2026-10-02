@@ -736,6 +736,7 @@ To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `I
 ### Security notes
 
 - Keep `irc.client.tls.trustAllCertificates: false` unless you are intentionally testing with self-signed certs in a trusted environment.
+- For an IRC server, ZNC/other bouncer, or Quassel Core with a self-signed certificate, enable **Allow self-signed and insecure certificates** on the **Connection** tab of Add/Edit Server. This persists as `irc.servers[].trustAllCertificates` (default `false`) and skips certificate validation for that server's TLS connections, including SOCKS connections and discovered bouncer networks. The existing global trust-all setting still applies when enabled.
 - Interceptor and notification rule script actions execute local scripts. Only use scripts and paths you trust.
 
 ### Platform notes

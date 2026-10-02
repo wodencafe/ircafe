@@ -379,7 +379,8 @@ public class ConnectionCoordinator {
             existing.autoJoin(),
             existing.perform(),
             existing.proxy(),
-            existing.backendId());
+            existing.backendId(),
+            existing.trustAllCertificates());
     serverRegistry.upsert(updated);
   }
 
@@ -1409,6 +1410,7 @@ public class ConnectionCoordinator {
     if (!sameTrimmed(previous.host(), next.host())) return true;
     if (previous.port() != next.port()) return true;
     if (previous.tls() != next.tls()) return true;
+    if (previous.trustAllCertificates() != next.trustAllCertificates()) return true;
     if (!Objects.equals(previous.proxy(), next.proxy())) return true;
     if (!Objects.equals(previous.serverPassword(), next.serverPassword())) return true;
     if (!sameTrimmed(previous.login(), next.login())) return true;
@@ -1436,6 +1438,11 @@ public class ConnectionCoordinator {
           + " ("
           + tlsToken
           + ")";
+    }
+    if (previous.trustAllCertificates() != next.trustAllCertificates()) {
+      return next.trustAllCertificates()
+          ? "TLS certificate validation disabled"
+          : "TLS certificate validation enabled";
     }
     if (!Objects.equals(previous.proxy(), next.proxy())) return "proxy updated";
     if (!Objects.equals(previous.serverPassword(), next.serverPassword()))

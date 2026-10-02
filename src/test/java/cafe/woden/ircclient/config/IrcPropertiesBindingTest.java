@@ -384,6 +384,35 @@ class IrcPropertiesBindingTest {
   }
 
   @Test
+  void serverCertificateOptOutIsExplicitAndIndependentPerServer() {
+    runner
+        .withPropertyValues(
+            "irc.servers[0].id=znc",
+            "irc.servers[0].host=znc.example.net",
+            "irc.servers[0].tls=true",
+            "irc.servers[0].trust-all-certificates=true",
+            "irc.servers[1].id=libera",
+            "irc.servers[1].host=irc.libera.chat",
+            "irc.servers[1].tls=true")
+        .run(
+            ctx -> {
+              IrcProperties props = ctx.getBean(IrcProperties.class);
+              assertTrue(props.servers().getFirst().trustAllCertificates());
+              assertFalse(props.servers().get(1).trustAllCertificates());
+              assertFalse(props.client().tls().trustAllCertificates());
+            });
+  }
+
+  @Test
+  void serverCopiesPreserveCertificateOptOut() {
+    IrcProperties.Server server =
+        IrcPropertiesTestFixtures.serverBuilder("znc").trustAllCertificates(true).build();
+    assertTrue(server.withAutoJoin(List.of("#ircafe")).trustAllCertificates());
+    assertTrue(server.withTransport(7000, true).trustAllCertificates());
+    assertFalse(IrcPropertiesTestFixtures.server("libera").trustAllCertificates());
+  }
+
+  @Test
   void customBackendIdBindsFromExistingBackendProperty() {
     runner
         .withPropertyValues(

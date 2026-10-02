@@ -216,7 +216,8 @@ public final class BouncerNetworkDiscoveryOrchestrator {
         config.autoJoinChannels(),
         List.of(),
         bouncer.proxy(),
-        bouncer.backend());
+        bouncer.backendId(),
+        bouncer.trustAllCertificates());
   }
 
   private BouncerConfiguredServerTemplate configuredTemplate(IrcProperties.Server bouncer) {

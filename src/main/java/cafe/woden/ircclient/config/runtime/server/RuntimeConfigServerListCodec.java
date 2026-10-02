@@ -77,6 +77,7 @@ final class RuntimeConfigServerListCodec {
     m.put("host", s.host());
     m.put("port", s.port());
     m.put("tls", s.tls());
+    m.put("trustAllCertificates", s.trustAllCertificates());
     String backendId = BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(s.backendId());
     if (!backendId.equals(
         BackendDescriptorCatalog.builtIns().idFor(IrcProperties.Server.Backend.IRC))) {

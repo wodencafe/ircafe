@@ -43,7 +43,7 @@ public class QuasselCoreSocketConnector {
       return tcp;
     }
 
-    SSLSocketFactory sslFactory = NetTlsContext.sslSocketFactory();
+    SSLSocketFactory sslFactory = NetTlsContext.sslSocketFactory(s.trustAllCertificates());
     Socket tls = null;
     try {
       tls = sslFactory.createSocket(tcp, host, port, true);
