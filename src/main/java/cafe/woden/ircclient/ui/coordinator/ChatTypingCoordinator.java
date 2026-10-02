@@ -168,6 +168,7 @@ public final class ChatTypingCoordinator {
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(normalized),
                 err -> {
+                  inputPanel.onLocalTypingIndicatorFailed(normalized);
                   if (log.isDebugEnabled()) {
                     log.debug(
                         "[{}] typing send failed (target={} state={}): {}",

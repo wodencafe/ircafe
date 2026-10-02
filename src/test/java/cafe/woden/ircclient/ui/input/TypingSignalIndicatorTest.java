@@ -74,6 +74,34 @@ class TypingSignalIndicatorTest {
   }
 
   @Test
+  void pendingTransitionFadesFromGreenToVioletThenBlueWithoutJumping() throws Exception {
+    ManualClock clock = new ManualClock();
+    TypingSignalIndicator indicator = createOnEdt(clock);
+    onEdt(
+        () -> {
+          indicator.setAvailable(true);
+          indicator.pulse("pending");
+          assertEquals(0x35C86E, rgbHex(indicator.debugArrowColorForTest()));
+          clock.advance(280);
+          Color violet = indicator.debugArrowColorForTest();
+          float glow = indicator.debugArrowGlowForTest();
+          assertTrue(violet.getBlue() > violet.getRed());
+          assertTrue(violet.getRed() > violet.getGreen());
+          assertTrue(glow > 0.2f);
+          indicator.pulse("pending");
+          assertEquals(violet, indicator.debugArrowColorForTest());
+          indicator.pulse("active");
+          assertEquals(violet, indicator.debugArrowColorForTest());
+          assertEquals(glow, indicator.debugArrowGlowForTest());
+          clock.advance(280);
+          Color blue = indicator.debugArrowColorForTest();
+          assertTrue(blue.getBlue() > blue.getGreen());
+          assertTrue(blue.getGreen() > blue.getRed());
+          assertTrue(indicator.debugArrowGlowForTest() > 0.2f);
+        });
+  }
+
+  @Test
   void activeTransitionFadesFromGreenToGlowingBlue() throws Exception {
     ManualClock clock = new ManualClock();
     TypingSignalIndicator indicator = createOnEdt(clock);

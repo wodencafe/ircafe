@@ -107,8 +107,12 @@ final class MessageInputTypingSupport {
   }
 
   void setTypingSignalAvailable(boolean available) {
+    boolean becameAvailable = available && !typingSignalAvailable;
     typingSignalAvailable = available;
     refreshTypingSignalAvailability();
+    if (becameAvailable && "active".equals(lastEmittedTypingState)) {
+      typingSignalIndicator.pulse("pending");
+    }
   }
 
   void onLocalTypingIndicatorSent(String state) {
@@ -117,6 +121,12 @@ final class MessageInputTypingSupport {
     // A send may complete after the draft was submitted or typing changed state.
     if (s.isEmpty() || !s.equals(lastEmittedTypingState)) return;
     typingSignalIndicator.pulse(s);
+  }
+
+  void onLocalTypingIndicatorFailed(String state) {
+    String s = normalizeTypingState(state);
+    if (s.isEmpty() || !s.equals(lastEmittedTypingState)) return;
+    typingSignalIndicator.pulse("done");
   }
 
   /** Call from the input document listener (only when the edit was user-driven). */
@@ -254,6 +264,9 @@ final class MessageInputTypingSupport {
     typingDotsIndicator.setVisible(false);
     typingBanner.setVisible(false);
 
+    lastEmittedTypingState = "done";
+    typingSignalIndicator.pulse("done");
+
     lastActiveSentAtMs = 0L;
   }
 
@@ -383,9 +396,13 @@ final class MessageInputTypingSupport {
     if (!allowRepeat && normalized.equals(lastEmittedTypingState)) return;
 
     lastEmittedTypingState = normalized;
+    if ("active".equals(normalized)) {
+      typingSignalIndicator.pulse("pending");
+    }
     try {
       onTypingStateChanged.accept(normalized);
     } catch (Exception ex) {
+      onLocalTypingIndicatorFailed(normalized);
       log.warn("[MessageInputTypingSupport] onTypingStateChanged failed", ex);
     }
   }

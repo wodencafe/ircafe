@@ -931,6 +931,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(s),
                 err -> {
+                  inputPanel.onLocalTypingIndicatorFailed(s);
                   if (log.isDebugEnabled()) {
                     log.debug(
                         "[{}] typing send failed (target={} state={}): {}",

@@ -17,8 +17,115 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MessageInputTypingSupportTest {
+
+  @Test
+  void userEditGlowsVioletUntilActiveSendCompletes() throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.clock.addAndGet(300);
+            assertViolet(f);
+            // Throttled edits must preserve the pending animation.
+            f.input.setText("draft more");
+            f.support.onUserEdit(false);
+            assertViolet(f);
+            f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(300);
+            var blue = f.signal.debugArrowColorForTest();
+            assertTrue(blue.getBlue() > blue.getGreen());
+            assertTrue(blue.getGreen() > blue.getRed());
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"submit", "clear", "switch", "draft", "remove", "fail", "slash"})
+  void pendingSignalReturnsToGreenWhenCanceledOrFailed(String action) throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.clock.addAndGet(300);
+            assertViolet(f);
+            switch (action) {
+              case "submit" -> f.support.onMessageSubmitted();
+              case "clear" -> {
+                f.input.setText("");
+                f.support.onUserEdit(false);
+              }
+              case "switch" -> f.support.flushTypingForBufferSwitch();
+              case "draft" -> f.support.onDraftTextSetProgrammatically();
+              case "remove" -> f.support.onRemoveNotify();
+              case "fail" -> f.support.onLocalTypingIndicatorFailed("active");
+              case "slash" -> {
+                f.input.setText("/whois alice");
+                f.support.onUserEdit(false);
+              }
+              default -> throw new AssertionError(action);
+            }
+            if (!"fail".equals(action)) f.support.onLocalTypingIndicatorSent("active");
+            f.clock.addAndGet(500);
+            assertEquals(0x35C86E, rgbHex(f.signal.debugArrowColorForTest()));
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"send", "signal"})
+  void disabledTypingSettingsSuppressPendingGlow(String disabledSetting) throws Exception {
+    UiSettings settings = defaultSettings();
+    UiSettings disabled =
+        "send".equals(disabledSetting)
+            ? settings.withTypingIndicatorsEnabled(false)
+            : settings.withTypingIndicatorsSendSignalEnabled(false);
+    Fixture f = newFixture(() -> disabled);
+    onEdt(
+        () -> {
+          try {
+            f.support.setTypingSignalAvailable(true);
+            var fallback = f.signal.debugArrowColorForTest();
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.clock.addAndGet(300);
+            assertEquals(fallback, f.signal.debugArrowColorForTest());
+            assertEquals(0f, f.signal.debugArrowGlowForTest());
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
+
+  @Test
+  void availabilityDiscoveredDuringSendStartsPendingGlow() throws Exception {
+    Fixture f = newFixture();
+    onEdt(
+        () -> {
+          try {
+            f.support.setOnTypingStateChanged(state -> f.support.setTypingSignalAvailable(true));
+            f.input.setText("draft");
+            f.support.onUserEdit(false);
+            f.clock.addAndGet(300);
+            assertViolet(f);
+          } finally {
+            f.support.onRemoveNotify();
+          }
+        });
+  }
 
   @Test
   void showsMultipleActiveTypersInSingleBannerLine() throws Exception {
@@ -414,6 +521,13 @@ class MessageInputTypingSupportTest {
 
   private static int rgbHex(java.awt.Color color) {
     return color == null ? 0 : (color.getRGB() & 0xFFFFFF);
+  }
+
+  private static void assertViolet(Fixture f) {
+    var violet = f.signal.debugArrowColorForTest();
+    assertTrue(violet.getBlue() > violet.getRed());
+    assertTrue(violet.getRed() > violet.getGreen());
+    assertTrue(f.signal.debugArrowGlowForTest() > 0.2f);
   }
 
   private static int unavailableFallbackArrowColorHex()

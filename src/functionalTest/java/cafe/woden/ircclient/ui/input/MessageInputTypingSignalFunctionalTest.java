@@ -18,14 +18,18 @@ import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class MessageInputTypingSignalFunctionalTest {
 
   @ParameterizedTest
-  @ValueSource(strings = {"send", "pause", "clear", "switch"})
-  void arrowReturnsToGreenWhenTypingStops(String action) throws Exception {
+  @CsvSource({
+    "send, true", "pause, true", "clear, true", "switch, true",
+    "send, false", "pause, false", "clear, false", "switch, false"
+  })
+  void arrowReturnsToGreenWhenTypingStops(String action, boolean acknowledgeSend) throws Exception {
     MessageInputPanel[] panels = new MessageInputPanel[1];
     List<String> states = new CopyOnWriteArrayList<>();
     onEdt(
@@ -38,7 +42,8 @@ class MessageInputTypingSignalFunctionalTest {
               state -> {
                 states.add(state);
                 // Only ACTIVE is acknowledged: local cleanup must also work without a reply.
-                if ("active".equals(state)) panel.onLocalTypingIndicatorSent(state);
+                if (acknowledgeSend && "active".equals(state))
+                  panel.onLocalTypingIndicatorSent(state);
               });
           panel.addNotify();
         });
@@ -58,7 +63,11 @@ class MessageInputTypingSignalFunctionalTest {
       waitFor(
           () -> {
             var color = signal.debugArrowColorForTest();
-            return color.getBlue() > color.getGreen() && signal.debugArrowGlowForTest() > 0.2f;
+            return color.getBlue() > color.getGreen()
+                && (acknowledgeSend
+                    ? color.getGreen() > color.getRed()
+                    : color.getRed() > color.getGreen())
+                && signal.debugArrowGlowForTest() > 0.2f;
           },
           Duration.ofSeconds(1));
       onEdt(
@@ -76,6 +85,8 @@ class MessageInputTypingSignalFunctionalTest {
       waitFor(
           () -> (signal.debugArrowColorForTest().getRGB() & 0xFFFFFF) == 0x35C86E,
           Duration.ofSeconds(4));
+      panel.onLocalTypingIndicatorSent("active");
+      onEdt(() -> assertEquals(0x35C86E, signal.debugArrowColorForTest().getRGB() & 0xFFFFFF));
       if ("send".equals(action)) {
         assertEquals(List.of("active"), states);
       } else if ("clear".equals(action)) {
@@ -88,6 +99,50 @@ class MessageInputTypingSignalFunctionalTest {
             panel.removeNotify();
             assertFalse(signal.isDisplayable());
           });
+    } finally {
+      onEdt(
+          () -> {
+            panel.shutdownResources();
+            if (panel.isDisplayable()) panel.removeNotify();
+          });
+    }
+  }
+
+  @Test
+  void delayedSendTransitionsFromVioletToBlueOnBackgroundCompletion() throws Exception {
+    MessageInputPanel[] panels = new MessageInputPanel[1];
+    onEdt(
+        () -> {
+          panels[0] =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          panels[0].setTypingSignalAvailable(true);
+          panels[0].addNotify();
+        });
+    MessageInputPanel panel = panels[0];
+    try {
+      JTextComponent input = findFirst(panel, JTextComponent.class);
+      TypingSignalIndicator signal = findFirst(panel, TypingSignalIndicator.class);
+      assertNotNull(input);
+      assertNotNull(signal);
+      onEdt(() -> input.setText("hello"));
+      waitFor(
+          () -> {
+            var color = signal.debugArrowColorForTest();
+            return color.getBlue() > color.getRed()
+                && color.getRed() > color.getGreen()
+                && signal.debugArrowGlowForTest() > 0.2f;
+          },
+          Duration.ofSeconds(1));
+      // The test thread simulates a network send completing off the EDT.
+      panel.onLocalTypingIndicatorSent("active");
+      waitFor(
+          () -> {
+            var color = signal.debugArrowColorForTest();
+            return color.getBlue() > color.getGreen()
+                && color.getGreen() > color.getRed()
+                && signal.debugArrowGlowForTest() > 0.2f;
+          },
+          Duration.ofSeconds(1));
     } finally {
       onEdt(
           () -> {
