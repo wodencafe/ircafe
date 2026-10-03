@@ -45,6 +45,17 @@ final class QuasselCoreHistorySupport {
     return state == null ? UNKNOWN_MSG_ID : state.timestampForMsgId(msgId);
   }
 
+  long exactTimestampForMsgId(String target, long msgId) {
+    if (msgId <= 0L) return UNKNOWN_MSG_ID;
+    TargetHistoryState state = historyByTarget.get(normalizeHistoryTargetKey(target));
+    return state == null ? UNKNOWN_MSG_ID : state.exactTimestampForMsgId(msgId);
+  }
+
+  long readMarkerMsgIdForTimestamp(String target, Instant timestamp) {
+    TargetHistoryState state = historyByTarget.get(normalizeHistoryTargetKey(target));
+    return state == null ? UNKNOWN_MSG_ID : state.readMarkerMsgIdForTimestamp(timestamp);
+  }
+
   void clear() {
     historyByTarget.clear();
   }
@@ -180,6 +191,19 @@ final class QuasselCoreHistorySupport {
       return floorDelta <= ceilDelta
           ? sanitizeTimestampSample(floor.getValue())
           : sanitizeTimestampSample(ceil.getValue());
+    }
+
+    synchronized long exactTimestampForMsgId(long messageId) {
+      return sanitizeTimestampSample(timestampByMsgId.get(messageId));
+    }
+
+    synchronized long readMarkerMsgIdForTimestamp(Instant timestamp) {
+      long atMs = (timestamp == null ? Instant.now() : timestamp).toEpochMilli();
+      // Native timestamps have second precision; ties must include the latest message ID.
+      for (Map.Entry<Long, Long> sample : timestampByMsgId.descendingMap().entrySet()) {
+        if (sample.getValue() <= atMs) return sample.getKey();
+      }
+      return UNKNOWN_MSG_ID;
     }
 
     private static long sanitizeTimestampSample(Long sample) {

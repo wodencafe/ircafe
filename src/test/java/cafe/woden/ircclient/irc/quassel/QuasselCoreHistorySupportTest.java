@@ -53,10 +53,25 @@ class QuasselCoreHistorySupportTest {
     history.observe("#room{net:two}", 10, Instant.ofEpochMilli(9000));
     assertEquals(1000, history.timestampForMsgId("#ROOM{net:one}", 15));
     assertEquals(2000, history.timestampForMsgId("#room{net:one}", 16));
+    assertEquals(-1, history.exactTimestampForMsgId("#room{net:one}", 15));
+    assertEquals(1000, history.exactTimestampForMsgId("#ROOM{net:one}", 10));
     assertEquals(9000, history.timestampForMsgId("#room{net:two}", 10));
     assertEquals(-1, history.timestampForMsgId("#room", 10));
     assertEquals(10, history.msgIdForTimestamp("#room{net:one}", Instant.ofEpochMilli(1500)));
     assertEquals(20, history.msgIdForTimestamp("#room{net:one}", Instant.ofEpochMilli(1501)));
+  }
+
+  @Test
+  void readMarkersUseObservedIdsAndIncludeAllMessagesSharingTheTimestamp() {
+    QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
+    history.observe("#room", 10, Instant.ofEpochMilli(1000));
+    history.observe("#room", 11, Instant.ofEpochMilli(1100));
+    history.observe("#room", 20, Instant.ofEpochMilli(2000));
+    history.observe("#room", 21, Instant.ofEpochMilli(2000));
+    assertEquals(11, history.readMarkerMsgIdForTimestamp("#room", Instant.ofEpochMilli(1500)));
+    assertEquals(21, history.readMarkerMsgIdForTimestamp("#room", Instant.ofEpochMilli(2000)));
+    assertEquals(-1, history.readMarkerMsgIdForTimestamp("#room", Instant.ofEpochMilli(999)));
+    assertEquals(-1, history.readMarkerMsgIdForTimestamp("#unknown", Instant.ofEpochMilli(2000)));
   }
 
   @Test

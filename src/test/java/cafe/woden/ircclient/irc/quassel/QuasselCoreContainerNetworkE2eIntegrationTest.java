@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -406,6 +407,214 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         });
   }
 
+  @Test
+  void readMarkersSynchronizeBetweenClientsAndSurviveReconnect() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          QuasselCoreIrcClientService peer =
+              newService(session.runtimeConfig(), new AtomicReference<>());
+          TestSubscriber<ServerIrcEvent> peerEvents = peer.events().test();
+          try {
+            peer.connect(session.serverId()).blockingAwait();
+            awaitNextEvent(
+                peerEvents, session.serverId(), IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
+            session.bot().privmsg(session.channel(), "read marker anchor");
+            var anchor =
+                awaitChannelMessage(
+                    session.events(),
+                    session.serverId(),
+                    session.channel(),
+                    session.botNick(),
+                    "read marker anchor",
+                    0,
+                    MESSAGE_TIMEOUT);
+            awaitChannelMessage(
+                peerEvents,
+                session.serverId(),
+                session.channel(),
+                session.botNick(),
+                "read marker anchor",
+                0,
+                MESSAGE_TIMEOUT);
+            assertTrue(
+                session.service().isReadMarkerAvailable(session.serverId()),
+                "native Quassel markers must be available independently of IRC server capabilities");
+            int markerCount =
+                countEvents(peerEvents, session.serverId(), IrcEvent.ReadMarkerObserved.class);
+            session
+                .service()
+                .sendReadMarker(session.serverId(), session.channel(), anchor.at())
+                .blockingAwait();
+            var marker =
+                awaitNextEvent(
+                    peerEvents,
+                    session.serverId(),
+                    IrcEvent.ReadMarkerObserved.class,
+                    markerCount,
+                    MESSAGE_TIMEOUT);
+            assertEquals(session.channel(), marker.target());
+            assertEquals(
+                anchor.at(),
+                java.time.Instant.parse(marker.marker().substring("timestamp=".length())));
+
+            int beforeReconnect =
+                countEvents(peerEvents, session.serverId(), IrcEvent.ReadMarkerObserved.class);
+            reconnectAndAwaitReady(peer, peerEvents, session.serverId());
+            int historyCount =
+                countEvents(
+                    peerEvents, session.serverId(), IrcEvent.ChatHistoryBatchReceived.class);
+            peer.requestChatHistoryLatest(session.serverId(), session.channel(), "*", 1)
+                .blockingAwait();
+            var replay =
+                awaitNextEvent(
+                    peerEvents,
+                    session.serverId(),
+                    IrcEvent.ChatHistoryBatchReceived.class,
+                    historyCount,
+                    MESSAGE_TIMEOUT);
+            assertHistoryMatches(replay.entries(), List.of(anchor), session.channel());
+            awaitMarkerTimestamp(
+                peerEvents, session.serverId(), session.channel(), anchor.at(), beforeReconnect);
+          } finally {
+            peerEvents.cancel();
+            peer.shutdownNow();
+          }
+        });
+  }
+
+  @Test
+  void networkEditsDisconnectReconnectAndRemovalAreConfirmedByCore() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          var initial =
+              session.service().quasselCoreNetworks(session.serverId()).stream()
+                  .filter(network -> session.networkName().equals(network.networkName()))
+                  .findFirst()
+                  .orElseThrow();
+          session
+              .service()
+              .quasselCoreDisconnectNetwork(
+                  session.serverId(), Integer.toString(initial.networkId()))
+              .blockingAwait();
+          awaitNetworkState(
+              session, initial.networkId(), network -> !network.connected(), "disconnected");
+          session.bot().awaitMembershipChange(session.cfg().nick(), "QUIT", "", IRC_BOT_TIMEOUT);
+          String renamed = "renamed-network";
+          session
+              .service()
+              .quasselCoreUpdateNetwork(
+                  session.serverId(),
+                  Integer.toString(initial.networkId()),
+                  new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
+                      renamed,
+                      session.cfg().ircAlias(),
+                      session.cfg().ircPort(),
+                      false,
+                      "",
+                      true,
+                      initial.identityId(),
+                      true))
+              .blockingAwait();
+          awaitNetworkState(
+              session,
+              initial.networkId(),
+              network -> renamed.equals(network.networkName()),
+              "renamed");
+          reconnectAndAwaitReady(session.service(), session.events(), session.serverId());
+          var persisted =
+              awaitNetworkState(
+                  session,
+                  initial.networkId(),
+                  network -> renamed.equals(network.networkName()),
+                  "persisted renamed network");
+          assertEquals(initial.identityId(), persisted.identityId());
+          assertEquals(session.cfg().ircAlias(), persisted.serverHost());
+          assertEquals(session.cfg().ircPort(), persisted.serverPort());
+          assertTrue(!persisted.connected());
+          session.service().quasselCoreConnectNetwork(session.serverId(), renamed).blockingAwait();
+          awaitNetworkConnected(
+              session.service(), session.serverId(), initial.networkId(), NETWORK_SYNC_TIMEOUT);
+          session
+              .bot()
+              .awaitMembershipChange(session.cfg().nick(), "JOIN", session.channel(), JOIN_TIMEOUT);
+          session.bot().privmsg(session.channel(), "message after network reconnect");
+          awaitChannelMessage(
+              session.events(),
+              session.serverId(),
+              session.channel(),
+              session.botNick(),
+              "message after network reconnect",
+              0,
+              MESSAGE_TIMEOUT);
+          session
+              .service()
+              .quasselCoreDisconnectNetwork(session.serverId(), renamed)
+              .blockingAwait();
+          awaitNetworkState(
+              session,
+              initial.networkId(),
+              network -> !network.connected(),
+              "disconnected before removal");
+          session.service().quasselCoreRemoveNetwork(session.serverId(), renamed).blockingAwait();
+          reconnectAndAwaitReady(session.service(), session.events(), session.serverId());
+          assertTrue(
+              session.service().quasselCoreNetworks(session.serverId()).stream()
+                  .noneMatch(network -> network.networkId() == initial.networkId()),
+              "removed network must remain absent after a fresh core handshake");
+        });
+  }
+
+  private static QuasselCoreControlPort.QuasselCoreNetworkSummary awaitNetworkState(
+      ConnectedNetwork session,
+      int networkId,
+      Predicate<QuasselCoreControlPort.QuasselCoreNetworkSummary> predicate,
+      String expected)
+      throws InterruptedException {
+    long deadlineNs = System.nanoTime() + NETWORK_SYNC_TIMEOUT.toNanos();
+    while (System.nanoTime() < deadlineNs) {
+      for (var network : session.service().quasselCoreNetworks(session.serverId())) {
+        if (network.networkId() == networkId && predicate.test(network)) return network;
+      }
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+    fail(
+        "Timed out waiting for network "
+            + networkId
+            + " to be "
+            + expected
+            + "; networks="
+            + session.service().quasselCoreNetworks(session.serverId()));
+    throw new IllegalStateException("unreachable");
+  }
+
+  private static void awaitMarkerTimestamp(
+      TestSubscriber<ServerIrcEvent> events,
+      String serverId,
+      String target,
+      java.time.Instant timestamp,
+      int alreadySeenCount)
+      throws InterruptedException {
+    long deadlineNs = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
+    while (System.nanoTime() < deadlineNs) {
+      if (matchingEvents(events, serverId, IrcEvent.ReadMarkerObserved.class).stream()
+          .skip(alreadySeenCount)
+          .anyMatch(
+              marker ->
+                  target.equals(marker.target())
+                      && timestamp.equals(
+                          java.time.Instant.parse(
+                              marker.marker().substring("timestamp=".length()))))) return;
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+    fail(
+        "No read marker for "
+            + target
+            + " at "
+            + timestamp
+            + "; recent events: "
+            + summarizeRecentEvents(events, serverId, 12));
+  }
+
   private static void awaitJoinedChannel(ConnectedNetwork session, String channel)
       throws InterruptedException {
     long deadlineNs = System.nanoTime() + JOIN_TIMEOUT.toNanos();
@@ -476,7 +685,8 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
       E2eConfig cfg,
       Network dockerNetwork,
       String networkName,
-      AtomicReference<Socket> transportSocket) {
+      AtomicReference<Socket> transportSocket,
+      RuntimeCoreConfig runtimeConfig) {
     String serverId() {
       return cfg.serverId();
     }
@@ -571,7 +781,8 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         assertEquals(cfg.channel(), joined.channel());
 
         scenario.run(
-            new ConnectedNetwork(service, events, bot, cfg, network, networkName, transportSocket));
+            new ConnectedNetwork(
+                service, events, bot, cfg, network, networkName, transportSocket, runtimeCfg));
       } catch (Exception | AssertionError failure) {
         throw new AssertionError(
             "Quassel network round trip failed; core log tail:\n"
@@ -1124,6 +1335,28 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         throw new IllegalArgumentException("privmsg channel/text is blank");
       }
       sendLine("PRIVMSG " + chan + " :" + msg);
+    }
+
+    void awaitMembershipChange(String from, String command, String channel, Duration timeout)
+        throws Exception {
+      long deadlineNs = System.nanoTime() + timeout.toNanos();
+      while (System.nanoTime() < deadlineNs) {
+        String line = readLine();
+        if (line == null) continue;
+        if (line.startsWith("PING ")) {
+          sendLine("PONG " + line.substring(5));
+          continue;
+        }
+        if (!line.startsWith(":" + from + "!")) continue;
+        int prefixEnd = line.indexOf(' ');
+        String payload = line.substring(prefixEnd + 1);
+        if (!payload.startsWith(command + " ")) continue;
+        if (channel.isEmpty()
+            || payload.substring(command.length() + 1).replaceFirst("^:", "").equals(channel)) {
+          return;
+        }
+      }
+      fail("Timed out waiting for " + command + " from " + from + " in " + channel);
     }
 
     void awaitMessage(String from, String command, String target, String text, Duration timeout)

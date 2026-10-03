@@ -125,10 +125,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
   private static final String RPC_REMOVE_NETWORK_SLOT = "2removeNetwork(NetworkId)";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
-  private static final String BUFFER_SYNCER_OBJECT = "global";
-  private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine(BufferId,MsgId)";
-  private static final String BUFFER_SYNCER_LAST_SEEN_SLOT =
-      "requestSetLastSeenMsg(BufferId,MsgId)";
+  private static final String BUFFER_SYNCER_OBJECT = "";
+  private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine";
+  private static final String BUFFER_SYNCER_LAST_SEEN_SLOT = "requestSetLastSeenMsg";
   private static final long MIN_RECONNECT_DELAY_MS = 250L;
   private static final long LAG_SAMPLE_STALE_AFTER_MS = TimeUnit.MINUTES.toMillis(2);
   private static final int MAX_BUFFER_INFOS_PER_SESSION = 8_192;
@@ -801,10 +800,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               if (markerTarget.isEmpty()) {
                 markerTarget = requested.rawTarget();
               }
-              long markerMsgId = resolveHistoryMsgIdByTimestamp(session, markerTarget, at);
+              long markerMsgId = session.history.readMarkerMsgIdForTimestamp(markerTarget, at);
               if (markerMsgId > 0L && bufferInfo.bufferId() >= 0) {
                 sendBufferSyncerReadMarkerUpdate(session, bufferInfo.bufferId(), markerMsgId);
                 return;
+              }
+
+              if (!capabilityEnabledOrUnknown(session, READ_MARKER, DRAFT_READ_MARKER)) {
+                throw new IllegalStateException(
+                    "Quassel read marker requires an observed message for "
+                        + requested.rawTarget());
               }
 
               List<String> rawLines =
@@ -1061,7 +1066,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, READ_MARKER, DRAFT_READ_MARKER);
+    return session != null
+        && (session.nativeReadMarkerSupportObserved.get()
+            || capabilityEnabledOrUnknown(session, READ_MARKER, DRAFT_READ_MARKER));
   }
 
   @Override
@@ -1295,12 +1302,17 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private long resolveHistoryTimestampByMsgId(QuasselSession session, String target, long msgId) {
-    return session == null ? UNKNOWN_MSG_ID : session.history.timestampForMsgId(target, msgId);
+    return session == null ? UNKNOWN_MSG_ID : session.history.exactTimestampForMsgId(target, msgId);
   }
 
   private void noteHistoryObservation(
       QuasselSession session, String target, long messageId, Instant at) {
-    if (session != null) session.history.observe(target, messageId, at);
+    if (session == null) return;
+    session.history.observe(target, messageId, at);
+    Integer bufferId = session.pendingReadMarkersByMsgId.remove(messageId);
+    if (bufferId != null) {
+      emitReadMarkerObserved(session, bufferId, messageId, at);
+    }
   }
 
   private void noteTargetNetworkHint(
@@ -1582,6 +1594,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselCoreAuthHandshake.AuthResult auth = authHandshake.authenticate(openedSocket, server);
       session.authResult.set(auth);
       session.bufferInfosById.clear();
+      session.pendingReadMarkersByMsgId.clear();
+      session.nativeReadMarkerSupportObserved.set(false);
       session.bufferInfosById.putAll(auth.initialBuffers());
       trimMapToMaxSize(session.bufferInfosById, MAX_BUFFER_INFOS_PER_SESSION);
       session.targetNetworkHintsByTargetLower.clear();
@@ -1624,6 +1638,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       resetReconnectAttempts(sid);
       cancelReconnectTask(sid, false);
 
+      sendSignalProxyInitRequest(session, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT);
+      for (Integer networkId : collectKnownNetworkIds(session)) {
+        requestNetworkInitState(session, networkId);
+      }
       Disposable readTask = RxVirtualSchedulers.io().scheduleDirect(() -> runReadLoop(session));
       session.readLoopTask.set(readTask);
       Disposable fallbackReadyTask =
@@ -1838,6 +1856,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       if (first instanceof QuasselCoreDatastreamCodec.BufferInfoValue info
           && info.bufferId() >= 0) {
         session.bufferInfosById.remove(info.bufferId());
+        session.pendingReadMarkersByMsgId.values().removeIf(id -> id == info.bufferId());
       }
     }
 
@@ -2070,6 +2089,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     if ("BufferSyncer".equals(classToken)) {
+      if (session.nativeReadMarkerSupportObserved.compareAndSet(false, true)) {
+        bus.onNext(
+            new ServerIrcEvent(
+                session.serverId,
+                new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "quassel-buffer-syncer")));
+      }
       applyBufferInfoSnapshot(session, values);
       handleBufferSyncerSync(session, slotToken, values);
       return;
@@ -2134,6 +2159,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (networkId < 0) return;
     Object value = values.getFirst();
     switch (slotName) {
+      case "setNetworkName" -> {
+        String name = Objects.toString(value, "").trim();
+        if (!name.isEmpty()) {
+          observeKnownNetwork(session, networkId, name);
+          observeNetworkStateSnapshot(session, networkId, Map.of("networkName", name));
+        }
+      }
       case "setConnected" -> {
         Boolean connected = parseBoolean(value);
         if (connected != null) {
@@ -2568,6 +2600,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     LinkedHashSet<ReadMarkerUpdate> updates = new LinkedHashSet<>();
+    for (int i = 0; i + 1 < values.size(); i += 2) {
+      String key = decodeNetworkStateKey(values.get(i)).toLowerCase(Locale.ROOT);
+      if (Set.of("markerlines", "lastseenmsg", "lastseenmsgs").contains(key)) {
+        collectBufferSyncerMarkerPairs(values.get(i + 1), updates);
+      }
+    }
     for (Object value : values) {
       collectBufferSyncerReadMarkers(value, updates);
     }
@@ -2606,17 +2644,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       out.add(new ReadMarkerUpdate(directBufferId, directMsgId));
     }
 
-    Object markerLines =
-        firstMapValueByKeyIgnoreCase(
-            map, "markerLines", "markerlines", "lastSeenMsgs", "lastseenmsgs");
-    if (markerLines instanceof Map<?, ?> markerMap) {
-      for (Map.Entry<?, ?> entry : markerMap.entrySet()) {
-        int bufferId = tryParseInt(entry.getKey());
-        long msgId = tryParseLong(entry.getValue());
-        if (bufferId >= 0 && msgId > 0L) {
-          out.add(new ReadMarkerUpdate(bufferId, msgId));
-        }
-      }
+    for (String key : List.of("markerLines", "lastSeenMsg", "lastSeenMsgs")) {
+      collectBufferSyncerMarkerPairs(firstMapValueByKeyIgnoreCase(map, key), out);
     }
 
     for (Object value : map.values()) {
@@ -2624,11 +2653,36 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
   }
 
+  private static void collectBufferSyncerMarkerPairs(Object raw, Set<ReadMarkerUpdate> out) {
+    if (raw instanceof Map<?, ?> markerMap) {
+      for (Map.Entry<?, ?> entry : markerMap.entrySet()) {
+        int bufferId = tryParseInt(entry.getKey());
+        long msgId = tryParseLong(entry.getValue());
+        if (bufferId >= 0 && msgId > 0L) {
+          out.add(new ReadMarkerUpdate(bufferId, msgId));
+        }
+      }
+    } else if (raw instanceof List<?> pairs) {
+      for (int i = 0; i + 1 < pairs.size(); i += 2) {
+        int bufferId = tryParseInt(pairs.get(i));
+        long msgId = tryParseLong(pairs.get(i + 1));
+        if (bufferId >= 0 && msgId > 0L) {
+          out.add(new ReadMarkerUpdate(bufferId, msgId));
+        }
+      }
+    }
+  }
+
   private void emitReadMarkerObserved(
       QuasselSession session, int bufferId, long markerMsgId, Instant at) {
     if (session == null || bufferId < 0 || markerMsgId <= 0L) return;
+    // Core init-data arrives before backlog. Keep the native ID until its timestamp is known.
+    session.pendingReadMarkersByMsgId.values().removeIf(id -> id == bufferId);
     QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo = session.bufferInfosById.get(bufferId);
-    if (bufferInfo == null) return;
+    if (bufferInfo == null) {
+      rememberPendingReadMarker(session, bufferId, markerMsgId);
+      return;
+    }
 
     int networkId = bufferInfo.networkId();
     String from = currentNickForNetwork(session, networkId);
@@ -2645,7 +2699,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     Instant fallback = at == null ? Instant.now() : at;
     long resolvedEpochMs = resolveHistoryTimestampByMsgId(session, target, markerMsgId);
     if (resolvedEpochMs <= 0L) {
-      resolvedEpochMs = fallback.toEpochMilli();
+      rememberPendingReadMarker(session, bufferId, markerMsgId);
+      return;
     }
     String marker =
         Ircv3ChatHistorySelectors.TIMESTAMP_PREFIX
@@ -2653,6 +2708,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, new IrcEvent.ReadMarkerObserved(fallback, from, target, marker)));
+  }
+
+  private static void rememberPendingReadMarker(
+      QuasselSession session, int bufferId, long markerMsgId) {
+    session.pendingReadMarkersByMsgId.put(markerMsgId, bufferId);
+    trimMapToMaxSize(session.pendingReadMarkersByMsgId, MAX_BUFFER_INFOS_PER_SESSION);
   }
 
   private void observeNetworkCapabilities(
@@ -4107,6 +4168,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselCoreDatastreamCodec.BufferInfoValue info = entry.getValue();
       if (info == null || info.networkId() != networkId) continue;
       session.bufferInfosById.remove(entry.getKey(), info);
+      session.pendingReadMarkersByMsgId.values().removeIf(id -> id.equals(entry.getKey()));
     }
     for (Map.Entry<String, Integer> entry :
         new ArrayList<>(session.targetNetworkHintsByTargetLower.entrySet())) {
@@ -4899,6 +4961,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.lagLastMeasuredMs.set(-1L);
     session.lagLastMeasuredAtMs.set(0L);
     session.bufferInfosById.clear();
+    session.pendingReadMarkersByMsgId.clear();
+    session.nativeReadMarkerSupportObserved.set(false);
     session.history.clear();
     session.targetNetworkHintsByTargetLower.clear();
     session.joinedChannelMembershipKeys.clear();
@@ -5238,7 +5302,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (session == null) return;
     String clazz = Objects.toString(className, "").trim();
     String object = Objects.toString(objectName, "").trim();
-    if (clazz.isEmpty() || object.isEmpty()) return;
+    if (clazz.isEmpty()) return;
     Socket socket = session.socketRef.get();
     if (socket == null) return;
     OutputStream out = socket.getOutputStream();
@@ -6111,6 +6175,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> bufferInfosById =
         new ConcurrentHashMap<>();
     private final QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
+    private final Map<Long, Integer> pendingReadMarkersByMsgId = new ConcurrentHashMap<>();
     private final Map<String, Integer> targetNetworkHintsByTargetLower = new ConcurrentHashMap<>();
     private final Set<String> joinedChannelMembershipKeys = ConcurrentHashMap.newKeySet();
     private final AtomicReference<QuasselCoreDatastreamCodec.QtDateTimeValue> lagProbeToken =
@@ -6119,6 +6184,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
     private final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
     private final AtomicBoolean capabilitySnapshotObserved = new AtomicBoolean(false);
+    private final AtomicBoolean nativeReadMarkerSupportObserved = new AtomicBoolean(false);
     private final AtomicBoolean syncObserved = new AtomicBoolean(false);
     private final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);

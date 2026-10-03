@@ -559,7 +559,8 @@ Expanded Quassel E2E (Quassel Core + local ngIRCd, with a second IRC server for 
 ```bash
 # Validates network creation/connection, inbound and outbound messages/notices/actions,
 # backlog selector boundaries, ordering, stable IDs/timestamps after reconnect,
-# routing between networks with matching channel/nick names, and automatic recovery.
+# routing between networks with matching channel/nick names, automatic recovery,
+# native read-marker sync across clients/reconnects, and network edit/removal persistence.
 ./gradlew :integrationTest --tests 'cafe.woden.ircclient.irc.quassel.QuasselCoreContainerNetworkE2eIntegrationTest' \
   -Dquassel.it.container.e2e.enabled=true
 ```

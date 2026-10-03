@@ -563,16 +563,23 @@ class QuasselCoreIrcClientServiceTest {
     socket.writeInbound(
         encodeSignalProxyFrame(
             List.of(
-                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
-                "Network".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                Map.of("capsEnabled", List.of("read-marker")))));
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
+                "BufferSyncer",
+                "",
+                "MarkerLines",
+                List.of())));
     long readMarkerReadyDeadline = System.currentTimeMillis() + 2_000L;
     while (!service.isReadMarkerAvailable("quassel")
         && System.currentTimeMillis() < readMarkerReadyDeadline) {
       Thread.sleep(10L);
     }
+
+    assertTrue(service.isReadMarkerAvailable("quassel"));
+    assertFalse(service.isMessageTagsAvailable("quassel"));
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            service.sendReadMarker("quassel", "#ircafe", java.time.Instant.now()).blockingAwait());
 
     socket.writeInbound(
         encodeRpcCall(
@@ -601,8 +608,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BufferSyncer",
-            "global",
-            "requestSetMarkerLine(BufferId,MsgId)",
+            "",
+            "requestSetMarkerLine",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100)));
@@ -610,8 +617,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BufferSyncer",
-            "global",
-            "requestSetLastSeenMsg(BufferId,MsgId)",
+            "",
+            "requestSetLastSeenMsg",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100)));
@@ -825,7 +832,7 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
-  void scalarNetworkSyncUpdatesConnectionStateAndCurrentNick() throws Exception {
+  void scalarNetworkSyncUpdatesConnectionStateNickAndNetworkName() throws Exception {
     ServerCatalog catalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
@@ -907,7 +914,19 @@ class QuasselCoreIrcClientServiceTest {
                   "setConnected",
                   false)));
       awaitCondition(() -> !service.quasselCoreNetworks("quassel").getFirst().connected());
-      assertEquals("local", service.quasselCoreNetworks("quassel").getFirst().networkName());
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "setNetworkName",
+                  "renamed")));
+      awaitCondition(
+          () -> "renamed".equals(service.quasselCoreNetworks("quassel").getFirst().networkName()));
+      assertEquals(
+          "renamed",
+          service.quasselCoreNetworks("quassel").getFirst().rawState().get("networkName"));
     } finally {
       events.cancel();
       service.shutdownNow();
@@ -1341,6 +1360,12 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
     connectAndAwaitEstablishedSession(service, events);
+
+    verify(datastreamCodec, org.mockito.Mockito.timeout(500L))
+        .writeSignalProxyInitRequest(socket.getOutputStream(), "BufferSyncer", "", List.of());
+    verify(datastreamCodec, org.mockito.Mockito.timeout(500L))
+        .writeSignalProxyInitRequest(socket.getOutputStream(), "Network", "5", List.of());
+    org.mockito.Mockito.clearInvocations(datastreamCodec);
 
     TestObserver<Void> connect = service.quasselCoreConnectNetwork("quassel", "5").test();
 
@@ -2052,8 +2077,10 @@ class QuasselCoreIrcClientServiceTest {
     assertEquals(150, service.negotiatedMonitorLimit("quassel"));
   }
 
-  @Test
-  void bufferSyncerMarkerSyncEmitsReadMarkerObservedEvent() throws Exception {
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"MarkerLines", "LastSeenMsg"})
+  void bufferSyncerInitDefersReadMarkerUntilMatchingBacklogArrives(String property)
+      throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
@@ -2083,12 +2110,28 @@ class QuasselCoreIrcClientServiceTest {
     socket.writeInbound(
         encodeSignalProxyFrame(
             List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
+                "BufferSyncer",
+                "",
+                property,
+                List.of(11, 42))));
+    awaitCondition(() -> service.isReadMarkerAvailable("quassel"));
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .noneMatch(IrcEvent.ReadMarkerObserved.class::isInstance));
+    long anchorSeconds = 1_700_000_500L;
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(
                 QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
-                "BufferSyncer".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "global".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "setMarkerLine(BufferId,MsgId)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 42))));
+                "BacklogManager",
+                "",
+                "receiveBacklog",
+                11,
+                List.of(
+                    new QuasselCoreDatastreamCodec.MessageValue(
+                        42L, anchorSeconds, 0x0001, 0x80, chan, "alice!u@h", "marker anchor")))));
 
     awaitEvent(events, ev -> ev instanceof IrcEvent.ReadMarkerObserved);
     assertTrue(
@@ -2098,7 +2141,10 @@ class QuasselCoreIrcClientServiceTest {
                 ev ->
                     ev instanceof IrcEvent.ReadMarkerObserved marker
                         && "#ircafe".equals(marker.target())
-                        && marker.marker().startsWith("timestamp=")));
+                        && java.time.Instant.ofEpochSecond(anchorSeconds)
+                            .equals(
+                                java.time.Instant.parse(
+                                    marker.marker().substring("timestamp=".length())))));
   }
 
   @Test
@@ -2843,10 +2889,14 @@ class QuasselCoreIrcClientServiceTest {
                 "global".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8))));
 
-    events.awaitCount(5);
-    assertInstanceOf(IrcEvent.ConnectionReady.class, events.values().get(3).event());
+    events.awaitCount(6);
+    IrcEvent.ConnectionFeaturesUpdated nativeFeatures =
+        assertInstanceOf(IrcEvent.ConnectionFeaturesUpdated.class, events.values().get(3).event());
+    assertEquals("quassel-buffer-syncer", nativeFeatures.source());
+    assertTrue(service.isReadMarkerAvailable("quassel"));
+    assertInstanceOf(IrcEvent.ConnectionReady.class, events.values().get(4).event());
     IrcEvent.ConnectionFeaturesUpdated updated =
-        assertInstanceOf(IrcEvent.ConnectionFeaturesUpdated.class, events.values().get(4).event());
+        assertInstanceOf(IrcEvent.ConnectionFeaturesUpdated.class, events.values().get(5).event());
     assertEquals("quassel-phase=sync-ready;detail=quassel-sync", updated.source());
   }
 

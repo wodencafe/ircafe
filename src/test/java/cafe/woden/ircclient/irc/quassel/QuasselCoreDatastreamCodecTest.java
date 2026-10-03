@@ -221,6 +221,18 @@ class QuasselCoreDatastreamCodecTest {
   }
 
   @Test
+  void writesInitRequestForUnnamedBufferSyncer() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    codec.writeSignalProxyInitRequest(out, "BufferSyncer", "", List.of());
+    var decoded = codec.readSignalProxyMessage(new java.io.ByteArrayInputStream(out.toByteArray()));
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_REQUEST, decoded.requestType());
+    assertEquals("BufferSyncer", decoded.className());
+    assertEquals("", decoded.objectName());
+    assertTrue(decoded.params().isEmpty());
+  }
+
+  @Test
   void writesSignalProxyHeartbeatProbeFrame() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
     ByteArrayOutputStream out = new ByteArrayOutputStream();

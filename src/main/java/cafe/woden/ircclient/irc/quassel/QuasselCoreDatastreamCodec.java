@@ -146,10 +146,6 @@ public class QuasselCoreDatastreamCodec {
     if (clazz.isEmpty()) {
       throw new IllegalArgumentException("className is blank");
     }
-    if (object.isEmpty()) {
-      throw new IllegalArgumentException("objectName is blank");
-    }
-
     ArrayList<Object> items = new ArrayList<>();
     items.add(SIGNAL_PROXY_INIT_REQUEST);
     items.add(clazz.getBytes(StandardCharsets.UTF_8));
