@@ -276,6 +276,14 @@ class QuasselCoreIrcClientServiceTest {
             List.of(
                 new QuasselCoreDatastreamCodec.BufferInfoValue(-1, 1, 0x01, -1, ""),
                 "/QUOTE WHOIS alice"));
+    service.sendRaw("quassel", "  PRIVMSG #ircafe :\u0001ACTION waves\u0001  ").blockingAwait();
+    verify(datastreamCodec)
+        .writeSignalProxyRpcCall(
+            socket.getOutputStream(),
+            "2sendInput(BufferInfo,QString)",
+            List.of(
+                new QuasselCoreDatastreamCodec.BufferInfoValue(-1, 1, 0x02, -1, "#ircafe"),
+                "/QUOTE PRIVMSG #ircafe :\u0001ACTION waves\u0001"));
   }
 
   @Test
@@ -365,12 +373,12 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 22),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 99),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100),
                 20,
                 0));
   }
@@ -814,6 +822,96 @@ class QuasselCoreIrcClientServiceTest {
     assertEquals("irc.libera.chat", libera.serverHost());
     assertEquals(6697, libera.serverPort());
     assertTrue(libera.useTls());
+  }
+
+  @Test
+  void scalarNetworkSyncUpdatesConnectionStateAndCurrentNick() throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            catalog, connector, probe, handshake, new QuasselCoreDatastreamCodec());
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "sync()",
+                  Map.of("isConnected", false, "networkName", "local"))));
+      awaitCondition(
+          () ->
+              service.quasselCoreNetworks("quassel").stream()
+                  .anyMatch(n -> "local".equals(n.networkName())));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "setConnected",
+                  true)));
+      awaitCondition(() -> service.quasselCoreNetworks("quassel").getFirst().connected());
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "setConnectionState",
+                  3)));
+      awaitCondition(
+          () ->
+              Integer.valueOf(3)
+                  .equals(
+                      service
+                          .quasselCoreNetworks("quassel")
+                          .getFirst()
+                          .rawState()
+                          .get("connectionState")));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "setMyNick",
+                  "actual-nick")));
+      awaitCondition(() -> "actual-nick".equals(service.currentNick("quassel").orElse("")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.NickChanged changed
+                  && "actual-nick".equals(changed.newNick()));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "setConnected",
+                  false)));
+      awaitCondition(() -> !service.quasselCoreNetworks("quassel").getFirst().connected());
+      assertEquals("local", service.quasselCoreNetworks("quassel").getFirst().networkName());
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test
@@ -2364,12 +2462,12 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 99),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100),
                 25,
                 0));
   }
@@ -2414,8 +2512,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 101),
@@ -2426,8 +2524,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 90),
@@ -2438,8 +2536,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 80),
@@ -2484,8 +2582,8 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
@@ -2547,12 +2645,12 @@ class QuasselCoreIrcClientServiceTest {
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
-            "global",
-            "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+            "",
+            "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 99),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100),
                 25,
                 0));
   }

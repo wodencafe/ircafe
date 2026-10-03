@@ -122,9 +122,6 @@ public class QuasselCoreDatastreamCodec {
     if (clazz.isEmpty()) {
       throw new IllegalArgumentException("className is blank");
     }
-    if (object.isEmpty()) {
-      throw new IllegalArgumentException("objectName is blank");
-    }
     if (slot.isEmpty()) {
       throw new IllegalArgumentException("slotName is blank");
     }
@@ -242,7 +239,8 @@ public class QuasselCoreDatastreamCodec {
     long daysSinceEpoch = Math.floorDiv(epochMs, MILLIS_PER_DAY);
     int msecsOfDay = (int) Math.floorMod(epochMs, MILLIS_PER_DAY);
     long julianDay = JULIAN_DAY_UNIX_EPOCH + daysSinceEpoch;
-    return new QtDateTimeValue((int) julianDay, msecsOfDay, 1);
+    // Qt_4_2 serializes QDateTimePrivate::UTC (2), rather than Qt::UTC (1).
+    return new QtDateTimeValue((int) julianDay, msecsOfDay, 2);
   }
 
   public static long epochMsFromQtDateTime(QtDateTimeValue value) {
@@ -537,12 +535,16 @@ public class QuasselCoreDatastreamCodec {
     }
     ensureRemaining(in, 5, "variant header");
     int type = in.getInt();
-    boolean isNull = in.get() != 0;
-    if (isNull) {
-      return null;
-    }
+    // Qt writes typed payloads even when QVariant's null flag is set. In particular,
+    // SignalProxy return values can keep that flag after a slot populates their list.
+    in.get();
 
     return switch (type) {
+      case 0 -> {
+        // Qt_4_2 writes a null QString for an invalid QVariant.
+        readQString(in);
+        yield null;
+      }
       case QT_BOOL -> {
         ensureRemaining(in, 1, "bool");
         yield in.get() != 0;

@@ -1,8 +1,12 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
@@ -13,6 +17,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -23,11 +28,13 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -37,7 +44,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
-/** Two-container Quassel E2E: Quassel Core + local IRC server, with a real bot message flow. */
+/** Real-core round trips for live messaging and stored backlog through a local IRC server. */
 class QuasselCoreContainerNetworkE2eIntegrationTest {
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(100);
   private static final Duration SETUP_TIMEOUT = Duration.ofSeconds(100);
@@ -54,6 +61,436 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
 
   @Test
   void quasselCoreCanCreateAndConnectNetworkThenReceiveLiveChannelMessage() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          int messageCount =
+              countChannelMessages(
+                  session.events(),
+                  session.serverId(),
+                  session.channel(),
+                  session.botNick(),
+                  session.cfg().messageText());
+          session.bot().privmsg(session.channel(), session.cfg().messageText());
+          IrcEvent.ChannelMessage message =
+              awaitChannelMessage(
+                  session.events(),
+                  session.serverId(),
+                  session.channel(),
+                  session.botNick(),
+                  session.cfg().messageText(),
+                  messageCount,
+                  MESSAGE_TIMEOUT);
+          assertTrue(
+              Long.parseLong(message.messageId()) > 0,
+              "live Quassel messages must carry core message IDs");
+        });
+  }
+
+  @Test
+  void outboundChannelPrivateNoticeAndActionMessagesReachAnotherIrcClient() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          QuasselCoreIrcClientService service = session.service();
+          String sid = session.serverId();
+          String from = service.currentNick(sid).orElseThrow();
+          service.sendToChannel(sid, session.channel(), "outbound channel message").blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "PRIVMSG", session.channel(), "outbound channel message", MESSAGE_TIMEOUT);
+          service
+              .sendPrivateMessage(sid, session.botNick(), "outbound private message")
+              .blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "PRIVMSG", session.botNick(), "outbound private message", MESSAGE_TIMEOUT);
+          service
+              .sendNoticeToChannel(sid, session.channel(), "outbound channel notice")
+              .blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "NOTICE", session.channel(), "outbound channel notice", MESSAGE_TIMEOUT);
+          service
+              .sendNoticePrivate(sid, session.botNick(), "outbound private notice")
+              .blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "NOTICE", session.botNick(), "outbound private notice", MESSAGE_TIMEOUT);
+          service
+              .sendRaw(sid, "PRIVMSG " + session.channel() + " :\u0001ACTION waves\u0001")
+              .blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "PRIVMSG", session.channel(), "\u0001ACTION waves\u0001", MESSAGE_TIMEOUT);
+        });
+  }
+
+  @Test
+  void backlogSelectorsReturnStoredMessagesWithStableIdsAfterReconnect() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          List<IrcEvent.ChannelMessage> seeded = new ArrayList<>();
+          for (int index = 0; index < 6; index++) {
+            String text = "backlog-roundtrip-" + index;
+            session.bot().privmsg(session.channel(), text);
+            seeded.add(
+                awaitChannelMessage(
+                    session.events(),
+                    session.serverId(),
+                    session.channel(),
+                    session.botNick(),
+                    text,
+                    0,
+                    MESSAGE_TIMEOUT));
+          }
+          List<String> ids = seeded.stream().map(IrcEvent.ChannelMessage::messageId).toList();
+          assertEquals(ids.size(), ids.stream().distinct().count());
+          for (int index = 1; index < ids.size(); index++) {
+            assertTrue(Long.parseLong(ids.get(index)) > Long.parseLong(ids.get(index - 1)));
+          }
+
+          List<ChatHistoryEntry> latest =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryLatest(session.serverId(), session.channel(), "*", 3));
+          assertHistoryMatches(latest, seeded.subList(3, 6), session.channel());
+          List<ChatHistoryEntry> before =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryBefore(
+                          session.serverId(), session.channel(), "msgid=" + ids.get(3), 2));
+          assertHistoryMatches(before, seeded.subList(1, 3), session.channel());
+          List<ChatHistoryEntry> after =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryLatest(
+                          session.serverId(), session.channel(), "msgid=" + ids.get(2), 3));
+          assertHistoryMatches(after, seeded.subList(3, 6), session.channel());
+
+          reconnectAndAwaitReady(session.service(), session.events(), session.serverId());
+          List<ChatHistoryEntry> replay =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryLatest(session.serverId(), session.channel(), "*", 3));
+          assertHistoryMatches(replay, seeded.subList(3, 6), session.channel());
+          assertEquals(
+              latest, replay, "stored backlog IDs, timestamps, and text must survive reconnect");
+        });
+  }
+
+  @Test
+  void duplicateChannelAndNickNamesStayIsolatedAcrossNetworks() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          E2eConfig cfg = session.cfg();
+          String secondAlias = cfg.ircAlias() + "-second";
+          try (GenericContainer<?> secondServer =
+              new GenericContainer<>(DockerImageName.parse(cfg.ircImage()))
+                  .withNetwork(session.dockerNetwork())
+                  .withNetworkAliases(secondAlias)
+                  .withExposedPorts(cfg.ircPort())
+                  .withEnv("TZ", "UTC")
+                  .withEnv("PUID", "1000")
+                  .withEnv("PGID", "1000")
+                  .waitingFor(Wait.forListeningPort())
+                  .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()))) {
+            secondServer.start();
+            try (SimpleIrcBot secondBot =
+                SimpleIrcBot.connect(
+                    secondServer.getHost(),
+                    secondServer.getMappedPort(cfg.ircPort()),
+                    cfg.botNick())) {
+              secondBot.join(cfg.channel(), IRC_BOT_TIMEOUT);
+              String secondName = "second-network";
+              session
+                  .service()
+                  .quasselCoreCreateNetwork(
+                      session.serverId(),
+                      new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
+                          secondName,
+                          secondAlias,
+                          cfg.ircPort(),
+                          false,
+                          "",
+                          true,
+                          null,
+                          List.of(cfg.channel())))
+                  .blockingAwait();
+              var secondNetwork =
+                  tryAwaitNetworkObserved(
+                      session.service(), session.serverId(), secondName, NETWORK_SYNC_TIMEOUT);
+              assertNotNull(secondNetwork, "second network must be observed by its requested name");
+              session
+                  .service()
+                  .quasselCoreConnectNetwork(
+                      session.serverId(), Integer.toString(secondNetwork.networkId()))
+                  .blockingAwait();
+              awaitNetworkConnected(
+                  session.service(),
+                  session.serverId(),
+                  secondNetwork.networkId(),
+                  NETWORK_SYNC_TIMEOUT);
+
+              String firstTarget = cfg.channel() + "{net:" + session.networkName() + "}";
+              String secondTarget = cfg.channel() + "{net:" + secondName + "}";
+              awaitJoinedChannel(session, secondTarget);
+              session.bot().privmsg(cfg.channel(), "first network history");
+              secondBot.privmsg(cfg.channel(), "second network history");
+              var firstMessage =
+                  awaitChannelMessage(
+                      session.events(),
+                      session.serverId(),
+                      firstTarget,
+                      cfg.botNick(),
+                      "first network history",
+                      0,
+                      MESSAGE_TIMEOUT);
+              var secondMessage =
+                  awaitChannelMessage(
+                      session.events(),
+                      session.serverId(),
+                      secondTarget,
+                      cfg.botNick(),
+                      "second network history",
+                      0,
+                      MESSAGE_TIMEOUT);
+
+              assertHistoryMatches(
+                  requestHistory(
+                      session,
+                      firstTarget,
+                      session
+                          .service()
+                          .requestChatHistoryLatest(session.serverId(), firstTarget, "*", 1)),
+                  List.of(firstMessage),
+                  firstTarget);
+              assertHistoryMatches(
+                  requestHistory(
+                      session,
+                      secondTarget,
+                      session
+                          .service()
+                          .requestChatHistoryLatest(session.serverId(), secondTarget, "*", 1)),
+                  List.of(secondMessage),
+                  secondTarget);
+
+              String from = session.service().currentNick(session.serverId()).orElseThrow();
+              session
+                  .service()
+                  .sendToChannel(session.serverId(), firstTarget, "first channel only")
+                  .blockingAwait();
+              session
+                  .service()
+                  .sendToChannel(session.serverId(), secondTarget, "second channel only")
+                  .blockingAwait();
+              session
+                  .service()
+                  .sendPrivateMessage(
+                      session.serverId(),
+                      cfg.botNick() + "{net:" + session.networkName() + "}",
+                      "first private only")
+                  .blockingAwait();
+              session
+                  .service()
+                  .sendPrivateMessage(
+                      session.serverId(),
+                      cfg.botNick() + "{net:" + secondName + "}",
+                      "second private only")
+                  .blockingAwait();
+              session
+                  .bot()
+                  .awaitMessages(
+                      from,
+                      Map.of(
+                          cfg.channel(), "first channel only", cfg.botNick(), "first private only"),
+                      List.of("second channel only", "second private only"),
+                      MESSAGE_TIMEOUT);
+              secondBot.awaitMessages(
+                  from,
+                  Map.of(
+                      cfg.channel(), "second channel only", cfg.botNick(), "second private only"),
+                  List.of("first channel only", "first private only"),
+                  MESSAGE_TIMEOUT);
+            } catch (Exception | AssertionError failure) {
+              throw new AssertionError(
+                  "Second IRC server log tail:\n" + containerLogTail(secondServer), failure);
+            }
+          }
+        });
+  }
+
+  @Test
+  void unexpectedTransportLossAutomaticallyReconnectsAndRestoresMessagingAndHistory()
+      throws Exception {
+    withConnectedNetwork(
+        session -> {
+          session.bot().privmsg(session.channel(), "before transport loss");
+          var original =
+              awaitChannelMessage(
+                  session.events(),
+                  session.serverId(),
+                  session.channel(),
+                  session.botNick(),
+                  "before transport loss",
+                  0,
+                  MESSAGE_TIMEOUT);
+          int readyCount =
+              countEvents(session.events(), session.serverId(), IrcEvent.ConnectionReady.class);
+          int reconnectCount =
+              countEvents(session.events(), session.serverId(), IrcEvent.Reconnecting.class);
+          int disconnectedCount =
+              countEvents(session.events(), session.serverId(), IrcEvent.Disconnected.class);
+          Socket originalSocket = session.transportSocket().get();
+          assertNotNull(originalSocket);
+          originalSocket.close(); // Drop only the transport; don't request a service disconnect.
+          awaitNextEvent(
+              session.events(),
+              session.serverId(),
+              IrcEvent.Disconnected.class,
+              disconnectedCount,
+              CONNECT_TIMEOUT);
+          awaitNextEvent(
+              session.events(),
+              session.serverId(),
+              IrcEvent.Reconnecting.class,
+              reconnectCount,
+              CONNECT_TIMEOUT);
+          awaitNextEvent(
+              session.events(),
+              session.serverId(),
+              IrcEvent.ConnectionReady.class,
+              readyCount,
+              CONNECT_TIMEOUT);
+          assertTrue(
+              session.transportSocket().get() != originalSocket,
+              "reconnect must open a new transport");
+          assertTrue(session.service().hasEstablishedQuasselCoreSession(session.serverId()));
+          assertHistoryMatches(
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryLatest(session.serverId(), session.channel(), "*", 1)),
+              List.of(original),
+              session.channel());
+          session.bot().privmsg(session.channel(), "after automatic reconnect");
+          awaitChannelMessage(
+              session.events(),
+              session.serverId(),
+              session.channel(),
+              session.botNick(),
+              "after automatic reconnect",
+              0,
+              MESSAGE_TIMEOUT);
+          String from = session.service().currentNick(session.serverId()).orElseThrow();
+          session
+              .service()
+              .sendToChannel(session.serverId(), session.channel(), "recovered outbound")
+              .blockingAwait();
+          session
+              .bot()
+              .awaitMessage(
+                  from, "PRIVMSG", session.channel(), "recovered outbound", MESSAGE_TIMEOUT);
+        });
+  }
+
+  private static void awaitJoinedChannel(ConnectedNetwork session, String channel)
+      throws InterruptedException {
+    long deadlineNs = System.nanoTime() + JOIN_TIMEOUT.toNanos();
+    while (System.nanoTime() < deadlineNs) {
+      if (matchingEvents(session.events(), session.serverId(), IrcEvent.JoinedChannel.class)
+          .stream()
+          .anyMatch(event -> channel.equals(event.channel()))) return;
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+    fail(
+        "Timed out waiting for joined channel "
+            + channel
+            + "; recent events: "
+            + summarizeRecentEvents(session.events(), session.serverId(), 16));
+  }
+
+  private static List<ChatHistoryEntry> requestHistory(
+      ConnectedNetwork session, Completable request) throws Exception {
+    return requestHistory(session, session.channel(), request);
+  }
+
+  private static List<ChatHistoryEntry> requestHistory(
+      ConnectedNetwork session, String target, Completable request) throws Exception {
+    int before =
+        countEvents(session.events(), session.serverId(), IrcEvent.ChatHistoryBatchReceived.class);
+    request.blockingAwait();
+    IrcEvent.ChatHistoryBatchReceived batch =
+        awaitNextEvent(
+            session.events(),
+            session.serverId(),
+            IrcEvent.ChatHistoryBatchReceived.class,
+            before,
+            MESSAGE_TIMEOUT);
+    assertEquals(target, batch.target());
+    assertTrue(
+        batch.batchId().startsWith("quassel-backlog-sync-"), "expected a BacklogManager response");
+    return batch.entries();
+  }
+
+  private static void assertHistoryMatches(
+      List<ChatHistoryEntry> actual, List<IrcEvent.ChannelMessage> expected, String target) {
+    assertEquals(
+        expected.stream().map(IrcEvent.ChannelMessage::text).toList(),
+        actual.stream().map(ChatHistoryEntry::text).toList(),
+        "history must be complete and ordered oldest to newest");
+    assertEquals(
+        expected.stream().map(IrcEvent.ChannelMessage::messageId).toList(),
+        actual.stream().map(ChatHistoryEntry::messageId).toList());
+    assertEquals(
+        expected.stream().map(IrcEvent.ChannelMessage::at).toList(),
+        actual.stream().map(ChatHistoryEntry::at).toList());
+    for (ChatHistoryEntry entry : actual) {
+      assertEquals(target, entry.target());
+      assertEquals(ChatHistoryEntry.Kind.PRIVMSG, entry.kind());
+      assertEquals(expected.getFirst().from(), entry.from());
+    }
+  }
+
+  @FunctionalInterface
+  private interface NetworkScenario {
+    void run(ConnectedNetwork session) throws Exception;
+  }
+
+  private record ConnectedNetwork(
+      QuasselCoreIrcClientService service,
+      TestSubscriber<ServerIrcEvent> events,
+      SimpleIrcBot bot,
+      E2eConfig cfg,
+      Network dockerNetwork,
+      String networkName,
+      AtomicReference<Socket> transportSocket) {
+    String serverId() {
+      return cfg.serverId();
+    }
+
+    String channel() {
+      return cfg.channel();
+    }
+
+    String botNick() {
+      return cfg.botNick();
+    }
+  }
+
+  private static void withConnectedNetwork(NetworkScenario scenario) throws Exception {
     E2eConfig cfg = E2eConfig.fromSystem();
     Assumptions.assumeTrue(
         cfg.enabled(),
@@ -90,7 +527,8 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
 
       RuntimeCoreConfig runtimeCfg =
           cfg.toRuntimeConfig(core.getHost(), core.getMappedPort(cfg.quasselPort()));
-      QuasselCoreIrcClientService service = newService(runtimeCfg);
+      AtomicReference<Socket> transportSocket = new AtomicReference<>();
+      QuasselCoreIrcClientService service = newService(runtimeCfg, transportSocket);
       TestSubscriber<ServerIrcEvent> events = service.events().test();
 
       try (SimpleIrcBot bot =
@@ -110,12 +548,15 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
             tryAwaitNetworkObserved(service, sid, networkName, Duration.ofSeconds(20));
         if (createdNetwork == null) {
           reconnectAndAwaitReady(service, events, sid);
-          createdNetwork = awaitAnyNetworkObserved(service, sid, NETWORK_SYNC_TIMEOUT);
+          createdNetwork = tryAwaitNetworkObserved(service, sid, networkName, NETWORK_SYNC_TIMEOUT);
         }
-        Assumptions.assumeTrue(
-            createdNetwork != null,
-            "No Quassel network observed after create request; core image may not support runtime"
-                + " createNetwork in this mode. Recent events: "
+        assertNotNull(
+            createdNetwork,
+            "Requested Quassel network '"
+                + networkName
+                + "' was not observed after creation; networks="
+                + service.quasselCoreNetworks(sid)
+                + "; recent events: "
                 + summarizeRecentEvents(events, sid, 16));
         service
             .quasselCoreConnectNetwork(sid, Integer.toString(createdNetwork.networkId()))
@@ -129,17 +570,15 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
             awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
         assertEquals(cfg.channel(), joined.channel());
 
-        int messageCount =
-            countChannelMessages(events, sid, cfg.channel(), cfg.botNick(), cfg.messageText());
-        bot.privmsg(cfg.channel(), cfg.messageText());
-        awaitChannelMessage(
-            events,
-            sid,
-            cfg.channel(),
-            cfg.botNick(),
-            cfg.messageText(),
-            messageCount,
-            MESSAGE_TIMEOUT);
+        scenario.run(
+            new ConnectedNetwork(service, events, bot, cfg, network, networkName, transportSocket));
+      } catch (Exception | AssertionError failure) {
+        throw new AssertionError(
+            "Quassel network round trip failed; core log tail:\n"
+                + containerLogTail(core)
+                + "\nIRC server log tail:\n"
+                + containerLogTail(ircServer),
+            failure);
       } finally {
         try {
           service.disconnect(runtimeCfg.serverId(), "container e2e shutdown").blockingAwait();
@@ -157,15 +596,30 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     }
   }
 
-  private static QuasselCoreIrcClientService newService(RuntimeCoreConfig cfg) {
+  private static String containerLogTail(GenericContainer<?> container) {
+    String logs = container.getLogs();
+    return logs.substring(Math.max(0, logs.length() - 8_192));
+  }
+
+  private static QuasselCoreIrcClientService newService(
+      RuntimeCoreConfig cfg, AtomicReference<Socket> transportSocket) throws Exception {
     IrcProperties.Server server = cfg.toServer();
 
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     when(serverCatalog.require(cfg.serverId())).thenReturn(server);
     when(serverCatalog.find(cfg.serverId())).thenReturn(Optional.of(server));
+    when(serverCatalog.containsId(cfg.serverId())).thenReturn(true);
 
     ServerProxyResolver proxyResolver = new ServerProxyResolver(serverCatalog);
-    QuasselCoreSocketConnector socketConnector = new QuasselCoreSocketConnector(proxyResolver);
+    QuasselCoreSocketConnector socketConnector = spy(new QuasselCoreSocketConnector(proxyResolver));
+    doAnswer(
+            invocation -> {
+              Socket socket = (Socket) invocation.callRealMethod();
+              transportSocket.set(socket);
+              return socket;
+            })
+        .when(socketConnector)
+        .connect(server);
     QuasselCoreProtocolProbe protocolProbe = new QuasselCoreProtocolProbe();
     QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
     QuasselCoreAuthHandshake authHandshake = new QuasselCoreAuthHandshake(datastreamCodec);
@@ -238,21 +692,6 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     return null;
   }
 
-  private static QuasselCoreControlPort.QuasselCoreNetworkSummary awaitAnyNetworkObserved(
-      QuasselCoreIrcClientService service, String serverId, Duration timeout)
-      throws InterruptedException {
-    long deadlineNs = System.nanoTime() + timeout.toNanos();
-    while (System.nanoTime() < deadlineNs) {
-      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-          service.quasselCoreNetworks(serverId);
-      if (!networks.isEmpty()) {
-        return networks.get(0);
-      }
-      Thread.sleep(POLL_INTERVAL_MS);
-    }
-    return null;
-  }
-
   private static void awaitNetworkConnected(
       QuasselCoreIrcClientService service, String serverId, int networkId, Duration timeout)
       throws InterruptedException {
@@ -318,7 +757,7 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     return count;
   }
 
-  private static void awaitChannelMessage(
+  private static IrcEvent.ChannelMessage awaitChannelMessage(
       TestSubscriber<ServerIrcEvent> events,
       String serverId,
       String channel,
@@ -331,7 +770,13 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     while (System.nanoTime() < deadlineNs) {
       int seen = countChannelMessages(events, serverId, channel, fromNick, expectedTextPart);
       if (seen > alreadySeenCount) {
-        return;
+        return matchingEvents(events, serverId, IrcEvent.ChannelMessage.class).stream()
+            .filter(message -> channel.equalsIgnoreCase(message.channel()))
+            .filter(message -> fromNick.equalsIgnoreCase(message.from()))
+            .filter(message -> message.text().contains(expectedTextPart))
+            .skip(alreadySeenCount)
+            .findFirst()
+            .orElseThrow();
       }
       Thread.sleep(POLL_INTERVAL_MS);
     }
@@ -342,6 +787,7 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
             + channel
             + "; recent events: "
             + summarizeRecentEvents(events, serverId, 16));
+    throw new IllegalStateException("unreachable");
   }
 
   private static <T extends IrcEvent> int countEvents(
@@ -636,7 +1082,7 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         throw new IllegalArgumentException("bot nick is blank");
       }
       Socket socket = new Socket(host, port);
-      socket.setSoTimeout((int) IRC_BOT_TIMEOUT.toMillis());
+      socket.setSoTimeout(250);
       BufferedReader in =
           new BufferedReader(
               new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -680,6 +1126,68 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
       sendLine("PRIVMSG " + chan + " :" + msg);
     }
 
+    void awaitMessage(String from, String command, String target, String text, Duration timeout)
+        throws Exception {
+      long deadlineNs = System.nanoTime() + timeout.toNanos();
+      List<String> recent = new ArrayList<>();
+      while (System.nanoTime() < deadlineNs) {
+        String line = readLine();
+        if (line == null) continue;
+        if (line.startsWith("PING ")) {
+          sendLine("PONG " + line.substring(5));
+          continue;
+        }
+        recent.add(line);
+        if (recent.size() > 16) recent.removeFirst();
+        if (line.startsWith(":" + from + "!")
+            && line.endsWith(" " + command + " " + target + " :" + text)) return;
+      }
+      fail(
+          "Timed out waiting for "
+              + command
+              + " from "
+              + from
+              + " to "
+              + target
+              + " with text '"
+              + text
+              + "'; recent IRC lines: "
+              + recent);
+    }
+
+    void awaitMessages(
+        String from, Map<String, String> expectedByTarget, List<String> forbidden, Duration timeout)
+        throws Exception {
+      Map<String, String> pending = new LinkedHashMap<>(expectedByTarget);
+      long deadlineNs = System.nanoTime() + timeout.toNanos();
+      long quietDeadlineNs = Long.MAX_VALUE;
+      List<String> recent = new ArrayList<>();
+      while (System.nanoTime() < Math.min(deadlineNs, quietDeadlineNs)) {
+        String line = readLine();
+        if (line == null) continue;
+        if (line.startsWith("PING ")) {
+          sendLine("PONG " + line.substring(5));
+          continue;
+        }
+        recent.add(line);
+        if (recent.size() > 16) recent.removeFirst();
+        for (String text : forbidden) {
+          assertTrue(!line.endsWith(" :" + text), "message leaked to wrong network: " + line);
+        }
+        if (!line.startsWith(":" + from + "!")) continue;
+        pending
+            .entrySet()
+            .removeIf(
+                entry -> line.endsWith(" PRIVMSG " + entry.getKey() + " :" + entry.getValue()));
+        if (pending.isEmpty() && quietDeadlineNs == Long.MAX_VALUE) {
+          quietDeadlineNs = System.nanoTime() + Duration.ofSeconds(1).toNanos();
+        }
+      }
+      assertTrue(
+          pending.isEmpty(),
+          "Missing routed messages " + pending + "; recent IRC lines: " + recent);
+    }
+
     private void awaitWelcome(Duration timeout) throws Exception {
       long deadlineNs = System.nanoTime() + timeout.toNanos();
       while (System.nanoTime() < deadlineNs) {
@@ -698,7 +1206,9 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
 
     private String readLine() throws IOException {
       try {
-        return in.readLine();
+        String line = in.readLine();
+        if (line == null) throw new IOException("IRC bot connection closed while awaiting a reply");
+        return line;
       } catch (java.net.SocketTimeoutException timeout) {
         return null;
       }

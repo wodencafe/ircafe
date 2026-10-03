@@ -95,9 +95,8 @@ class QuasselCoreContainerIntegrationTest {
 
         service.requestLagProbe(runtimeCfg.serverId()).blockingAwait();
         OptionalLong lagMs = awaitLagSample(service, runtimeCfg.serverId(), LAG_TIMEOUT);
-        if (lagMs.isPresent()) {
-          assertTrue(lagMs.orElseThrow() >= 0L);
-        }
+        assertTrue(lagMs.isPresent(), "core must reply to the requested heartbeat probe");
+        assertTrue(lagMs.orElseThrow() >= 0L);
 
         int disconnectedCount =
             countEvents(events, runtimeCfg.serverId(), IrcEvent.Disconnected.class);
@@ -184,9 +183,8 @@ class QuasselCoreContainerIntegrationTest {
 
         service.requestLagProbe(sid).blockingAwait();
         OptionalLong lagMs = awaitLagSample(service, sid, LAG_TIMEOUT);
-        if (lagMs.isPresent()) {
-          assertTrue(lagMs.orElseThrow() >= 0L);
-        }
+        assertTrue(lagMs.isPresent(), "core must reply to the requested heartbeat probe");
+        assertTrue(lagMs.orElseThrow() >= 0L);
       } finally {
         try {
           service

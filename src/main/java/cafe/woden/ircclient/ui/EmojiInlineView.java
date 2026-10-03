@@ -11,19 +11,64 @@ import java.awt.Shape;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
 import javax.swing.text.LabelView;
 import javax.swing.text.Position;
+import javax.swing.text.View;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Paints emoji-tagged styled-document runs using bundled image assets instead of font glyphs. */
 final class EmojiInlineView extends LabelView {
+  private static final Logger log = LoggerFactory.getLogger(EmojiInlineView.class);
+  private static final ImageSource BUNDLED_IMAGES =
+      new ImageSource() {
+        @Override
+        public EmojiImageSupport.CachedImage lookup(String text, int size) {
+          return EmojiImageSupport.cachedImageFor(text, size);
+        }
 
+        @Override
+        public void load(String text, int size) {
+          EmojiImageSupport.imageFor(text, size);
+        }
+      };
+
+  interface ImageSource {
+    EmojiImageSupport.CachedImage lookup(String text, int size);
+
+    void load(String text, int size);
+  }
+
+  private final ImageSource images;
   private String cachedText = "";
   private List<String> cachedClusters = List.of();
+  private SwingWorker<Void, Void> imageWorker;
+  private Timer retryTimer;
 
   EmojiInlineView(Element elem) {
+    this(elem, BUNDLED_IMAGES);
+  }
+
+  EmojiInlineView(Element elem, ImageSource images) {
     super(elem);
+    this.images = Objects.requireNonNull(images, "images");
+  }
+
+  @Override
+  public void setParent(View parent) {
+    if (parent == null) {
+      SwingWorker<Void, Void> worker = imageWorker;
+      imageWorker = null;
+      if (worker != null) worker.cancel(true);
+      if (retryTimer != null) retryTimer.stop();
+    }
+    super.setParent(parent);
   }
 
   @Override
@@ -58,9 +103,12 @@ final class EmojiInlineView extends LabelView {
       int x = bounds.x;
       int y = bounds.y + Math.max(0, (bounds.height - boxSize) / 2);
       int baseline = bounds.y + metrics.getAscent();
+      boolean needsLoad = false;
 
       for (String cluster : clusters) {
-        BufferedImage image = EmojiImageSupport.imageFor(cluster, boxSize);
+        EmojiImageSupport.CachedImage cached = images.lookup(cluster, boxSize);
+        needsLoad |= !cached.resolved();
+        BufferedImage image = cached.image();
         if (image != null) {
           g2.drawImage(image, x, y, null);
           x += boxSize;
@@ -68,11 +116,63 @@ final class EmojiInlineView extends LabelView {
         }
 
         g2.setFont(font);
+        g2.setColor(getForeground());
         g2.drawString(cluster, x, baseline);
-        x += metrics.stringWidth(cluster);
+        // Keep layout stable while the image is loading (and for unsupported emoji).
+        x += boxSize;
       }
+      if (needsLoad) requestImages(clusters, boxSize);
     } finally {
       g2.dispose();
+    }
+  }
+
+  private void requestImages(List<String> clusters, int size) {
+    if (imageWorker != null || getParent() == null || getContainer() == null) return;
+    if (retryTimer != null && retryTimer.isRunning()) return;
+    List<String> requests = clusters.stream().distinct().toList();
+    SwingWorker<Void, Void> worker =
+        new SwingWorker<>() {
+          @Override
+          protected Void doInBackground() {
+            for (String text : requests) {
+              if (isCancelled()) break;
+              images.load(text, size);
+            }
+            return null;
+          }
+
+          @Override
+          protected void done() {
+            if (imageWorker != this) return;
+            imageWorker = null;
+            try {
+              get();
+              repaintIfAttached();
+            } catch (CancellationException ignored) {
+              // Detached views cancel their load; they must not repaint their former container.
+            } catch (InterruptedException ex) {
+              Thread.currentThread().interrupt();
+            } catch (ExecutionException ex) {
+              log.warn("[ircafe] loading inline emoji images failed", ex.getCause());
+            }
+          }
+        };
+    imageWorker = worker;
+    if (!EmojiImageSupport.executeLoad(worker)) {
+      imageWorker = null;
+      worker.cancel(false);
+      if (retryTimer == null) {
+        retryTimer = new Timer(100, event -> repaintIfAttached());
+        retryTimer.setRepeats(false);
+      }
+      retryTimer.restart();
+    }
+  }
+
+  private void repaintIfAttached() {
+    if (getParent() != null && getContainer() != null && getContainer().isDisplayable()) {
+      getContainer().repaint();
     }
   }
 
@@ -118,7 +218,7 @@ final class EmojiInlineView extends LabelView {
   private int emojiBoxSize() {
     Font font = getFont();
     float size = font != null ? font.getSize2D() : 12f;
-    return Math.max(12, Math.round(size * 1.25f));
+    return Math.clamp(Math.round(size * 1.25f), 12, 256);
   }
 
   private List<String> emojiClusters() {
