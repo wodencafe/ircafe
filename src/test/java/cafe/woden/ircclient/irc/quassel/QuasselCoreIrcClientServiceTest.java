@@ -28,6 +28,7 @@ import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -2586,7 +2587,7 @@ class QuasselCoreIrcClientServiceTest {
             "requestBacklog",
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 80),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 81),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100),
                 40,
                 0));
@@ -2639,7 +2640,7 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
-  void requestChatHistoryBeforeTimestampSelectorUsesObservedMessageAnchor() throws Exception {
+  void timestampHistorySelectorsUseCachedSamplesForBoundsAndMixedRangeDirection() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
@@ -2696,9 +2697,139 @@ class QuasselCoreIrcClientServiceTest {
             List.of(
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
-                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 100),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 200),
                 25,
                 0));
+    service
+        .requestChatHistoryBetween("quassel", "#ircafe", "msgid=100", selector, 25)
+        .blockingAwait();
+    service
+        .requestChatHistoryBetween("quassel", "#ircafe", selector, "msgid=100", 25)
+        .blockingAwait();
+    verify(datastreamCodec, times(2))
+        .writeSignalProxySync(
+            socket.getOutputStream(),
+            "BacklogManager",
+            "",
+            "requestBacklog",
+            List.of(
+                new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 101),
+                new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 200),
+                25,
+                0));
+  }
+
+  @Test
+  void emptyOrNonTextBacklogResponsesEmitAnEmptyHistoryBatchForTheKnownBuffer() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreDatastreamCodec.BufferInfoValue channel =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#ircafe");
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of(11, channel)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      for (List<Object> payload :
+          List.of(
+              List.<Object>of(11, -1, -1, 10, 0, List.of()),
+              List.<Object>of(channel, List.of()),
+              List.<Object>of(
+                  11,
+                  List.of(
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          42, 1_700_000_000L, 0x0020, 0x80, channel, "alice!u@h", "joined"))))) {
+        long before =
+            events.values().stream()
+                .filter(event -> event.event() instanceof IrcEvent.ChatHistoryBatchReceived)
+                .count();
+        List<Object> frame =
+            new ArrayList<>(
+                List.of(
+                    QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                    "BacklogManager",
+                    "",
+                    "receiveBacklog"));
+        frame.addAll(payload);
+        socket.writeInbound(encodeSignalProxyFrame(frame));
+        awaitCondition(
+            () ->
+                events.values().stream()
+                        .filter(event -> event.event() instanceof IrcEvent.ChatHistoryBatchReceived)
+                        .count()
+                    > before);
+        IrcEvent.ChatHistoryBatchReceived batch =
+            events.values().stream()
+                .map(ServerIrcEvent::event)
+                .filter(IrcEvent.ChatHistoryBatchReceived.class::isInstance)
+                .map(IrcEvent.ChatHistoryBatchReceived.class::cast)
+                .toList()
+                .getLast();
+        assertEquals("#ircafe", batch.target());
+        assertTrue(batch.entries().isEmpty());
+      }
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  999,
+                  11,
+                  -1,
+                  10,
+                  0,
+                  List.of())));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  11,
+                  List.of(
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          43,
+                          1_700_000_001L,
+                          0x0001,
+                          0x80,
+                          channel,
+                          "alice!u@h",
+                          "reply sentinel")))));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ChatHistoryBatchReceived batch
+                  && batch.entries().stream()
+                      .anyMatch(entry -> "reply sentinel".equals(entry.text())));
+      assertEquals(
+          4,
+          events.values().stream()
+              .filter(event -> event.event() instanceof IrcEvent.ChatHistoryBatchReceived)
+              .count(),
+          "the unknown buffer ID must not be confused with a message ID for a known buffer");
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test

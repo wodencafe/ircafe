@@ -39,6 +39,16 @@ final class QuasselCoreHistorySupport {
     return state == null ? UNKNOWN_MSG_ID : state.anchorForTimestamp(timestamp);
   }
 
+  long firstMsgIdAtOrAfterTimestamp(String target, Instant timestamp) {
+    TargetHistoryState state = historyByTarget.get(normalizeHistoryTargetKey(target));
+    return state == null ? UNKNOWN_MSG_ID : state.firstMsgIdAtTimestampBoundary(timestamp, false);
+  }
+
+  long firstMsgIdAfterTimestamp(String target, Instant timestamp) {
+    TargetHistoryState state = historyByTarget.get(normalizeHistoryTargetKey(target));
+    return state == null ? UNKNOWN_MSG_ID : state.firstMsgIdAtTimestampBoundary(timestamp, true);
+  }
+
   long timestampForMsgId(String target, long msgId) {
     if (msgId <= 0L) return UNKNOWN_MSG_ID;
     TargetHistoryState state = historyByTarget.get(normalizeHistoryTargetKey(target));
@@ -171,6 +181,22 @@ final class QuasselCoreHistorySupport {
       }
       long midpoint = oldestTsEpochMs + ((newestTsEpochMs - oldestTsEpochMs) / 2L);
       return ts <= midpoint ? oldestMsgId : newestMsgId;
+    }
+
+    synchronized long firstMsgIdAtTimestampBoundary(Instant timestamp, boolean exclusive) {
+      if (newestMsgId <= 0L) return UNKNOWN_MSG_ID;
+      long ts = (timestamp == null ? Instant.now() : timestamp).toEpochMilli();
+      if (ts < oldestTsEpochMs || (!exclusive && ts == oldestTsEpochMs)) {
+        return oldestMsgId;
+      }
+      for (Map.Entry<Long, Long> sample : timestampByMsgId.entrySet()) {
+        if (sample.getValue() > ts || (!exclusive && sample.getValue() == ts)) {
+          return sample.getKey();
+        }
+      }
+      // Core accepts an inclusive lower / exclusive upper ID bound. Beyond the newest
+      // observation this includes all known messages for BEFORE and none for LATEST.
+      return newestMsgId + 1L;
     }
 
     synchronized long timestampForMsgId(long messageId) {

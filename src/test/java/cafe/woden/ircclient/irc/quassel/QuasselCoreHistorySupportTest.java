@@ -62,6 +62,26 @@ class QuasselCoreHistorySupportTest {
   }
 
   @Test
+  void timestampBoundariesUseMiddleSamplesAndExcludeEveryMessageSharingTheTimestamp() {
+    QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
+    history.observe("#room", 10, Instant.ofEpochMilli(1000));
+    history.observe("#room", 20, Instant.ofEpochMilli(2000));
+    history.observe("#room", 21, Instant.ofEpochMilli(2000));
+    history.observe("#room", 30, Instant.ofEpochMilli(3000));
+    history.observe("#other", 100, Instant.ofEpochMilli(2000));
+    assertEquals(20, history.firstMsgIdAtOrAfterTimestamp("#ROOM", Instant.ofEpochMilli(2000)));
+    assertEquals(30, history.firstMsgIdAfterTimestamp("#room", Instant.ofEpochMilli(2000)));
+    assertEquals(20, history.firstMsgIdAtOrAfterTimestamp("#room", Instant.ofEpochMilli(1500)));
+    assertEquals(20, history.firstMsgIdAfterTimestamp("#room", Instant.ofEpochMilli(1500)));
+    assertEquals(10, history.firstMsgIdAtOrAfterTimestamp("#room", Instant.ofEpochMilli(999)));
+    assertEquals(10, history.firstMsgIdAfterTimestamp("#room", Instant.ofEpochMilli(999)));
+    assertEquals(30, history.firstMsgIdAtOrAfterTimestamp("#room", Instant.ofEpochMilli(3000)));
+    assertEquals(31, history.firstMsgIdAfterTimestamp("#room", Instant.ofEpochMilli(3000)));
+    assertEquals(31, history.firstMsgIdAtOrAfterTimestamp("#room", Instant.ofEpochMilli(4000)));
+    assertEquals(-1, history.firstMsgIdAfterTimestamp("#unknown", Instant.ofEpochMilli(2000)));
+  }
+
+  @Test
   void readMarkersUseObservedIdsAndIncludeAllMessagesSharingTheTimestamp() {
     QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
     history.observe("#room", 10, Instant.ofEpochMilli(1000));

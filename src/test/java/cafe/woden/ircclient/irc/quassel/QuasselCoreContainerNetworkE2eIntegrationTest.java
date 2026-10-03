@@ -27,6 +27,7 @@ import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -188,6 +189,403 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
           assertHistoryMatches(replay, seeded.subList(3, 6), session.channel());
           assertEquals(
               latest, replay, "stored backlog IDs, timestamps, and text must survive reconnect");
+        });
+  }
+
+  @Test
+  void offlineMessagesCatchUpThroughOverlappingPagesWithStableIds() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          String sid = session.serverId();
+          List<IrcEvent.ChannelMessage> expected = seedMessages(session, "before-offline-", 2);
+          QuasselCoreIrcClientService observer =
+              newService(session.runtimeConfig(), new AtomicReference<>());
+          TestSubscriber<ServerIrcEvent> observed = observer.events().test();
+          try {
+            observer.connect(sid).blockingAwait();
+            awaitNextEvent(observed, sid, IrcEvent.ConnectionReady.class, 0, CONNECT_TIMEOUT);
+            int readyCount = countEvents(session.events(), sid, IrcEvent.ConnectionReady.class);
+            session.service().disconnect(sid, "offline catch-up test").blockingAwait();
+            for (int index = 0; index < 4; index++) {
+              String text = "while-offline-" + index;
+              session.bot().privmsg(session.channel(), text);
+              // A second client confirms that Core stored each message before reconnecting.
+              expected.add(
+                  awaitChannelMessage(
+                      observed,
+                      sid,
+                      session.channel(),
+                      session.botNick(),
+                      text,
+                      0,
+                      MESSAGE_TIMEOUT));
+            }
+            assertEquals(
+                0,
+                countChannelMessages(
+                    session.events(), sid, session.channel(), session.botNick(), "while-offline-"));
+            session.service().connect(sid).blockingAwait();
+            awaitNextEvent(
+                session.events(), sid, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
+            expected.addAll(seedMessages(session, "after-offline-", 1));
+
+            List<ChatHistoryEntry> latest =
+                requestHistory(
+                    session,
+                    session.service().requestChatHistoryLatest(sid, session.channel(), "*", 4));
+            assertHistoryMatches(latest, expected.subList(3, 7), session.channel());
+            List<ChatHistoryEntry> overlap =
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBefore(
+                            sid, session.channel(), "msgid=" + expected.get(4).messageId(), 4));
+            assertHistoryMatches(overlap, expected.subList(0, 4), session.channel());
+            Map<String, ChatHistoryEntry> byId = new LinkedHashMap<>();
+            overlap.forEach(entry -> byId.put(entry.messageId(), entry));
+            latest.forEach(entry -> byId.put(entry.messageId(), entry));
+            assertHistoryMatches(new ArrayList<>(byId.values()), expected, session.channel());
+            assertEquals(
+                overlap.getLast(), latest.getFirst(), "overlapping entries must be identical");
+          } finally {
+            observed.cancel();
+            observer.shutdownNow();
+          }
+        });
+  }
+
+  @Test
+  void boundedAndAroundHistoryExcludeBetweenAnchorsAndIncludeSurroundingContext() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          List<IrcEvent.ChannelMessage> seeded = seedMessages(session, "history-window-", 7);
+          String start = "msgid=" + seeded.get(1).messageId();
+          String end = "msgid=" + seeded.get(5).messageId();
+          List<ChatHistoryEntry> between =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryBetween(
+                          session.serverId(), session.channel(), start, end, 10));
+          assertHistoryMatches(between, seeded.subList(2, 5), session.channel());
+          List<ChatHistoryEntry> reverse =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryBetween(
+                          session.serverId(), session.channel(), end, start, 10));
+          assertEquals(between, reverse);
+          List<ChatHistoryEntry> around =
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryAround(
+                          session.serverId(),
+                          session.channel(),
+                          "msgid=" + seeded.get(3).messageId(),
+                          4));
+          assertTrue(around.size() <= 4);
+          assertTrue(
+              around.stream()
+                  .anyMatch(entry -> entry.messageId().equals(seeded.get(2).messageId())));
+          assertTrue(
+              around.stream()
+                  .anyMatch(entry -> entry.messageId().equals(seeded.get(3).messageId())));
+          assertTrue(
+              around.stream()
+                  .anyMatch(entry -> entry.messageId().equals(seeded.get(4).messageId())));
+          List<IrcEvent.ChannelMessage> expectedAround =
+              seeded.stream()
+                  .filter(
+                      message ->
+                          around.stream()
+                              .anyMatch(entry -> entry.messageId().equals(message.messageId())))
+                  .toList();
+          assertHistoryMatches(around, expectedAround, session.channel());
+        });
+  }
+
+  @Test
+  void timestampHistoryUsesObservedMiddleBoundaryBeforeAndAfterReconnect() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          List<IrcEvent.ChannelMessage> seeded = seedMessages(session, "timestamp-before-", 2);
+          awaitNextTimestampSecond(seeded.getLast().at());
+          seeded.addAll(seedMessages(session, "timestamp-boundary-", 2));
+          Instant boundary = seeded.get(2).at();
+          awaitNextTimestampSecond(seeded.getLast().at());
+          seeded.addAll(seedMessages(session, "timestamp-after-", 2));
+          List<IrcEvent.ChannelMessage> expectedBefore =
+              seeded.stream().filter(message -> message.at().isBefore(boundary)).toList();
+          List<IrcEvent.ChannelMessage> expectedAfter =
+              seeded.stream().filter(message -> message.at().isAfter(boundary)).toList();
+          for (int attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) {
+              reconnectAndAwaitReady(session.service(), session.events(), session.serverId());
+              // Repopulate the bounded timestamp index from stored history on the new session.
+              assertHistoryMatches(
+                  requestHistory(
+                      session,
+                      session
+                          .service()
+                          .requestChatHistoryLatest(session.serverId(), session.channel(), "*", 6)),
+                  seeded,
+                  session.channel());
+            }
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBefore(
+                            session.serverId(), session.channel(), "timestamp=" + boundary, 2)),
+                expectedBefore,
+                session.channel());
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryLatest(
+                            session.serverId(), session.channel(), "timestamp=" + boundary, 6)),
+                expectedAfter,
+                session.channel());
+            String firstId = seeded.getFirst().messageId();
+            List<IrcEvent.ChannelMessage> expectedMixed =
+                expectedBefore.stream()
+                    .filter(
+                        message -> Long.parseLong(message.messageId()) > Long.parseLong(firstId))
+                    .toList();
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBetween(
+                            session.serverId(),
+                            session.channel(),
+                            "msgid=" + firstId,
+                            "timestamp=" + boundary,
+                            6)),
+                expectedMixed,
+                session.channel());
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBetween(
+                            session.serverId(),
+                            session.channel(),
+                            "timestamp=" + boundary,
+                            "msgid=" + firstId,
+                            6)),
+                expectedMixed,
+                session.channel());
+            Instant lower = seeded.getFirst().at();
+            Instant upper = seeded.getLast().at();
+            List<IrcEvent.ChannelMessage> expectedBetween =
+                seeded.stream()
+                    .filter(message -> message.at().isAfter(lower) && message.at().isBefore(upper))
+                    .toList();
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBetween(
+                            session.serverId(),
+                            session.channel(),
+                            "timestamp=" + lower,
+                            "timestamp=" + upper,
+                            6)),
+                expectedBetween,
+                session.channel());
+            assertHistoryMatches(
+                requestHistory(
+                    session,
+                    session
+                        .service()
+                        .requestChatHistoryBetween(
+                            session.serverId(),
+                            session.channel(),
+                            "timestamp=" + upper,
+                            "timestamp=" + lower,
+                            6)),
+                expectedBetween,
+                session.channel());
+          }
+        });
+  }
+
+  @Test
+  void emptyHistoryReplyCompletesAndNextRequestStillReturnsMessages() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          List<IrcEvent.ChannelMessage> seeded = seedMessages(session, "empty-history-", 1);
+          assertTrue(
+              requestHistory(
+                      session,
+                      session
+                          .service()
+                          .requestChatHistoryLatest(
+                              session.serverId(),
+                              session.channel(),
+                              "msgid=" + seeded.getFirst().messageId(),
+                              10))
+                  .isEmpty());
+          // This response contains only channel events (JOIN/MODE/TOPIC), which are filtered
+          // from chat history but must still complete the request.
+          assertTrue(
+              requestHistory(
+                      session,
+                      session
+                          .service()
+                          .requestChatHistoryBefore(
+                              session.serverId(),
+                              session.channel(),
+                              "msgid=" + seeded.getFirst().messageId(),
+                              50))
+                  .isEmpty());
+          assertHistoryMatches(
+              requestHistory(
+                  session,
+                  session
+                      .service()
+                      .requestChatHistoryLatest(session.serverId(), session.channel(), "*", 1)),
+              seeded,
+              session.channel());
+        });
+  }
+
+  @Test
+  void inboundPrivateNoticeAndActionMessagesKeepTheirKindsAndIdsInHistory() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          String sid = session.serverId();
+          String ourNick = session.service().currentNick(sid).orElseThrow();
+          session.bot().privmsg(ourNick, "incoming private");
+          IrcEvent.PrivateMessage privateMessage =
+              awaitMatchingEvent(
+                  session,
+                  IrcEvent.PrivateMessage.class,
+                  event -> "incoming private".equals(event.text()));
+          session.bot().sendLine("NOTICE " + ourNick + " :incoming private notice");
+          IrcEvent.Notice privateNotice =
+              awaitMatchingEvent(
+                  session,
+                  IrcEvent.Notice.class,
+                  event -> "incoming private notice".equals(event.text()));
+          session.bot().privmsg(ourNick, "\u0001ACTION private wave\u0001");
+          IrcEvent.PrivateAction privateAction =
+              awaitMatchingEvent(
+                  session,
+                  IrcEvent.PrivateAction.class,
+                  event -> "private wave".equals(event.action()));
+          session.bot().sendLine("NOTICE " + session.channel() + " :incoming channel notice");
+          IrcEvent.Notice channelNotice =
+              awaitMatchingEvent(
+                  session,
+                  IrcEvent.Notice.class,
+                  event -> "incoming channel notice".equals(event.text()));
+          session.bot().privmsg(session.channel(), "\u0001ACTION channel wave\u0001");
+          IrcEvent.ChannelAction channelAction =
+              awaitMatchingEvent(
+                  session,
+                  IrcEvent.ChannelAction.class,
+                  event -> "channel wave".equals(event.action()));
+          assertEquals(session.botNick(), privateMessage.from());
+          assertEquals(session.botNick(), privateNotice.from());
+          assertEquals(session.botNick(), privateAction.from());
+          assertEquals(session.botNick(), channelNotice.from());
+          assertEquals(session.botNick(), channelAction.from());
+          assertEquals(session.botNick(), privateNotice.target());
+          assertEquals(session.channel(), channelNotice.target());
+          assertEquals(session.channel(), channelAction.channel());
+          List<ChatHistoryEntry> query =
+              requestHistory(
+                  session,
+                  session.botNick(),
+                  session.service().requestChatHistoryLatest(sid, session.botNick(), "*", 3));
+          assertEquals(
+              List.of("incoming private", "incoming private notice", "private wave"),
+              query.stream().map(ChatHistoryEntry::text).toList());
+          assertEquals(
+              List.of(
+                  ChatHistoryEntry.Kind.PRIVMSG,
+                  ChatHistoryEntry.Kind.NOTICE,
+                  ChatHistoryEntry.Kind.ACTION),
+              query.stream().map(ChatHistoryEntry::kind).toList());
+          assertEquals(
+              List.of(
+                  privateMessage.messageId(), privateNotice.messageId(), privateAction.messageId()),
+              query.stream().map(ChatHistoryEntry::messageId).toList());
+          assertEquals(
+              List.of(privateMessage.at(), privateNotice.at(), privateAction.at()),
+              query.stream().map(ChatHistoryEntry::at).toList());
+          assertTrue(
+              query.stream()
+                  .allMatch(
+                      entry ->
+                          session.botNick().equals(entry.target())
+                              && session.botNick().equals(entry.from())
+                              && Long.parseLong(entry.messageId()) > 0));
+          List<ChatHistoryEntry> channel =
+              requestHistory(
+                  session,
+                  session.service().requestChatHistoryLatest(sid, session.channel(), "*", 2));
+          assertEquals(
+              List.of("incoming channel notice", "channel wave"),
+              channel.stream().map(ChatHistoryEntry::text).toList());
+          assertEquals(
+              List.of(ChatHistoryEntry.Kind.NOTICE, ChatHistoryEntry.Kind.ACTION),
+              channel.stream().map(ChatHistoryEntry::kind).toList());
+          assertEquals(
+              List.of(channelNotice.messageId(), channelAction.messageId()),
+              channel.stream().map(ChatHistoryEntry::messageId).toList());
+        });
+  }
+
+  @Test
+  void channelSelfEchoIsDeliveredOnceAndStoredWithTheSameNativeId() throws Exception {
+    withConnectedNetwork(
+        session -> {
+          String sid = session.serverId();
+          String ourNick = session.service().currentNick(sid).orElseThrow();
+          session.service().sendToChannel(sid, session.channel(), "self echo").blockingAwait();
+          session
+              .bot()
+              .awaitMessage(ourNick, "PRIVMSG", session.channel(), "self echo", MESSAGE_TIMEOUT);
+          IrcEvent.ChannelMessage echo =
+              awaitChannelMessage(
+                  session.events(),
+                  sid,
+                  session.channel(),
+                  ourNick,
+                  "self echo",
+                  0,
+                  MESSAGE_TIMEOUT);
+          List<ChatHistoryEntry> stored =
+              requestHistory(
+                  session,
+                  session.service().requestChatHistoryLatest(sid, session.channel(), "*", 1));
+          assertHistoryMatches(stored, List.of(echo), session.channel());
+          assertTrue(Long.parseLong(echo.messageId()) > 0);
+          reconnectAndAwaitReady(session.service(), session.events(), sid);
+          assertEquals(
+              stored,
+              requestHistory(
+                  session,
+                  session.service().requestChatHistoryLatest(sid, session.channel(), "*", 1)));
+          // A live sentinel ensures both replay responses were consumed before counting echoes.
+          seedMessages(session, "echo-sentinel-", 1);
+          assertEquals(
+              1,
+              countChannelMessages(session.events(), sid, session.channel(), ourNick, "self echo"));
         });
   }
 
@@ -584,6 +982,55 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
             + expected
             + "; networks="
             + session.service().quasselCoreNetworks(session.serverId()));
+    throw new IllegalStateException("unreachable");
+  }
+
+  private static List<IrcEvent.ChannelMessage> seedMessages(
+      ConnectedNetwork session, String prefix, int count) throws Exception {
+    List<IrcEvent.ChannelMessage> seeded = new ArrayList<>();
+    for (int index = 0; index < count; index++) {
+      String text = prefix + index;
+      session.bot().privmsg(session.channel(), text);
+      seeded.add(
+          awaitChannelMessage(
+              session.events(),
+              session.serverId(),
+              session.channel(),
+              session.botNick(),
+              text,
+              0,
+              MESSAGE_TIMEOUT));
+    }
+    return seeded;
+  }
+
+  private static void awaitNextTimestampSecond(Instant previous) throws InterruptedException {
+    // Core's negotiated legacy Message format exposes second precision timestamps.
+    long deadlineNs = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
+    while (Instant.now().getEpochSecond() <= previous.getEpochSecond()) {
+      assertTrue(
+          System.nanoTime() < deadlineNs, "clock did not advance past the observed timestamp");
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+  }
+
+  private static <T extends IrcEvent> T awaitMatchingEvent(
+      ConnectedNetwork session, Class<T> eventType, Predicate<T> predicate)
+      throws InterruptedException {
+    long deadlineNs = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
+    while (System.nanoTime() < deadlineNs) {
+      Optional<T> match =
+          matchingEvents(session.events(), session.serverId(), eventType).stream()
+              .filter(predicate)
+              .findFirst();
+      if (match.isPresent()) return match.orElseThrow();
+      Thread.sleep(POLL_INTERVAL_MS);
+    }
+    fail(
+        "Timed out waiting for matching "
+            + eventType.getSimpleName()
+            + "; recent events: "
+            + summarizeRecentEvents(session.events(), session.serverId(), 16));
     throw new IllegalStateException("unreachable");
   }
 
@@ -1330,7 +1777,7 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
 
     void privmsg(String channel, String text) throws Exception {
       String chan = Objects.toString(channel, "").trim();
-      String msg = Objects.toString(text, "").trim();
+      String msg = Objects.toString(text, "").strip();
       if (chan.isEmpty() || msg.isEmpty()) {
         throw new IllegalArgumentException("privmsg channel/text is blank");
       }
@@ -1448,7 +1895,7 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     }
 
     private void sendLine(String line) throws IOException {
-      String value = Objects.toString(line, "").trim();
+      String value = Objects.toString(line, "").strip();
       if (value.isEmpty()) return;
       out.write(value);
       out.write("\r\n");

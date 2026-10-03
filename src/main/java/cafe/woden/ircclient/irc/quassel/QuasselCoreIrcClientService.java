@@ -839,11 +839,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                       serverId, plan.target(), plan.limit(), "request chat history");
               HistorySelector parsed =
                   QuasselCoreHistorySupport.parseHistorySelector(plan.primarySelector(), false);
-              long anchorMsgId = resolveHistorySelectorMsgId(ctx.session(), ctx.target(), parsed);
               int lastMsgId =
-                  anchorMsgId > 0
-                      ? QuasselCoreHistorySupport.clampMsgId(anchorMsgId)
-                      : UNKNOWN_MSG_ID;
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), parsed, false);
               sendBacklogRequest(
                   ctx.session(), ctx.bufferInfo(), UNKNOWN_MSG_ID, lastMsgId, ctx.limit());
             })
@@ -862,11 +859,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                       serverId, plan.target(), plan.limit(), "request chat history");
               HistorySelector parsed =
                   QuasselCoreHistorySupport.parseHistorySelector(plan.primarySelector(), false);
-              long anchorMsgId = resolveHistorySelectorMsgId(ctx.session(), ctx.target(), parsed);
               int lastMsgId =
-                  anchorMsgId > 0
-                      ? QuasselCoreHistorySupport.clampMsgId(anchorMsgId)
-                      : UNKNOWN_MSG_ID;
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), parsed, false);
               sendBacklogRequest(
                   ctx.session(), ctx.bufferInfo(), UNKNOWN_MSG_ID, lastMsgId, ctx.limit());
             })
@@ -886,13 +880,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               HistorySelector parsed =
                   QuasselCoreHistorySupport.parseHistorySelector(plan.primarySelector(), true);
 
-              int firstMsgId = UNKNOWN_MSG_ID;
-              if (parsed.kind() != HistorySelectorKind.WILDCARD) {
-                long anchorMsgId = resolveHistorySelectorMsgId(ctx.session(), ctx.target(), parsed);
-                if (anchorMsgId > 0) {
-                  firstMsgId = QuasselCoreHistorySupport.clampMsgId(anchorMsgId + 1L);
-                }
-              }
+              int firstMsgId =
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), parsed, true);
               sendBacklogRequest(
                   ctx.session(), ctx.bufferInfo(), firstMsgId, UNKNOWN_MSG_ID, ctx.limit());
             })
@@ -914,21 +903,20 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               HistorySelector end =
                   QuasselCoreHistorySupport.parseHistorySelector(plan.secondarySelector(), true);
 
-              long startMsgId = resolveHistorySelectorMsgId(ctx.session(), ctx.target(), start);
-              long endMsgId = resolveHistorySelectorMsgId(ctx.session(), ctx.target(), end);
+              int startMsgId =
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), start, false);
+              int endMsgId = resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), end, false);
+              boolean reversed =
+                  start.kind() == HistorySelectorKind.TIMESTAMP
+                          && end.kind() == HistorySelectorKind.TIMESTAMP
+                      ? start.timestamp().isAfter(end.timestamp())
+                      : startMsgId > 0 && endMsgId > 0 && startMsgId > endMsgId;
+              HistorySelector lower = reversed ? end : start;
+              HistorySelector upper = reversed ? start : end;
               int firstMsgId =
-                  startMsgId > 0
-                      ? QuasselCoreHistorySupport.clampMsgId(startMsgId)
-                      : UNKNOWN_MSG_ID;
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), lower, true);
               int lastMsgId =
-                  endMsgId > 0 ? QuasselCoreHistorySupport.clampMsgId(endMsgId) : UNKNOWN_MSG_ID;
-              if (firstMsgId != UNKNOWN_MSG_ID
-                  && lastMsgId != UNKNOWN_MSG_ID
-                  && firstMsgId > lastMsgId) {
-                int tmp = firstMsgId;
-                firstMsgId = lastMsgId;
-                lastMsgId = tmp;
-              }
+                  resolveHistoryBoundaryMsgId(ctx.session(), ctx.target(), upper, false);
 
               sendBacklogRequest(
                   ctx.session(), ctx.bufferInfo(), firstMsgId, lastMsgId, ctx.limit());
@@ -1294,6 +1282,21 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       case MSGID -> selector.msgId();
       case TIMESTAMP -> resolveHistoryMsgIdByTimestamp(session, target, selector.timestamp());
     };
+  }
+
+  private int resolveHistoryBoundaryMsgId(
+      QuasselSession session, String target, HistorySelector selector, boolean lowerBound) {
+    long boundary =
+        switch (selector.kind()) {
+          case WILDCARD -> UNKNOWN_MSG_ID;
+          // Core's lower ID bound is inclusive, whereas both history selectors are exclusive.
+          case MSGID -> lowerBound ? selector.msgId() + 1L : selector.msgId();
+          case TIMESTAMP ->
+              lowerBound
+                  ? session.history.firstMsgIdAfterTimestamp(target, selector.timestamp())
+                  : session.history.firstMsgIdAtOrAfterTimestamp(target, selector.timestamp());
+        };
+    return QuasselCoreHistorySupport.clampMsgId(boundary);
   }
 
   private long resolveHistoryMsgIdByTimestamp(
@@ -2921,24 +2924,26 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (values == null || values.isEmpty()) return;
 
     QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo = null;
+    if (values.getFirst() instanceof Number bufferId) {
+      bufferInfo = session.bufferInfosById.get(bufferId.intValue());
+      // A late response for a removed buffer must not complete another target's request.
+      if (bufferInfo == null) return;
+    }
     ArrayList<QuasselCoreDatastreamCodec.MessageValue> messages = new ArrayList<>();
     for (Object value : values) {
       if (bufferInfo == null && value instanceof QuasselCoreDatastreamCodec.BufferInfoValue info) {
         bufferInfo = resolveBufferInfo(session, info);
-      } else if (bufferInfo == null && value instanceof Number n) {
-        QuasselCoreDatastreamCodec.BufferInfoValue byId = session.bufferInfosById.get(n.intValue());
-        if (byId != null) bufferInfo = byId;
       }
       collectMessages(value, messages);
     }
-    if (messages.isEmpty()) return;
-
-    QuasselCoreDatastreamCodec.MessageValue first = messages.get(0);
-    QuasselCoreDatastreamCodec.BufferInfoValue resolvedBuffer =
-        bufferInfo == null ? resolveBufferInfo(session, first.bufferInfo()) : bufferInfo;
-    String target = historyTargetForBuffer(session, resolvedBuffer, extractNick(first.sender()));
+    if (bufferInfo == null && !messages.isEmpty()) {
+      bufferInfo = resolveBufferInfo(session, messages.getFirst().bufferInfo());
+    }
+    if (bufferInfo == null) return;
+    String from = messages.isEmpty() ? "" : extractNick(messages.getFirst().sender());
+    String target = historyTargetForBuffer(session, bufferInfo, from);
     if (target.isEmpty()) return;
-    noteTargetNetworkHint(session, target, resolvedBuffer.networkId(), true);
+    noteTargetNetworkHint(session, target, bufferInfo.networkId(), true);
 
     ArrayList<ChatHistoryEntry> entries = new ArrayList<>(messages.size());
     for (QuasselCoreDatastreamCodec.MessageValue msg : messages) {
@@ -2948,7 +2953,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         entries.add(entry);
       }
     }
-    if (entries.isEmpty()) return;
     // Core backlog queries return newest first; consumers replay in chronological order.
     entries.sort(java.util.Comparator.comparingLong(entry -> tryParseLong(entry.messageId())));
 
