@@ -69,7 +69,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -127,7 +126,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String BUFFER_SYNCER_OBJECT = "";
   private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine";
   private static final String BUFFER_SYNCER_LAST_SEEN_SLOT = "requestSetLastSeenMsg";
-  private static final long MIN_RECONNECT_DELAY_MS = 250L;
   private static final long LAG_SAMPLE_STALE_AFTER_MS = TimeUnit.MINUTES.toMillis(2);
   private static final int MAX_BUFFER_INFOS_PER_SESSION = 8_192;
   private static final int MAX_TARGET_NETWORK_HINTS_PER_SESSION = 4_096;
@@ -160,8 +158,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, QuasselCoreSetupPrompt> pendingSetupByServer =
       new ConcurrentHashMap<>();
-  private final Map<String, Disposable> reconnectTasksByServer = new ConcurrentHashMap<>();
-  private final Map<String, AtomicLong> reconnectAttemptsByServer = new ConcurrentHashMap<>();
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
   private final ServerCatalog serverCatalog;
@@ -170,7 +166,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreAuthHandshake authHandshake;
   private final QuasselCoreDatastreamCodec datastreamCodec;
   private final QuasselCoreSignalProxySender signalProxySender;
-  private final IrcProperties.Reconnect reconnectPolicy;
+  private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
 
   @Autowired
@@ -207,7 +203,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
     IrcProperties.Client client = props == null ? null : props.client();
-    this.reconnectPolicy = client == null ? null : client.reconnect();
+    this.reconnects =
+        new QuasselCoreReconnectCoordinator(
+            client == null ? null : client.reconnect(),
+            serverCatalog::containsId,
+            sid -> connectInternal(sid, false),
+            bus::onNext,
+            RxVirtualSchedulers::io);
   }
 
   @PreDestroy
@@ -218,14 +220,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public void shutdownNow() {
     if (!shuttingDown.compareAndSet(false, true)) return;
-    cancelAllReconnectTasks();
+    reconnects.close();
     for (Map.Entry<String, QuasselSession> entry : sessions.entrySet()) {
       closeSession(entry.getValue(), "Client shutting down", false);
     }
     sessions.clear();
     availabilityReasonByServer.clear();
     pendingSetupByServer.clear();
-    reconnectAttemptsByServer.clear();
   }
 
   @Override
@@ -308,8 +309,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                   QuasselCoreSetupSupport.normalizeSetupRequest(
                       prompt, Objects.requireNonNull(request, "request"));
 
-              cancelReconnectTask(sid, true);
-              resetReconnectAttempts(sid);
+              reconnects.cancel(sid, true);
+              reconnects.reset(sid);
               QuasselSession removed = sessions.remove(sid);
               if (removed != null) {
                 closeSession(removed, "Completing Quassel Core setup", false);
@@ -527,9 +528,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               if (sid.isEmpty()) {
                 throw new IllegalArgumentException(SERVER_ID_BLANK);
               }
-              cancelReconnectTask(sid, false);
+              reconnects.cancel(sid, false);
               if (resetReconnectAttempts) {
-                resetReconnectAttempts(sid);
+                reconnects.reset(sid);
               }
               availabilityReasonByServer.put(sid, "Quassel transport is connecting");
 
@@ -568,8 +569,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             () -> {
               String sid = normalizeServerId(serverId);
               if (sid.isEmpty()) return;
-              cancelReconnectTask(sid, true);
-              resetReconnectAttempts(sid);
+              reconnects.cancel(sid, true);
+              reconnects.reset(sid);
 
               QuasselSession removed = sessions.remove(sid);
               if (removed == null) {
@@ -1437,121 +1438,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void scheduleReconnectIfEligible(QuasselSession session, String reason) {
     if (session == null || shuttingDown.get() || session.closeRequested.get()) return;
     if (!session.reconnectScheduled.compareAndSet(false, true)) return;
-    scheduleReconnect(session.serverId, reason);
-  }
-
-  private void scheduleReconnect(String serverId, String reason) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || shuttingDown.get()) return;
-    IrcProperties.Reconnect policy = reconnectPolicy;
-    if (policy == null || !policy.enabled()) return;
-    if (!serverCatalog.containsId(sid)) return;
-
-    AtomicLong attempts =
-        reconnectAttemptsByServer.computeIfAbsent(sid, ignored -> new AtomicLong(0L));
-    long attempt = attempts.incrementAndGet();
-    if (policy.maxAttempts() > 0 && attempt > policy.maxAttempts()) {
-      bus.onNext(
-          new ServerIrcEvent(
-              sid,
-              new IrcEvent.Error(Instant.now(), "Reconnect aborted (max attempts reached)", null)));
-      return;
-    }
-
-    long delayMs = computeReconnectDelayMs(policy, attempt);
-    bus.onNext(
-        new ServerIrcEvent(
-            sid,
-            new IrcEvent.Reconnecting(
-                Instant.now(), attempt, delayMs, Objects.toString(reason, "Disconnected"))));
-
-    Disposable scheduled =
-        RxVirtualSchedulers.io()
-            .scheduleDirect(
-                () -> {
-                  if (shuttingDown.get()) return;
-                  if (!serverCatalog.containsId(sid)) {
-                    bus.onNext(
-                        new ServerIrcEvent(
-                            sid,
-                            new IrcEvent.Error(
-                                Instant.now(), "Reconnect cancelled (server removed)", null)));
-                    return;
-                  }
-                  var unused =
-                      connectInternal(sid, false)
-                          .subscribe(
-                              () -> {},
-                              err -> {
-                                String detail = renderThrowableMessage(err);
-                                String message =
-                                    detail.isEmpty()
-                                        ? "Reconnect attempt failed"
-                                        : ("Reconnect attempt failed: " + detail);
-                                bus.onNext(
-                                    new ServerIrcEvent(
-                                        sid, new IrcEvent.Error(Instant.now(), message, err)));
-                                scheduleReconnect(sid, "Reconnect attempt failed");
-                              });
-                },
-                delayMs,
-                TimeUnit.MILLISECONDS);
-
-    Disposable previous = reconnectTasksByServer.put(sid, scheduled);
-    if (previous != null && !previous.isDisposed()) {
-      try {
-        previous.dispose();
-      } catch (Exception ignored) {
-      }
-    }
-  }
-
-  private void cancelReconnectTask(String serverId, boolean clearAttempts) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    Disposable reconnectTask = reconnectTasksByServer.remove(sid);
-    if (reconnectTask != null && !reconnectTask.isDisposed()) {
-      try {
-        reconnectTask.dispose();
-      } catch (Exception ignored) {
-      }
-    }
-    if (clearAttempts) {
-      reconnectAttemptsByServer.remove(sid);
-    }
-  }
-
-  private void resetReconnectAttempts(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    reconnectAttemptsByServer.remove(sid);
-  }
-
-  private void cancelAllReconnectTasks() {
-    for (Map.Entry<String, Disposable> entry : reconnectTasksByServer.entrySet()) {
-      Disposable task = entry.getValue();
-      if (task != null && !task.isDisposed()) {
-        try {
-          task.dispose();
-        } catch (Exception ignored) {
-        }
-      }
-    }
-    reconnectTasksByServer.clear();
-  }
-
-  private static long computeReconnectDelayMs(IrcProperties.Reconnect policy, long attempt) {
-    if (policy == null) return MIN_RECONNECT_DELAY_MS;
-    double multiplier = Math.pow(policy.multiplier(), Math.max(0L, attempt - 1L));
-    long baseDelay = policy.initialDelayMs();
-    long cappedDelay = (long) Math.min(baseDelay * multiplier, (double) policy.maxDelayMs());
-    double jitterPct = policy.jitterPct();
-    if (jitterPct <= 0d) {
-      return Math.max(MIN_RECONNECT_DELAY_MS, cappedDelay);
-    }
-    double jitterFactor = 1.0 + ThreadLocalRandom.current().nextDouble(-jitterPct, jitterPct);
-    long jittered = (long) Math.max(0L, cappedDelay * jitterFactor);
-    return Math.max(MIN_RECONNECT_DELAY_MS, jittered);
+    reconnects.schedule(session.serverId, reason);
   }
 
   private void establishSession(IrcProperties.Server server, QuasselSession session) {
@@ -1637,8 +1524,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
       availabilityReasonByServer.remove(sid);
       pendingSetupByServer.remove(sid);
-      resetReconnectAttempts(sid);
-      cancelReconnectTask(sid, false);
+      reconnects.reset(sid);
+      reconnects.cancel(sid, false);
 
       sendSignalProxyInitRequest(session, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT);
       for (Integer networkId : collectKnownNetworkIds(session)) {
