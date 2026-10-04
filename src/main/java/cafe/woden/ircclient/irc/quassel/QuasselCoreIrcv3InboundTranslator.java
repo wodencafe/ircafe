@@ -3,10 +3,14 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.stripLeadingColon;
 
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ircv3.Ircv3IsupportRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3StandardReplyRuntimeSupport;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagRequest;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagSignal;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,6 +49,68 @@ final class QuasselCoreIrcv3InboundTranslator {
       default -> {
         return false;
       }
+    }
+  }
+
+  boolean handleMonitor(
+      Instant at,
+      String rawLine,
+      Consumer<Ircv3IsupportRuntimeSupport.MonitorSupport> observeSupport,
+      Consumer<IrcEvent> emit) {
+    String raw = Objects.toString(rawLine, "").trim();
+    if (raw.isEmpty()) return false;
+
+    ircv3RuntimeSupport.monitorSupport(raw).ifPresent(observeSupport);
+    boolean handled = false;
+    for (Ircv3InboundCommandSignal signal : ircv3RuntimeSupport.monitorSignals(raw)) {
+      if (signal instanceof Ircv3InboundCommandSignal.MonitorStatusObserved status) {
+        List<String> nicks = monitorNickList(status.entries());
+        emitMonitorHostmaskObservations(at, status.entries(), emit);
+        if (!nicks.isEmpty()) {
+          IrcEvent event =
+              status.online()
+                  ? new IrcEvent.MonitorOnlineObserved(at, nicks)
+                  : new IrcEvent.MonitorOfflineObserved(at, nicks);
+          emit.accept(event);
+        }
+        handled = true;
+      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListObserved list) {
+        emit.accept(new IrcEvent.MonitorListObserved(at, list.nicks()));
+        handled = true;
+      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListEnded) {
+        emit.accept(new IrcEvent.MonitorListEnded(at));
+        handled = true;
+      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListFull full) {
+        emit.accept(new IrcEvent.MonitorListFull(at, full.limit(), full.nicks(), full.message()));
+        handled = true;
+      }
+    }
+    return handled;
+  }
+
+  private static List<String> monitorNickList(
+      List<Ircv3InboundCommandSignal.MonitorStatusEntry> entries) {
+    if (entries == null || entries.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(entries.size());
+    for (Ircv3InboundCommandSignal.MonitorStatusEntry entry : entries) {
+      if (entry == null) continue;
+      String nick = Objects.toString(entry.nick(), "").trim();
+      if (!nick.isEmpty()) out.add(nick);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static void emitMonitorHostmaskObservations(
+      Instant at,
+      List<Ircv3InboundCommandSignal.MonitorStatusEntry> entries,
+      Consumer<IrcEvent> emit) {
+    if (entries == null || entries.isEmpty()) return;
+    for (Ircv3InboundCommandSignal.MonitorStatusEntry entry : entries) {
+      if (entry == null) continue;
+      String nick = Objects.toString(entry.nick(), "").trim();
+      String hostmask = Objects.toString(entry.hostmask(), "").trim();
+      if (nick.isEmpty() || !PircbotxUtil.isUsefulHostmask(hostmask)) continue;
+      emit.accept(new IrcEvent.UserHostmaskObserved(at, "", nick, hostmask));
     }
   }
 

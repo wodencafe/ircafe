@@ -50,7 +50,6 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
 import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
@@ -2526,7 +2525,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return;
     }
 
-    if (maybeEmitMonitorNumeric(session, at, networkId, content)) {
+    if (inboundTranslator.handleMonitor(
+        at,
+        content,
+        support -> {
+          int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
+          session.features.observeMonitor(resolvedNetworkId, support.supported(), support.limit());
+        },
+        emit)) {
       return;
     }
 
@@ -2691,82 +2697,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, serverResponse(at, statusLine, content, messageId, ircv3Tags)));
-  }
-
-  private boolean maybeEmitMonitorNumeric(
-      QuasselSession session, Instant at, int networkId, String rawLine) {
-    if (session == null) return false;
-    String raw = Objects.toString(rawLine, "").trim();
-    if (raw.isEmpty()) return false;
-
-    ircv3RuntimeSupport
-        .monitorSupport(raw)
-        .ifPresent(
-            monitorSupport -> {
-              int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-              session.features.observeMonitor(
-                  resolvedNetworkId, monitorSupport.supported(), monitorSupport.limit());
-            });
-
-    boolean handled = false;
-    for (Ircv3InboundCommandSignal signal : ircv3RuntimeSupport.monitorSignals(raw)) {
-      if (signal instanceof Ircv3InboundCommandSignal.MonitorStatusObserved status) {
-        List<String> nicks = monitorNickList(status.entries());
-        emitMonitorHostmaskObservations(session, at, status.entries());
-        if (!nicks.isEmpty()) {
-          IrcEvent event =
-              status.online()
-                  ? new IrcEvent.MonitorOnlineObserved(at, nicks)
-                  : new IrcEvent.MonitorOfflineObserved(at, nicks);
-          bus.onNext(new ServerIrcEvent(session.serverId, event));
-        }
-        handled = true;
-      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListObserved list) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId, new IrcEvent.MonitorListObserved(at, list.nicks())));
-        handled = true;
-      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListEnded) {
-        bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.MonitorListEnded(at)));
-        handled = true;
-      } else if (signal instanceof Ircv3InboundCommandSignal.MonitorListFull full) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.MonitorListFull(at, full.limit(), full.nicks(), full.message())));
-        handled = true;
-      }
-    }
-    return handled;
-  }
-
-  private static List<String> monitorNickList(
-      List<Ircv3InboundCommandSignal.MonitorStatusEntry> entries) {
-    if (entries == null || entries.isEmpty()) return List.of();
-    ArrayList<String> out = new ArrayList<>(entries.size());
-    for (Ircv3InboundCommandSignal.MonitorStatusEntry entry : entries) {
-      if (entry == null) continue;
-      String nick = Objects.toString(entry.nick(), "").trim();
-      if (!nick.isEmpty()) out.add(nick);
-    }
-    if (out.isEmpty()) return List.of();
-    return List.copyOf(out);
-  }
-
-  private void emitMonitorHostmaskObservations(
-      QuasselSession session,
-      Instant at,
-      List<Ircv3InboundCommandSignal.MonitorStatusEntry> entries) {
-    if (session == null || entries == null || entries.isEmpty()) return;
-    for (Ircv3InboundCommandSignal.MonitorStatusEntry entry : entries) {
-      if (entry == null) continue;
-      String nick = Objects.toString(entry.nick(), "").trim();
-      String hostmask = Objects.toString(entry.hostmask(), "").trim();
-      if (nick.isEmpty() || !PircbotxUtil.isUsefulHostmask(hostmask)) continue;
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId, new IrcEvent.UserHostmaskObserved(at, "", nick, hostmask)));
-    }
   }
 
   private void emitCapabilityChangesFromCapLine(

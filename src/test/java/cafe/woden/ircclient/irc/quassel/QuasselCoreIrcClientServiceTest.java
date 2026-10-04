@@ -2125,6 +2125,15 @@ class QuasselCoreIrcClientServiceTest {
     }
     assertTrue(service.isMonitorAvailable("quassel"));
     assertEquals(150, service.negotiatedMonitorLimit("quassel"));
+    awaitEvent(
+        events,
+        ev ->
+            ev instanceof IrcEvent.ServerResponseLine response
+                && response.code() == 5
+                && response
+                    .rawLine()
+                    .equals(
+                        ":irc.example.net 005 quassel MONITOR=150 CHANTYPES=# :are supported by this server"));
   }
 
   @org.junit.jupiter.params.ParameterizedTest

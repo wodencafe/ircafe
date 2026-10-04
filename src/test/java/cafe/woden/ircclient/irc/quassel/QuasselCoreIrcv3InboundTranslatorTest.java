@@ -3,8 +3,14 @@ package cafe.woden.ircclient.irc.quassel;
 import static org.junit.jupiter.api.Assertions.*;
 
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ircv3.Ircv3InboundCommandSignalRuntimeCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3InboundTagSignalRuntimeCatalog;
+import cafe.woden.ircclient.irc.ircv3.Ircv3IsupportRuntimeSupport;
 import cafe.woden.ircclient.irc.ircv3.Ircv3RuntimeCatalogs;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandOperation;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandRequest;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignalProvider;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagOperation;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagRequest;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagSignal;
@@ -15,6 +21,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -195,6 +202,187 @@ class QuasselCoreIrcv3InboundTranslatorTest {
       assertFalse(translator.handleCommand(observation, qualify, events::add));
     }
     assertTrue(events.isEmpty());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"730", "731"})
+  void monitorStatusEmitsHostmasksBeforeOnlineOrOfflineEvents(String numeric) {
+    assertTrue(
+        translator.handleMonitor(
+            AT,
+            ":irc.example " + numeric + " me :alice!u@h,bob!x@y,carol",
+            support -> fail("Status numerics must not change advertised support"),
+            events::add));
+    IrcEvent status =
+        "730".equals(numeric)
+            ? new IrcEvent.MonitorOnlineObserved(AT, List.of("alice", "bob", "carol"))
+            : new IrcEvent.MonitorOfflineObserved(AT, List.of("alice", "bob", "carol"));
+    assertEquals(
+        List.of(
+            new IrcEvent.UserHostmaskObserved(AT, "", "alice", "alice!u@h"),
+            new IrcEvent.UserHostmaskObserved(AT, "", "bob", "bob!x@y"),
+            status),
+        events);
+  }
+
+  @Test
+  void monitorListResponsesPreserveNicksLimitMessageAndTimestamp() {
+    for (String raw :
+        List.of(
+            ":irc.example 732 me :alice,bob",
+            ":irc.example 733 me :End of MONITOR list",
+            ":irc.example 734 me 100 dave,erin :Monitor list is full")) {
+      assertTrue(
+          translator.handleMonitor(
+              AT, raw, support -> fail("Unexpected support update"), events::add));
+    }
+    assertEquals(
+        List.of(
+            new IrcEvent.MonitorListObserved(AT, List.of("alice", "bob")),
+            new IrcEvent.MonitorListEnded(AT),
+            new IrcEvent.MonitorListFull(AT, 100, List.of("dave", "erin"), "Monitor list is full")),
+        events);
+  }
+
+  @Test
+  void monitorSupportIsObservedWithoutConsumingTheIsupportResponse() {
+    List<Ircv3IsupportRuntimeSupport.MonitorSupport> support = new ArrayList<>();
+    assertFalse(
+        translator.handleMonitor(
+            AT,
+            ":irc.example 005 me MONITOR=150 CHANTYPES=# :are supported by this server",
+            support::add,
+            events::add));
+    assertEquals(List.of(new Ircv3IsupportRuntimeSupport.MonitorSupport(true, 150)), support);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void customMonitorProvidersObserveSupportBeforeEventsAndFilterUnusableHostmasks() {
+    List<String> calls = new ArrayList<>();
+    var custom =
+        monitorTranslator(
+            (operation, request) -> {
+              calls.add(operation.name());
+              assertEquals("custom response", request.rawLine());
+              if (operation == Ircv3InboundCommandOperation.ISUPPORT_MONITOR) {
+                return List.of(new Ircv3InboundCommandSignal.MonitorSupportObserved(true, 321));
+              }
+              return List.of(
+                  new Ircv3InboundCommandSignal.WhoisEndedObserved("ignored"),
+                  new Ircv3InboundCommandSignal.MonitorStatusObserved(
+                      true,
+                      List.of(
+                          new Ircv3InboundCommandSignal.MonitorStatusEntry(" ", "!u@h"),
+                          new Ircv3InboundCommandSignal.MonitorStatusEntry("alice", "alice!*@*"),
+                          new Ircv3InboundCommandSignal.MonitorStatusEntry("bob", "bob!x@y"))));
+            });
+    assertTrue(
+        custom.handleMonitor(
+            AT,
+            " custom response ",
+            support -> {
+              assertEquals(new Ircv3IsupportRuntimeSupport.MonitorSupport(true, 321), support);
+              calls.add("observeSupport");
+            },
+            event -> {
+              calls.add(event.getClass().getSimpleName());
+              events.add(event);
+            }));
+    assertEquals(
+        List.of(
+            "ISUPPORT_MONITOR",
+            "observeSupport",
+            "MONITOR",
+            "UserHostmaskObserved",
+            "MonitorOnlineObserved"),
+        calls);
+    assertEquals(
+        List.of(
+            new IrcEvent.UserHostmaskObserved(AT, "", "bob", "bob!x@y"),
+            new IrcEvent.MonitorOnlineObserved(AT, List.of("alice", "bob"))),
+        events);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"empty", "blank"})
+  void recognizedMonitorStatusIsConsumedEvenWithoutUsableNicks(String response) {
+    var entries =
+        "empty".equals(response)
+            ? List.<Ircv3InboundCommandSignal.MonitorStatusEntry>of()
+            : List.of(new Ircv3InboundCommandSignal.MonitorStatusEntry(" ", ""));
+    var custom =
+        monitorTranslator(
+            (operation, request) ->
+                operation == Ircv3InboundCommandOperation.MONITOR
+                    ? List.of(new Ircv3InboundCommandSignal.MonitorStatusObserved(true, entries))
+                    : List.of());
+    assertTrue(
+        custom.handleMonitor(
+            AT, response, support -> fail("Unexpected support update"), events::add));
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void unrelatedProviderSignalsRemainAvailableToOtherHandlers() {
+    var custom =
+        monitorTranslator(
+            (operation, request) ->
+                List.of(new Ircv3InboundCommandSignal.WhoisEndedObserved("alice")));
+    assertFalse(
+        custom.handleMonitor(
+            AT, "unrelated response", support -> fail("Unexpected support update"), events::add));
+    assertTrue(events.isEmpty());
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" "})
+  void blankMonitorInputDoesNotInvokeProviders(String raw) {
+    var custom =
+        monitorTranslator(
+            (operation, request) -> {
+              fail("Blank input must not invoke a provider");
+              return List.of();
+            });
+    assertFalse(
+        custom.handleMonitor(AT, raw, support -> fail("Unexpected support update"), events::add));
+    assertTrue(events.isEmpty());
+  }
+
+  private static QuasselCoreIrcv3InboundTranslator monitorTranslator(
+      BiFunction<
+              Ircv3InboundCommandOperation,
+              Ircv3InboundCommandRequest,
+              List<Ircv3InboundCommandSignal>>
+          parse) {
+    var catalogs = Ircv3RuntimeCatalogs.applicationClasspath();
+    var provider =
+        new Ircv3InboundCommandSignalProvider() {
+          @Override
+          public String providerId() {
+            return "custom-monitor";
+          }
+
+          @Override
+          public Set<Ircv3InboundCommandOperation> inboundCommandOperations() {
+            return Set.of(
+                Ircv3InboundCommandOperation.ISUPPORT_MONITOR,
+                Ircv3InboundCommandOperation.MONITOR);
+          }
+
+          @Override
+          public List<Ircv3InboundCommandSignal> parse(
+              Ircv3InboundCommandOperation operation, Ircv3InboundCommandRequest request) {
+            return parse.apply(operation, request);
+          }
+        };
+    return new QuasselCoreIrcv3InboundTranslator(
+        new QuasselIrcv3RuntimeSupport(
+            catalogs.outboundCommands(),
+            catalogs.inboundTags(),
+            Ircv3InboundCommandSignalRuntimeCatalog.fromProviders(List.of(provider)),
+            catalogs.messageTags()));
   }
 
   private QuasselCoreIrcv3InboundTranslator.Observation observation(String raw, String from) {
