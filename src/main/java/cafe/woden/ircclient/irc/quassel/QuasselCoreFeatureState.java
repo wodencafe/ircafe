@@ -37,6 +37,14 @@ final class QuasselCoreFeatureState {
     return capabilitiesObserved.get();
   }
 
+  boolean hasMonitorState() {
+    return !monitors.isEmpty();
+  }
+
+  boolean hasMultilineLimits() {
+    return !multilineLimits.isEmpty();
+  }
+
   boolean hasAnyCapability(String... requested) {
     if (!capabilitiesObserved.get() || requested == null || requested.length == 0) return false;
     if (capabilities.isEmpty()) return false;
@@ -147,10 +155,10 @@ final class QuasselCoreFeatureState {
               QuasselCoreFeatureStateParser.multilineLimitsFromToken(token);
           if (parsed != null) {
             multilineLimits.put(networkId, parsed);
-            trimMapToMaxSize(multilineLimits, maxNetworks);
           } else {
             multilineLimits.putIfAbsent(networkId, new MultilineLimitState(0L, 0L));
           }
+          trimMapToMaxSize(multilineLimits, maxNetworks);
         }
       }
     }

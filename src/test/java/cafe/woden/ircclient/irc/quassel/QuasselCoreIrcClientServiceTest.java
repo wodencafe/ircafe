@@ -411,23 +411,36 @@ class QuasselCoreIrcClientServiceTest {
     assertFalse(service.isChatHistoryAvailable("quassel"));
     assertFalse(service.isEchoMessageAvailable("quassel"));
 
-    connectAndAwaitEstablishedSession(service, events);
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      Map<?, ?> sessions =
+          assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
+      var networks = mock(QuasselCoreNetworkCatalog.class);
+      ReflectionTestUtils.setField(sessions.get("quassel"), "networks", networks);
 
-    assertTrue(service.isChatHistoryAvailable("quassel"));
-    assertTrue(service.isEchoMessageAvailable("quassel"));
-    assertFalse(service.isDraftReplyAvailable("quassel"));
-    assertFalse(service.isDraftReactAvailable("quassel"));
-    assertFalse(service.isDraftUnreactAvailable("quassel"));
-    assertFalse(service.isExperimentalMessageEditAvailable("quassel"));
-    assertFalse(service.isMessageRedactionAvailable("quassel"));
-    assertFalse(service.isTypingAvailable("quassel"));
-    assertFalse(service.isReadMarkerAvailable("quassel"));
-    assertFalse(service.isLabeledResponseAvailable("quassel"));
-    assertFalse(service.isStandardRepliesAvailable("quassel"));
-    assertFalse(service.isMonitorAvailable("quassel"));
-    assertEquals(
-        "typing support status is not yet available from Quassel backend state",
-        service.typingAvailabilityReason("quassel"));
+      assertTrue(service.isChatHistoryAvailable("quassel"));
+      assertTrue(service.isEchoMessageAvailable("quassel"));
+      assertFalse(service.isDraftReplyAvailable("quassel"));
+      assertFalse(service.isDraftReactAvailable("quassel"));
+      assertFalse(service.isDraftUnreactAvailable("quassel"));
+      assertFalse(service.isExperimentalMessageEditAvailable("quassel"));
+      assertFalse(service.isMessageRedactionAvailable("quassel"));
+      assertFalse(service.isTypingAvailable("quassel"));
+      assertFalse(service.isReadMarkerAvailable("quassel"));
+      assertFalse(service.isLabeledResponseAvailable("quassel"));
+      assertFalse(service.isStandardRepliesAvailable("quassel"));
+      assertFalse(service.isMonitorAvailable("quassel"));
+      assertEquals(0, service.negotiatedMonitorLimit("quassel"));
+      assertEquals(0L, service.negotiatedMultilineMaxBytes("quassel"));
+      assertEquals(0, service.negotiatedMultilineMaxLines("quassel"));
+      org.mockito.Mockito.verifyNoInteractions(networks);
+      assertEquals(
+          "typing support status is not yet available from Quassel backend state",
+          service.typingAvailabilityReason("quassel"));
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test

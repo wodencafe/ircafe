@@ -1015,13 +1015,15 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return session == null ? 0L : session.features.multilineMaxBytes(primaryNetworkId(session));
+    if (session == null || !session.features.hasMultilineLimits()) return 0L;
+    return session.features.multilineMaxBytes(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return session == null ? 0 : session.features.multilineMaxLines(primaryNetworkId(session));
+    if (session == null || !session.features.hasMultilineLimits()) return 0;
+    return session.features.multilineMaxLines(primaryNetworkId(session));
   }
 
   @Override
@@ -1084,13 +1086,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public boolean isMonitorAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return session != null && session.features.monitorAvailable(primaryNetworkId(session));
+    return session != null
+        && session.features.hasMonitorState()
+        && session.features.monitorAvailable(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMonitorLimit(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return session == null ? 0 : session.features.monitorLimit(primaryNetworkId(session));
+    if (session == null || !session.features.hasMonitorState()) return 0;
+    return session.features.monitorLimit(primaryNetworkId(session));
   }
 
   @Override

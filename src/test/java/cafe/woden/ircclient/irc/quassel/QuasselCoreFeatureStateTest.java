@@ -249,6 +249,18 @@ class QuasselCoreFeatureStateTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"multiline", "draft/multiline", "multiline=max-lines=4"})
+  void capAcknowledgmentsPruneLimitsEvenWhenNoLimitParametersAreSupplied(String token) {
+    var limited = new QuasselCoreFeatureState(2, events::add);
+    for (int id = 1; id <= 12; id++) {
+      limited.observeCapLine(AT, id, cap("ACK", token));
+    }
+    assertEquals(2, ((Map<?, ?>) ReflectionTestUtils.getField(limited, "multilineLimits")).size());
+    assertEquals(2, ((Map<?, ?>) ReflectionTestUtils.getField(limited, "capabilities")).size());
+    assertEquals(24, events.size(), "pruning must preserve CAP notifications");
+  }
+
   private static QuasselCoreIrcEnvelope cap(String subcommand, String caps) {
     return QuasselCoreIrcEnvelope.parse(":irc.example CAP me " + subcommand + " :" + caps, RUNTIME);
   }
