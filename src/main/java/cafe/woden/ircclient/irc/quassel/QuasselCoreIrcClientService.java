@@ -1,6 +1,16 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNick;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNumericCode;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.firstChannelToken;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.normalizeReason;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseKickDetails;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseModeDetails;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseNickChange;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseTopic;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsAnyMapKeysIgnoreCase;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
@@ -35,6 +45,7 @@ import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
 import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.KickDetails;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreFeatureStateParser.MonitorSupportState;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreFeatureStateParser.MultilineLimitState;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelector;
@@ -3078,17 +3089,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return;
     }
 
-    IrcEvent.ServerResponseLine response = renderServerResponse(at, statusLine, content, messageId);
     bus.onNext(
         new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.ServerResponseLine(
-                response.at(),
-                response.code(),
-                response.message(),
-                response.rawLine(),
-                response.messageId(),
-                ircv3Tags)));
+            session.serverId, serverResponse(at, statusLine, content, messageId, ircv3Tags)));
   }
 
   private boolean maybeEmitMonitorNumeric(
@@ -4197,22 +4200,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return !known.isEmpty() && known.equalsIgnoreCase(candidate);
   }
 
-  private IrcEvent.ServerResponseLine renderServerResponse(
-      Instant at, String displayLine, String rawLine, String messageId) {
-    String display = Objects.toString(displayLine, "").trim();
-    String raw = Objects.toString(rawLine, "").trim();
-    if (raw.isEmpty()) raw = display;
-    int code = extractNumericCode(raw);
-    String message = display;
-    if (code != 0) {
-      String fromRaw = renderNumericMessage(raw);
-      if (!fromRaw.isEmpty()) {
-        message = fromRaw;
-      }
-    }
-    return new IrcEvent.ServerResponseLine(at, code, message, raw, messageId, Map.of());
-  }
-
   private void emitServerResponseLine(
       String serverId,
       Instant at,
@@ -4220,199 +4207,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       String rawLine,
       String messageId,
       Map<String, String> ircv3Tags) {
-    IrcEvent.ServerResponseLine response =
-        renderServerResponse(at, displayLine, rawLine, messageId);
-    Map<String, String> tags = ircv3Tags == null ? Map.of() : ircv3Tags;
     bus.onNext(
         new ServerIrcEvent(
-            serverId,
-            new IrcEvent.ServerResponseLine(
-                response.at(),
-                response.code(),
-                response.message(),
-                response.rawLine(),
-                response.messageId(),
-                tags)));
-  }
-
-  private static int extractNumericCode(String rawLine) {
-    String payload = stripIrcEnvelope(rawLine);
-    if (payload.length() < 3) return 0;
-    if (!Character.isDigit(payload.charAt(0))
-        || !Character.isDigit(payload.charAt(1))
-        || !Character.isDigit(payload.charAt(2))) {
-      return 0;
-    }
-    if (payload.length() > 3 && payload.charAt(3) != ' ') return 0;
-    try {
-      return Integer.parseInt(payload.substring(0, 3));
-    } catch (NumberFormatException ignored) {
-      return 0;
-    }
-  }
-
-  private static String renderNumericMessage(String rawLine) {
-    String payload = stripIrcEnvelope(rawLine);
-    int code = extractNumericCode(payload);
-    if (code == 0 || payload.length() <= 3) {
-      return "";
-    }
-    String tail = payload.substring(3).trim();
-    int trailingStart = tail.indexOf(" :");
-    if (trailingStart >= 0 && trailingStart + 2 < tail.length()) {
-      return tail.substring(trailingStart + 2).trim();
-    }
-    if (tail.startsWith(":")) {
-      return tail.substring(1).trim();
-    }
-    return tail;
-  }
-
-  private static String stripIrcEnvelope(String rawLine) {
-    String line = Objects.toString(rawLine, "").trim();
-    if (line.isEmpty()) return "";
-    if (line.startsWith("@")) {
-      int sp = line.indexOf(' ');
-      if (sp <= 0 || sp >= line.length() - 1) return "";
-      line = line.substring(sp + 1).trim();
-    }
-    if (line.startsWith(":")) {
-      int sp = line.indexOf(' ');
-      if (sp <= 1 || sp >= line.length() - 1) return "";
-      line = line.substring(sp + 1).trim();
-    }
-    return line;
-  }
-
-  private static String parseNickChange(String content, String fallback) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return fallback;
-    String lower = text.toLowerCase(Locale.ROOT);
-    int idx = lower.lastIndexOf(" is now known as ");
-    if (idx >= 0) {
-      String tail = text.substring(idx + " is now known as ".length()).trim();
-      if (!tail.isEmpty()) return tail.split("\\s+")[0];
-    }
-    String[] parts = text.split("\\s+");
-    if (parts.length > 0) {
-      String last = parts[parts.length - 1].trim();
-      if (!last.isEmpty()) return last;
-    }
-    return fallback;
-  }
-
-  private static String parseTopic(String content) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return "";
-    String lower = text.toLowerCase(Locale.ROOT);
-    int idx = lower.indexOf(" topic to ");
-    if (idx >= 0) {
-      String topic = text.substring(idx + " topic to ".length()).trim();
-      return stripWrappingQuotes(topic);
-    }
-    idx = lower.indexOf(" changed topic to ");
-    if (idx >= 0) {
-      String topic = text.substring(idx + " changed topic to ".length()).trim();
-      return stripWrappingQuotes(topic);
-    }
-    return stripWrappingQuotes(text);
-  }
-
-  private static String parseModeDetails(String content) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return "";
-    String lower = text.toLowerCase(Locale.ROOT);
-    int idx = lower.indexOf(" mode ");
-    if (idx >= 0) {
-      return text.substring(idx + " mode ".length()).trim();
-    }
-    idx = lower.indexOf(" set mode ");
-    if (idx >= 0) {
-      return text.substring(idx + " set mode ".length()).trim();
-    }
-    return text;
-  }
-
-  private static KickDetails parseKickDetails(String content) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return new KickDetails("", "");
-    String lower = text.toLowerCase(Locale.ROOT);
-    String tail;
-    if (lower.startsWith("kicked ")) {
-      tail = text.substring("kicked ".length()).trim();
-    } else {
-      int idx = lower.indexOf(" kicked ");
-      tail = idx >= 0 ? text.substring(idx + " kicked ".length()).trim() : text;
-    }
-    String nick = tail;
-    String reason = "";
-    int reasonStart = tail.indexOf('(');
-    int reasonEnd = tail.lastIndexOf(')');
-    if (reasonStart >= 0 && reasonEnd > reasonStart) {
-      nick = tail.substring(0, reasonStart).trim();
-      reason = tail.substring(reasonStart + 1, reasonEnd).trim();
-    } else {
-      String[] parts = tail.split("\\s+", 2);
-      nick = parts.length > 0 ? parts[0].trim() : "";
-      if (parts.length > 1) reason = parts[1].trim();
-    }
-    return new KickDetails(nick, reason);
-  }
-
-  private static String firstChannelToken(String content) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return "";
-    for (String token : text.split("\\s+")) {
-      if (looksLikeChannel(token)) return token;
-      String cleaned = stripPunctuation(token);
-      if (looksLikeChannel(cleaned)) return cleaned;
-    }
-    return "";
-  }
-
-  private static boolean looksLikeChannel(String token) {
-    String t = Objects.toString(token, "").trim();
-    if (t.length() < 2) return false;
-    char c = t.charAt(0);
-    return c == '#' || c == '&' || c == '+' || c == '!';
-  }
-
-  private static String stripPunctuation(String token) {
-    String t = Objects.toString(token, "").trim();
-    while (!t.isEmpty() && (t.endsWith(",") || t.endsWith(".") || t.endsWith(":"))) {
-      t = t.substring(0, t.length() - 1).trim();
-    }
-    return t;
-  }
-
-  private static String stripWrappingQuotes(String text) {
-    String t = Objects.toString(text, "").trim();
-    if (t.length() >= 2) {
-      if ((t.startsWith("\"") && t.endsWith("\"")) || (t.startsWith("'") && t.endsWith("'"))) {
-        return t.substring(1, t.length() - 1).trim();
-      }
-    }
-    return t;
-  }
-
-  private static String normalizeReason(String content) {
-    String text = Objects.toString(content, "").trim();
-    if (text.isEmpty()) return "";
-    int open = text.lastIndexOf('(');
-    int close = text.lastIndexOf(')');
-    if (open >= 0 && close > open) {
-      String reason = text.substring(open + 1, close).trim();
-      if (!reason.isEmpty()) return reason;
-    }
-    return text;
-  }
-
-  private static String extractNick(String sender) {
-    String hostmask = Objects.toString(sender, "").trim();
-    if (hostmask.isEmpty()) return "";
-    int bang = hostmask.indexOf('!');
-    if (bang <= 0) return hostmask;
-    return hostmask.substring(0, bang);
+            serverId, serverResponse(at, displayLine, rawLine, messageId, ircv3Tags)));
   }
 
   private void emitObservedHostmask(
@@ -4462,8 +4259,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       String target,
       QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo,
       int limit) {}
-
-  private record KickDetails(String nick, String reason) {}
 
   private void emitConnectionReadyIfNeeded(QuasselSession session) {
     if (session == null) return;
