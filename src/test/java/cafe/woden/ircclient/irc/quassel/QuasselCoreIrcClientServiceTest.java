@@ -1726,7 +1726,7 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
-  void multilineNegotiatedLimitsAreReadFromCapabilitySnapshot() throws Exception {
+  void featureSnapshotStateIsClearedWhenItsNetworkIsRemoved() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
@@ -1748,29 +1748,64 @@ class QuasselCoreIrcClientServiceTest {
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
-    connectAndAwaitEstablishedSession(service, events);
+    try {
+      connectAndAwaitEstablishedSession(service, events);
 
-    socket.writeInbound(
-        encodeSignalProxyFrame(
-            List.of(
-                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
-                "NetworkInfo".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                Map.of(
-                    "capsEnabled",
-                    List.of("multiline=max-bytes=4096,max-lines=4", "message-tags", "typing")))));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "NetworkInfo".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  Map.of(
+                      "capsEnabled",
+                      List.of(
+                          "multiline=max-bytes=4096,max-lines=4",
+                          "message-tags",
+                          "typing",
+                          "read-marker"),
+                      "isupport",
+                      List.of("MONITOR=100")))));
 
-    long deadline = System.currentTimeMillis() + 2_000L;
-    while ((!service.isMultilineAvailable("quassel")
-            || service.negotiatedMultilineMaxBytes("quassel") != 4096L
-            || service.negotiatedMultilineMaxLines("quassel") != 4)
-        && System.currentTimeMillis() < deadline) {
-      Thread.sleep(10L);
+      long deadline = System.currentTimeMillis() + 2_000L;
+      while ((!service.isMultilineAvailable("quassel")
+              || service.negotiatedMultilineMaxBytes("quassel") != 4096L
+              || service.negotiatedMultilineMaxLines("quassel") != 4)
+          && System.currentTimeMillis() < deadline) {
+        Thread.sleep(10L);
+      }
+      assertTrue(service.isMultilineAvailable("quassel"));
+      assertEquals(4096L, service.negotiatedMultilineMaxBytes("quassel"));
+      assertEquals(4, service.negotiatedMultilineMaxLines("quassel"));
+      awaitCondition(() -> service.isMonitorAvailable("quassel"));
+      assertTrue(service.isTypingAvailable("quassel"));
+      assertTrue(service.isReadMarkerAvailable("quassel"));
+      assertEquals(100, service.negotiatedMonitorLimit("quassel"));
+
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                  "2networkRemoved(NetworkId)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 1))));
+      awaitCondition(
+          () ->
+              service.quasselCoreNetworks("quassel").isEmpty()
+                  && !service.isMessageTagsAvailable("quassel")
+                  && !service.isMonitorAvailable("quassel")
+                  && service.negotiatedMultilineMaxBytes("quassel") == 0L);
+      assertFalse(service.isMultilineAvailable("quassel"));
+      assertFalse(service.isTypingAvailable("quassel"));
+      assertFalse(service.isReadMarkerAvailable("quassel"));
+      assertFalse(service.isMonitorAvailable("quassel"));
+      assertEquals(0L, service.negotiatedMultilineMaxBytes("quassel"));
+      assertEquals(0, service.negotiatedMultilineMaxLines("quassel"));
+      assertEquals(0, service.negotiatedMonitorLimit("quassel"));
+    } finally {
+      events.cancel();
+      service.shutdownNow();
     }
-    assertTrue(service.isMultilineAvailable("quassel"));
-    assertEquals(4096L, service.negotiatedMultilineMaxBytes("quassel"));
-    assertEquals(4, service.negotiatedMultilineMaxLines("quassel"));
   }
 
   @Test

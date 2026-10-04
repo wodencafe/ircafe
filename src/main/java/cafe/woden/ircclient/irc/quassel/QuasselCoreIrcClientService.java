@@ -22,7 +22,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.par
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parsePrimaryNetworkServer;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsAnyMapKeysIgnoreCase;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstIntFromMapKeys;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstLongFromMapKeys;
@@ -56,8 +55,6 @@ import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.KickDetails;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreFeatureStateParser.MonitorSupportState;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreFeatureStateParser.MultilineLimitState;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelector;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelectorKind;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.NetworkServerEndpoint;
@@ -76,7 +73,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -564,7 +560,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                       server.host(),
                       server.port(),
                       signalProxySender,
-                      observations::observeIdentity);
+                      observations::observeIdentity,
+                      event -> bus.onNext(new ServerIrcEvent(sid, event)));
               QuasselSession previous = sessions.putIfAbsent(sid, next);
               if (previous != null) return;
 
@@ -828,7 +825,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 return;
               }
 
-              if (!capabilityEnabledOrUnknown(session, READ_MARKER, DRAFT_READ_MARKER)) {
+              if (!hasCapability(session, READ_MARKER, DRAFT_READ_MARKER)) {
                 throw new IllegalStateException(
                     "Quassel read marker requires an observed message for "
                         + requested.rawTarget());
@@ -988,71 +985,62 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public boolean isMessageTagsAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, MESSAGE_TAGS);
+    return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, MESSAGE_TAGS);
+    return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, MESSAGE_TAGS);
+    return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, MESSAGE_TAGS);
+    return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, MULTILINE, DRAFT_MULTILINE);
+    return hasCapability(session, MULTILINE, DRAFT_MULTILINE);
   }
 
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    if (session == null) return 0L;
-    MultilineLimitState limits = multilineLimitsForPreferredNetwork(session);
-    if (limits == null) return 0L;
-    return Math.max(0L, limits.maxBytes());
+    return session == null ? 0L : session.features.multilineMaxBytes(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    if (session == null) return 0;
-    MultilineLimitState limits = multilineLimitsForPreferredNetwork(session);
-    if (limits == null) return 0;
-    long max = Math.max(0L, limits.maxLines());
-    if (max <= 0L) return 0;
-    if (max >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
-    return (int) max;
+    return session == null ? 0 : session.features.multilineMaxLines(primaryNetworkId(session));
   }
 
   @Override
   public boolean isExperimentalMessageEditAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, DRAFT_MESSAGE_EDIT);
+    return hasCapability(session, DRAFT_MESSAGE_EDIT);
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, DRAFT_MESSAGE_REDACTION);
+    return hasCapability(session, DRAFT_MESSAGE_REDACTION);
   }
 
   @Override
   public boolean isTypingAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
     if (session == null) return false;
-    return typingCapabilityEnabledOrUnknown(session);
+    return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
@@ -1061,13 +1049,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (session == null) {
       return backendAvailabilityReason(serverId);
     }
-    if (typingCapabilityEnabledOrUnknown(session)) {
+    if (hasCapability(session, MESSAGE_TAGS)) {
       return "";
     }
-    if (!session.capabilitySnapshotObserved.get()) {
+    if (!session.features.hasObservedCapabilities()) {
       return "typing support status is not yet available from Quassel backend state";
     }
-    if (!hasCapabilityAny(session, MESSAGE_TAGS)) {
+    if (!hasCapability(session, MESSAGE_TAGS)) {
       return "message-tags not negotiated in Quassel backend network state";
     }
     return "server may be blocking +typing via CLIENTTAGDENY";
@@ -1078,39 +1066,31 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     QuasselSession session = findEstablishedSession(serverId);
     return session != null
         && (session.nativeReadMarkerSupportObserved.get()
-            || capabilityEnabledOrUnknown(session, READ_MARKER, DRAFT_READ_MARKER));
+            || hasCapability(session, READ_MARKER, DRAFT_READ_MARKER));
   }
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, LABELED_RESPONSE);
+    return hasCapability(session, LABELED_RESPONSE);
   }
 
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, STANDARD_REPLIES);
+    return hasCapability(session, STANDARD_REPLIES);
   }
 
   @Override
   public boolean isMonitorAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    if (session == null) return false;
-    MonitorSupportState monitor = monitorSupportForPreferredNetwork(session);
-    return monitor != null && monitor.available();
+    return session != null && session.features.monitorAvailable(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMonitorLimit(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    if (session == null) return 0;
-    MonitorSupportState monitor = monitorSupportForPreferredNetwork(session);
-    if (monitor == null || !monitor.available()) return 0;
-    long max = Math.max(0L, monitor.limit());
-    if (max <= 0L) return 0;
-    if (max >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
-    return (int) max;
+    return session == null ? 0 : session.features.monitorLimit(primaryNetworkId(session));
   }
 
   @Override
@@ -1172,64 +1152,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return findEstablishedSession(serverId) != null;
   }
 
-  private boolean capabilityEnabledOrUnknown(QuasselSession session, String... capabilities) {
-    if (session == null) return false;
-    if (!session.capabilitySnapshotObserved.get()) return false;
-    return hasCapabilityAny(session, capabilities);
-  }
-
-  private boolean typingCapabilityEnabledOrUnknown(QuasselSession session) {
-    if (session == null) return false;
-    if (!session.capabilitySnapshotObserved.get()) return false;
-    return hasCapabilityAny(session, MESSAGE_TAGS);
-  }
-
-  private MonitorSupportState monitorSupportForPreferredNetwork(QuasselSession session) {
-    if (session == null || session.monitorSupportByNetworkId.isEmpty()) return null;
-    int primary = primaryNetworkId(session);
-    if (primary >= 0) {
-      MonitorSupportState byPrimary = session.monitorSupportByNetworkId.get(primary);
-      if (byPrimary != null) return byPrimary;
-    }
-    for (MonitorSupportState state : session.monitorSupportByNetworkId.values()) {
-      if (state != null) return state;
-    }
-    return null;
-  }
-
-  private MultilineLimitState multilineLimitsForPreferredNetwork(QuasselSession session) {
-    if (session == null || session.multilineLimitsByNetworkId.isEmpty()) return null;
-    int primary = primaryNetworkId(session);
-    if (primary >= 0) {
-      MultilineLimitState byPrimary = session.multilineLimitsByNetworkId.get(primary);
-      if (byPrimary != null) return byPrimary;
-    }
-    for (MultilineLimitState state : session.multilineLimitsByNetworkId.values()) {
-      if (state != null) return state;
-    }
-    return null;
-  }
-
-  private boolean hasCapabilityAny(QuasselSession session, String... capabilities) {
-    if (session == null || capabilities == null || capabilities.length == 0) return false;
-    if (session.enabledCapabilitiesByNetworkId.isEmpty()) return false;
-    HashSet<String> wanted = new HashSet<>();
-    for (String cap : capabilities) {
-      String token = QuasselCoreFeatureStateParser.canonicalCapabilityToken(cap);
-      if (!token.isEmpty()) {
-        wanted.add(token);
-      }
-    }
-    if (wanted.isEmpty()) return false;
-    for (Set<String> enabled : session.enabledCapabilitiesByNetworkId.values()) {
-      if (enabled == null || enabled.isEmpty()) continue;
-      for (String cap : wanted) {
-        if (enabled.contains(cap)) {
-          return true;
-        }
-      }
-    }
-    return false;
+  private boolean hasCapability(QuasselSession session, String... capabilities) {
+    return session != null && session.features.hasAnyCapability(capabilities);
   }
 
   private HistoryRequestContext prepareHistoryRequest(
@@ -1515,10 +1439,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.networks.reset();
       session.identities.clear();
       session.networkCurrentNickByNetworkId.clear();
-      session.enabledCapabilitiesByNetworkId.clear();
-      session.monitorSupportByNetworkId.clear();
-      session.multilineLimitsByNetworkId.clear();
-      session.capabilitySnapshotObserved.set(false);
+      session.features.clear();
       observeKnownNetworks(session, auth);
       session.identities.initialize(auth.initialIdentities());
       int primaryNetworkId = primaryNetworkId(session);
@@ -2382,107 +2303,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private void observeNetworkCapabilities(
       QuasselSession session, int networkId, Map<?, ?> stateMap) {
-    if (session == null || stateMap == null || stateMap.isEmpty()) return;
-    boolean hasCapabilitySnapshot =
-        containsAnyMapKeysIgnoreCase(
-            stateMap,
-            "capsEnabled",
-            "capsenabled",
-            "enabledCaps",
-            "enabledcaps",
-            "caps",
-            "capabilities",
-            "availableCaps");
-    if (!hasCapabilitySnapshot) return;
-
-    Set<String> enabled =
-        QuasselCoreFeatureStateParser.extractCapabilityTokens(
-            stateMap, "capsEnabled", "capsenabled", "enabledCaps", "enabledcaps");
-    if (enabled.isEmpty()) {
-      enabled =
-          QuasselCoreFeatureStateParser.extractCapabilityTokens(
-              stateMap, "caps", "capabilities", "availableCaps");
-    }
-
+    if (session == null) return;
     int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    if (resolvedNetworkId < 0) return;
-
-    session.capabilitySnapshotObserved.set(true);
-    Set<String> previous = session.enabledCapabilitiesByNetworkId.get(resolvedNetworkId);
-    session.enabledCapabilitiesByNetworkId.put(resolvedNetworkId, Set.copyOf(enabled));
-    trimMapToMaxSize(session.enabledCapabilitiesByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
-
-    observeMultilineLimitState(session, resolvedNetworkId, stateMap, enabled);
-    emitCapabilityDeltaEvents(session, previous, enabled, "SYNC");
-  }
-
-  private void observeMultilineLimitState(
-      QuasselSession session, int networkId, Map<?, ?> stateMap, Set<String> enabledCaps) {
-    if (session == null || networkId < 0) return;
-    Set<String> caps = enabledCaps == null ? Set.of() : enabledCaps;
-    boolean multilineEnabled =
-        caps.contains(Ircv3MultilineSupport.MULTILINE_CAPABILITY)
-            || caps.contains(Ircv3MultilineSupport.DRAFT_MULTILINE_CAPABILITY);
-    if (!multilineEnabled) {
-      session.multilineLimitsByNetworkId.remove(networkId);
-      return;
-    }
-
-    MultilineLimitState existing = session.multilineLimitsByNetworkId.get(networkId);
-    MultilineLimitState parsed =
-        QuasselCoreFeatureStateParser.extractMultilineLimitsFromStateMap(stateMap);
-    if (parsed != null) {
-      session.multilineLimitsByNetworkId.put(networkId, parsed);
-    } else if (existing == null) {
-      session.multilineLimitsByNetworkId.put(networkId, new MultilineLimitState(0L, 0L));
-    }
-    trimMapToMaxSize(session.multilineLimitsByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+    session.features.observeCapabilities(resolvedNetworkId, stateMap);
   }
 
   private void observeNetworkMonitorSupport(
       QuasselSession session, int networkId, Map<?, ?> stateMap) {
-    if (session == null || stateMap == null || stateMap.isEmpty()) return;
-    MonitorSupportState parsed =
-        QuasselCoreFeatureStateParser.extractMonitorSupportFromStateMap(stateMap);
-    if (parsed == null) return;
-    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    if (resolvedNetworkId < 0) return;
-    session.monitorSupportByNetworkId.put(resolvedNetworkId, parsed);
-    trimMapToMaxSize(session.monitorSupportByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
-  }
-
-  private void emitCapabilityDeltaEvents(
-      QuasselSession session, Set<String> previous, Set<String> current, String subcommand) {
     if (session == null) return;
-    Set<String> prev = previous == null ? Set.of() : previous;
-    Set<String> next = current == null ? Set.of() : current;
-    String sub = Objects.toString(subcommand, "").trim();
-    if (sub.isEmpty()) sub = "SYNC";
-    Instant now = Instant.now();
-    boolean emitted = false;
-
-    for (String cap : next) {
-      if (cap == null || cap.isBlank()) continue;
-      if (prev.contains(cap)) continue;
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId, new IrcEvent.Ircv3CapabilityChanged(now, sub, cap, true)));
-      emitted = true;
-    }
-    for (String cap : prev) {
-      if (cap == null || cap.isBlank()) continue;
-      if (next.contains(cap)) continue;
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId, new IrcEvent.Ircv3CapabilityChanged(now, sub, cap, false)));
-      emitted = true;
-    }
-    if (emitted) {
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.ConnectionFeaturesUpdated(now, "cap-" + sub.toLowerCase(Locale.ROOT))));
-    }
+    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
+    session.features.observeMonitor(resolvedNetworkId, stateMap);
   }
 
   private void handleIrcUserStateSync(
@@ -2869,14 +2699,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         .ifPresent(
             monitorSupport -> {
               int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-              if (resolvedNetworkId >= 0) {
-                session.monitorSupportByNetworkId.put(
-                    resolvedNetworkId,
-                    new MonitorSupportState(
-                        monitorSupport.supported(), Math.max(0L, (long) monitorSupport.limit())));
-                trimMapToMaxSize(
-                    session.monitorSupportByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
-              }
+              session.features.observeMonitor(
+                  resolvedNetworkId, monitorSupport.supported(), monitorSupport.limit());
             });
 
     boolean handled = false;
@@ -2942,82 +2766,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private void emitCapabilityChangesFromCapLine(
       QuasselSession session, Instant at, int networkId, QuasselCoreIrcEnvelope envelope) {
-    if (session == null || envelope == null || !envelope.parsed()) return;
-    String subcommand = envelope.capSubcommand();
-    if (subcommand.isEmpty()) return;
-    String caps = envelope.capList();
-    if (caps.isBlank()) return;
-
+    if (session == null) return;
     int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    boolean emitted = false;
-    for (String rawToken : caps.split("\\s+")) {
-      String token = Objects.toString(rawToken, "").trim();
-      if (token.isEmpty()) continue;
-
-      boolean disabledToken = token.startsWith("-");
-      String capName = QuasselCoreFeatureStateParser.canonicalCapabilityToken(token);
-      if (capName.isBlank()) continue;
-
-      boolean enabled =
-          switch (subcommand) {
-            case "ACK" -> !disabledToken;
-            case "DEL", "NAK", "NEW", "LS" -> false;
-            default -> false;
-          };
-
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.Ircv3CapabilityChanged(at, subcommand, capName, enabled)));
-      emitted = true;
-
-      if ("ACK".equals(subcommand) || "DEL".equals(subcommand) || "NAK".equals(subcommand)) {
-        applyCapabilityStateDelta(session, resolvedNetworkId, capName, enabled);
-      }
-
-      if (Ircv3MultilineSupport.isMultilineCapability(capName) && resolvedNetworkId >= 0) {
-        if ("DEL".equals(subcommand) || disabledToken) {
-          session.multilineLimitsByNetworkId.remove(resolvedNetworkId);
-        } else if ("ACK".equals(subcommand)) {
-          MultilineLimitState parsed =
-              QuasselCoreFeatureStateParser.multilineLimitsFromToken(token);
-          if (parsed != null) {
-            session.multilineLimitsByNetworkId.put(resolvedNetworkId, parsed);
-            trimMapToMaxSize(
-                session.multilineLimitsByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
-          } else {
-            session.multilineLimitsByNetworkId.putIfAbsent(
-                resolvedNetworkId, new MultilineLimitState(0L, 0L));
-          }
-        }
-      }
-    }
-
-    if (emitted) {
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.ConnectionFeaturesUpdated(
-                  at, "cap-" + subcommand.toLowerCase(Locale.ROOT))));
-    }
-  }
-
-  private void applyCapabilityStateDelta(
-      QuasselSession session, int networkId, String capability, boolean enabled) {
-    if (session == null || networkId < 0) return;
-    String cap = QuasselCoreFeatureStateParser.canonicalCapabilityToken(capability);
-    if (cap.isBlank()) return;
-
-    Set<String> previous = session.enabledCapabilitiesByNetworkId.get(networkId);
-    LinkedHashSet<String> next = new LinkedHashSet<>(previous == null ? Set.of() : previous);
-    if (enabled) {
-      next.add(cap);
-    } else {
-      next.remove(cap);
-    }
-    session.capabilitySnapshotObserved.set(true);
-    session.enabledCapabilitiesByNetworkId.put(networkId, Set.copyOf(next));
-    trimMapToMaxSize(session.enabledCapabilitiesByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+    session.features.observeCapLine(at, resolvedNetworkId, envelope);
   }
 
   private String resolveSignalTargetForRawTarget(
@@ -3380,9 +3131,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (session == null || networkId < 0) return;
     session.networks.forget(networkId);
     session.networkCurrentNickByNetworkId.remove(networkId);
-    session.enabledCapabilitiesByNetworkId.remove(networkId);
-    session.monitorSupportByNetworkId.remove(networkId);
-    session.multilineLimitsByNetworkId.remove(networkId);
+    session.features.removeNetwork(networkId);
     for (Map.Entry<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> entry :
         new ArrayList<>(session.bufferInfosById.entrySet())) {
       if (entry == null || entry.getKey() == null) continue;
@@ -3686,10 +3435,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.networks.clearMetadata();
     session.identities.clear();
     session.networkCurrentNickByNetworkId.clear();
-    session.enabledCapabilitiesByNetworkId.clear();
-    session.monitorSupportByNetworkId.clear();
-    session.multilineLimitsByNetworkId.clear();
-    session.capabilitySnapshotObserved.set(false);
+    session.features.clear();
     availabilityReasonByServer.put(session.serverId, session.closeReason.get());
     if (emitDisconnected) {
       emitDisconnectedOnce(session, session.closeReason.get());
@@ -4772,12 +4518,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final Map<Integer, String> networkCurrentNickByNetworkId = new ConcurrentHashMap<>();
     private final QuasselCoreNetworkCatalog networks;
     private final QuasselCoreIdentityState identities;
-    private final Map<Integer, Set<String>> enabledCapabilitiesByNetworkId =
-        new ConcurrentHashMap<>();
-    private final Map<Integer, MonitorSupportState> monitorSupportByNetworkId =
-        new ConcurrentHashMap<>();
-    private final Map<Integer, MultilineLimitState> multilineLimitsByNetworkId =
-        new ConcurrentHashMap<>();
+    private final QuasselCoreFeatureState features;
     private final Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> bufferInfosById =
         new ConcurrentHashMap<>();
     private final QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
@@ -4789,7 +4530,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);
     private final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
     private final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
-    private final AtomicBoolean capabilitySnapshotObserved = new AtomicBoolean(false);
     private final AtomicBoolean nativeReadMarkerSupportObserved = new AtomicBoolean(false);
     private final AtomicBoolean syncObserved = new AtomicBoolean(false);
     private final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);
@@ -4809,8 +4549,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         String connectedHost,
         int connectedPort,
         QuasselCoreSignalProxySender sender,
-        Consumer<String> identityObserved) {
+        Consumer<String> identityObserved,
+        Consumer<IrcEvent> featureObserved) {
       this.outbound = new QuasselCoreSerializedSignalProxySender(sender);
+      this.features =
+          new QuasselCoreFeatureState(MAX_NETWORK_IDENTITIES_PER_SESSION, featureObserved);
       this.identities =
           new QuasselCoreIdentityState(
               serverId, MAX_NETWORK_IDENTITIES_PER_SESSION, identityObserved);
