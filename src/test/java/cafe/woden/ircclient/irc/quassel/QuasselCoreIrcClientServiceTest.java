@@ -2137,8 +2137,8 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.ValueSource(strings = {"MarkerLines", "LastSeenMsg"})
-  void bufferSyncerInitDefersReadMarkerUntilMatchingBacklogArrives(String property)
+  @org.junit.jupiter.params.provider.MethodSource("bufferSyncerInitReadMarkerPayloads")
+  void bufferSyncerInitDefersReadMarkerUntilMatchingBacklogArrives(List<Object> payload)
       throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
@@ -2166,14 +2166,11 @@ class QuasselCoreIrcClientServiceTest {
     TestSubscriber<ServerIrcEvent> events = service.events().test();
     connectAndAwaitEstablishedSession(service, events);
 
-    socket.writeInbound(
-        encodeSignalProxyFrame(
-            List.of(
-                QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
-                "BufferSyncer",
-                "",
-                property,
-                List.of(11, 42))));
+    ArrayList<Object> initData =
+        new ArrayList<>(
+            List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA, "BufferSyncer", ""));
+    initData.addAll(payload);
+    socket.writeInbound(encodeSignalProxyFrame(initData));
     awaitCondition(() -> service.isReadMarkerAvailable("quassel"));
     assertTrue(
         events.values().stream()
@@ -2193,6 +2190,13 @@ class QuasselCoreIrcClientServiceTest {
                         42L, anchorSeconds, 0x0001, 0x80, chan, "alice!u@h", "marker anchor")))));
 
     awaitEvent(events, ev -> ev instanceof IrcEvent.ReadMarkerObserved);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.ChatHistoryBatchReceived);
+    assertEquals(
+        1L,
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.ReadMarkerObserved.class::isInstance)
+            .count());
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -2204,6 +2208,18 @@ class QuasselCoreIrcClientServiceTest {
                             .equals(
                                 java.time.Instant.parse(
                                     marker.marker().substring("timestamp=".length())))));
+  }
+
+  private static List<List<Object>> bufferSyncerInitReadMarkerPayloads() {
+    return List.of(
+        List.of("MarkerLines", List.of(11, 42)),
+        List.of("LastSeenMsg", List.of(11, 42)),
+        List.of("LastSeenMsgs".getBytes(java.nio.charset.StandardCharsets.UTF_8), List.of(11, 42)),
+        List.of("LastSeenMsg", Map.of("11", 42)),
+        List.of(Map.of("MarkerLines", Map.of("11", 42))),
+        List.of(Map.of("bufferId", 11, "markerLine", 42)),
+        List.of(List.of(Map.of("lastSeenMsgs", List.of(11, 42)))),
+        List.of("MarkerLines", List.of(11, 42, 11, 42), Map.of("bufferId", 11, "msgId", 42)));
   }
 
   @Test

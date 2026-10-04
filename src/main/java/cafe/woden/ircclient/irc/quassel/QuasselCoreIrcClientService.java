@@ -13,7 +13,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseTopic
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.collectPotentialNetworkStateMaps;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.decodeNetworkStateKey;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.flattenNetworkStateFromKeyValueParams;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.networkIdFromStateMap;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.networkStateLooksUsableForConnect;
@@ -23,9 +22,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.par
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parsePrimaryNetworkServer;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstIntFromMapKeys;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstLongFromMapKeys;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstMapValueByKeyIgnoreCase;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstNonBlank;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.mapValueIgnoreCase;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.parseBoolean;
@@ -53,6 +49,7 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreBufferSyncerParser.ReadMarkerUpdate;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.KickDetails;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelector;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelectorKind;
@@ -2178,87 +2175,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void handleBufferSyncerSync(
       QuasselSession session, String slotName, List<Object> values) {
     if (session == null || values == null || values.isEmpty()) return;
-    String slot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
     Instant now = Instant.now();
-
-    if (slot.contains("setmarkerline") || slot.contains("setlastseenmsg")) {
-      int bufferId = values.isEmpty() ? -1 : tryParseInt(values.get(0));
-      long markerMsgId = values.size() < 2 ? -1L : tryParseLong(values.get(1));
-      emitReadMarkerObserved(session, bufferId, markerMsgId, now);
-      return;
-    }
-
-    LinkedHashSet<ReadMarkerUpdate> updates = new LinkedHashSet<>();
-    for (int i = 0; i + 1 < values.size(); i += 2) {
-      String key = decodeNetworkStateKey(values.get(i)).toLowerCase(Locale.ROOT);
-      if (Set.of("markerlines", "lastseenmsg", "lastseenmsgs").contains(key)) {
-        collectBufferSyncerMarkerPairs(values.get(i + 1), updates);
-      }
-    }
-    for (Object value : values) {
-      collectBufferSyncerReadMarkers(value, updates);
-    }
-    if (updates.isEmpty()) return;
-    for (ReadMarkerUpdate update : updates) {
+    for (ReadMarkerUpdate update :
+        QuasselCoreBufferSyncerParser.parseReadMarkers(slotName, values)) {
       emitReadMarkerObserved(session, update.bufferId(), update.msgId(), now);
-    }
-  }
-
-  private static void collectBufferSyncerReadMarkers(Object raw, Set<ReadMarkerUpdate> out) {
-    if (raw == null || out == null) return;
-    if (raw instanceof List<?> list) {
-      for (Object value : list) {
-        collectBufferSyncerReadMarkers(value, out);
-      }
-      return;
-    }
-    if (!(raw instanceof Map<?, ?> map) || map.isEmpty()) return;
-
-    int directBufferId =
-        firstIntFromMapKeys(map, "bufferId", "bufferid", "buffer", "buffer_id", "id");
-    long directMsgId =
-        firstLongFromMapKeys(
-            map,
-            "markerLine",
-            "markerline",
-            "lastSeenMsg",
-            "lastseenmsg",
-            "lastSeen",
-            "lastseen",
-            "msgId",
-            "msgid",
-            "messageId",
-            "messageid");
-    if (directBufferId >= 0 && directMsgId > 0L) {
-      out.add(new ReadMarkerUpdate(directBufferId, directMsgId));
-    }
-
-    for (String key : List.of("markerLines", "lastSeenMsg", "lastSeenMsgs")) {
-      collectBufferSyncerMarkerPairs(firstMapValueByKeyIgnoreCase(map, key), out);
-    }
-
-    for (Object value : map.values()) {
-      collectBufferSyncerReadMarkers(value, out);
-    }
-  }
-
-  private static void collectBufferSyncerMarkerPairs(Object raw, Set<ReadMarkerUpdate> out) {
-    if (raw instanceof Map<?, ?> markerMap) {
-      for (Map.Entry<?, ?> entry : markerMap.entrySet()) {
-        int bufferId = tryParseInt(entry.getKey());
-        long msgId = tryParseLong(entry.getValue());
-        if (bufferId >= 0 && msgId > 0L) {
-          out.add(new ReadMarkerUpdate(bufferId, msgId));
-        }
-      }
-    } else if (raw instanceof List<?> pairs) {
-      for (int i = 0; i + 1 < pairs.size(); i += 2) {
-        int bufferId = tryParseInt(pairs.get(i));
-        long msgId = tryParseLong(pairs.get(i + 1));
-        if (bufferId >= 0 && msgId > 0L) {
-          out.add(new ReadMarkerUpdate(bufferId, msgId));
-        }
-      }
     }
   }
 
@@ -3306,8 +3226,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QualifiedTarget requestedTarget,
       String rewrittenRawLine,
       int targetTypeBitsHint) {}
-
-  private record ReadMarkerUpdate(int bufferId, long msgId) {}
 
   private record QualifiedTarget(String rawTarget, String baseTarget, String networkToken) {}
 
