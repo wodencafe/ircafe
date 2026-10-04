@@ -22,9 +22,7 @@ import static cafe.woden.ircclient.util.Ircv3CapabilityNames.LABELED_RESPONSE;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MESSAGE_TAGS;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MULTILINE;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.READ_MARKER;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.REPLY;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.STANDARD_REPLIES;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.TYPING;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.BackendDescriptorCatalog;
@@ -34,7 +32,6 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundCommandSignal;
-import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagSignal;
 import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
@@ -74,6 +71,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -139,8 +138,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String NETWORK_QUALIFIER_SUFFIX = "}";
   private static final Set<String> TARGET_ROUTED_RAW_COMMANDS =
       Set.of("PRIVMSG", "NOTICE", "TAGMSG", "MARKREAD", "REDACT");
-  private static final Set<String> EXTRA_PARSED_ENVELOPE_COMMANDS =
-      Set.of("CAP", "FAIL", "WARN", "NOTE");
   private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
   private static final String HANDSHAKE_INCOMPLETE_REASON =
       "Quassel protocol negotiated, but login/session handshake is not complete";
@@ -168,6 +165,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
+  private final QuasselCoreIrcv3InboundTranslator inboundTranslator;
 
   @Autowired
   public QuasselCoreIrcClientService(
@@ -202,6 +200,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.datastreamCodec = Objects.requireNonNull(datastreamCodec, "datastreamCodec");
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
+    this.inboundTranslator = new QuasselCoreIrcv3InboundTranslator(ircv3RuntimeSupport);
     IrcProperties.Client client = props == null ? null : props.client();
     this.reconnects =
         new QuasselCoreReconnectCoordinator(
@@ -2887,30 +2886,30 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     int networkId = bufferInfo == null ? -1 : bufferInfo.networkId();
     String fromDisplay = from.isEmpty() ? currentNickForNetwork(session, networkId) : from;
     String content = Objects.toString(message.content(), "");
-    ParsedIrcEnvelope ircEnvelope = parseIrcEnvelope(content);
+    QuasselCoreIrcEnvelope ircEnvelope = QuasselCoreIrcEnvelope.parse(content, ircv3RuntimeSupport);
     Map<String, String> ircv3Tags = ircEnvelope.ircv3Tags();
-    String payloadText = payloadTextFromEnvelope(ircEnvelope, content);
+    String payloadText = ircEnvelope.payloadText(content);
     String target = targetForBuffer(session, bufferInfo, fromDisplay);
     String historyTarget = historyTargetForBuffer(session, bufferInfo, fromDisplay);
     int historyNetworkId = networkId;
     noteTargetNetworkHint(session, historyTarget, historyNetworkId, true);
     noteHistoryObservation(session, historyTarget, message.messageId(), at);
     int typeBits = message.typeBits();
-    emitObservedIrcv3Signals(session, at, fromDisplay, target, networkId, ircEnvelope, messageId);
+    String fallbackSignalTarget = target;
+    Function<String, String> resolveSignalTarget =
+        rawTarget ->
+            resolveSignalTargetForRawTarget(
+                session, fromDisplay, fallbackSignalTarget, networkId, rawTarget);
+    Consumer<IrcEvent> emit = event -> bus.onNext(new ServerIrcEvent(session.serverId, event));
+    QuasselCoreIrcv3InboundTranslator.Observation observation =
+        new QuasselCoreIrcv3InboundTranslator.Observation(at, fromDisplay, ircEnvelope, messageId);
+    inboundTranslator.observeTags(observation, resolveSignalTarget, emit);
 
     String envelopeCommand = ircEnvelope.command();
     if ("CAP".equals(envelopeCommand)) {
       emitCapabilityChangesFromCapLine(session, at, networkId, ircEnvelope);
     }
-    if (emitStandardReplyFromCommand(session, at, ircEnvelope, messageId)) {
-      return;
-    }
-    if ("MARKREAD".equals(envelopeCommand)) {
-      emitReadMarkerFromCommand(session, at, fromDisplay, target, networkId, ircEnvelope);
-      return;
-    }
-    if ("REDACT".equals(envelopeCommand)) {
-      emitRedactionFromCommand(session, at, fromDisplay, target, networkId, ircEnvelope);
+    if (inboundTranslator.handleCommand(observation, resolveSignalTarget, emit)) {
       return;
     }
     if ("TAGMSG".equals(envelopeCommand) && payloadText.isBlank()) {
@@ -3092,101 +3091,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 ircv3Tags)));
   }
 
-  private static String payloadTextFromEnvelope(
-      ParsedIrcEnvelope envelope, String fallbackContent) {
-    if (envelope == null || !envelope.parsed()) {
-      return Objects.toString(fallbackContent, "");
-    }
-    if ("PRIVMSG".equals(envelope.command()) || "NOTICE".equals(envelope.command())) {
-      if (!envelope.trailing().isBlank()) {
-        return envelope.trailing();
-      }
-    }
-    if ("TAGMSG".equals(envelope.command())) {
-      return "";
-    }
-    return Objects.toString(fallbackContent, "");
-  }
-
-  private void emitObservedIrcv3Signals(
-      QuasselSession session,
-      Instant at,
-      String fromDisplay,
-      String fallbackTarget,
-      int networkId,
-      ParsedIrcEnvelope envelope,
-      String messageId) {
-    if (session == null || envelope == null) return;
-    Map<String, String> tags = envelope.ircv3Tags();
-    if (tags == null || tags.isEmpty()) return;
-
-    String from = Objects.toString(fromDisplay, "").trim();
-    if (from.isEmpty()) from = "server";
-    String convTarget =
-        resolveSignalTarget(session, fromDisplay, fallbackTarget, networkId, envelope, tags);
-
-    List<Ircv3InboundTagSignal> signals =
-        ircv3RuntimeSupport.conversationSignals(
-            envelope.command(),
-            from,
-            envelope.firstParam(),
-            envelope.params(),
-            tags,
-            envelope.rawLine());
-    for (Ircv3InboundTagSignal signal : signals) {
-      if (signal == null) continue;
-      switch (signal.type()) {
-        case REPLY ->
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.MessageReplyObserved(
-                        at, from, convTarget, signal.primaryValue())));
-        case REACT -> {
-          String targetMessageId = signal.secondaryValue();
-          if (targetMessageId.isBlank()) {
-            targetMessageId = Objects.toString(messageId, "").trim();
-          }
-          bus.onNext(
-              new ServerIrcEvent(
-                  session.serverId,
-                  new IrcEvent.MessageReactObserved(
-                      at, from, convTarget, signal.primaryValue(), targetMessageId)));
-        }
-        case UNREACT -> {
-          String targetMessageId = signal.secondaryValue();
-          if (targetMessageId.isBlank()) {
-            targetMessageId = Objects.toString(messageId, "").trim();
-          }
-          bus.onNext(
-              new ServerIrcEvent(
-                  session.serverId,
-                  new IrcEvent.MessageUnreactObserved(
-                      at, from, convTarget, signal.primaryValue(), targetMessageId)));
-        }
-        case MESSAGE_REDACTION ->
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.MessageRedactionObserved(
-                        at, from, convTarget, signal.primaryValue())));
-        case TYPING ->
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.UserTypingObserved(at, from, convTarget, signal.primaryValue())));
-        case READ_MARKER ->
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.ReadMarkerObserved(at, from, convTarget, signal.primaryValue())));
-        default -> {
-          // Other runtime tag signals are handled by their owning transport adapter.
-        }
-      }
-    }
-  }
-
   private boolean maybeEmitMonitorNumeric(
       QuasselSession session, Instant at, int networkId, String rawLine) {
     if (session == null) return false;
@@ -3270,11 +3174,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void emitCapabilityChangesFromCapLine(
-      QuasselSession session, Instant at, int networkId, ParsedIrcEnvelope envelope) {
+      QuasselSession session, Instant at, int networkId, QuasselCoreIrcEnvelope envelope) {
     if (session == null || envelope == null || !envelope.parsed()) return;
-    String subcommand = normalizeCapSubcommand(envelope);
+    String subcommand = envelope.capSubcommand();
     if (subcommand.isEmpty()) return;
-    String caps = capListFromEnvelope(envelope);
+    String caps = envelope.capList();
     if (caps.isBlank()) return;
 
     int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
@@ -3331,41 +3235,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
   }
 
-  private static String normalizeCapSubcommand(ParsedIrcEnvelope envelope) {
-    if (envelope == null) return "";
-    String sub = stripLeadingColon(envelope.secondParam());
-    if (sub.isBlank()) {
-      sub = stripLeadingColon(envelope.firstParam());
-    }
-    String action = sub.trim().toUpperCase(Locale.ROOT);
-    if ("ACK".equals(action)
-        || "DEL".equals(action)
-        || "NAK".equals(action)
-        || "NEW".equals(action)
-        || "LS".equals(action)) {
-      return action;
-    }
-    return "";
-  }
-
-  private static String capListFromEnvelope(ParsedIrcEnvelope envelope) {
-    if (envelope == null) return "";
-    String trailing = Objects.toString(envelope.trailing(), "").trim();
-    if (!trailing.isEmpty()) {
-      return trailing;
-    }
-    List<String> params = envelope.params();
-    if (params == null || params.size() <= 2) return "";
-    StringBuilder sb = new StringBuilder();
-    for (int i = 2; i < params.size(); i++) {
-      String token = stripLeadingColon(params.get(i));
-      if (token.isBlank()) continue;
-      if (sb.length() > 0) sb.append(' ');
-      sb.append(token);
-    }
-    return sb.toString().trim();
-  }
-
   private void applyCapabilityStateDelta(
       QuasselSession session, int networkId, String capability, boolean enabled) {
     if (session == null || networkId < 0) return;
@@ -3382,125 +3251,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.capabilitySnapshotObserved.set(true);
     session.enabledCapabilitiesByNetworkId.put(networkId, Set.copyOf(next));
     trimMapToMaxSize(session.enabledCapabilitiesByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
-  }
-
-  private boolean emitStandardReplyFromCommand(
-      QuasselSession session, Instant at, ParsedIrcEnvelope envelope, String fallbackMessageId) {
-    if (session == null || envelope == null || !envelope.parsed()) return false;
-    Ircv3StandardReplyRuntimeSupport.Observation reply =
-        ircv3RuntimeSupport
-            .standardReply(
-                envelope.command(),
-                envelope.rawLine(),
-                envelope.params(),
-                envelope.trailing(),
-                envelope.ircv3Tags(),
-                fallbackMessageId)
-            .orElse(null);
-    if (reply == null) return false;
-
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.StandardReply(
-                at,
-                toRootStandardReplyKind(reply.kind()),
-                reply.command(),
-                reply.code(),
-                reply.context(),
-                reply.description(),
-                envelope.rawLine(),
-                reply.messageId(),
-                envelope.ircv3Tags())));
-    return true;
-  }
-
-  private static IrcEvent.StandardReplyKind toRootStandardReplyKind(
-      Ircv3StandardReplyRuntimeSupport.Kind kind) {
-    return switch (kind) {
-      case FAIL -> IrcEvent.StandardReplyKind.FAIL;
-      case WARN -> IrcEvent.StandardReplyKind.WARN;
-      case NOTE -> IrcEvent.StandardReplyKind.NOTE;
-    };
-  }
-
-  private void emitReadMarkerFromCommand(
-      QuasselSession session,
-      Instant at,
-      String fromDisplay,
-      String fallbackTarget,
-      int networkId,
-      ParsedIrcEnvelope envelope) {
-    if (session == null || envelope == null || !envelope.parsed()) return;
-    String normalizedFrom = Objects.toString(fromDisplay, "").trim();
-    String observedFrom = normalizedFrom.isEmpty() ? "server" : normalizedFrom;
-    ircv3RuntimeSupport
-        .readMarkerFromCommand(
-            observedFrom,
-            envelope.command(),
-            envelope.rawLine(),
-            envelope.params(),
-            envelope.ircv3Tags())
-        .ifPresent(
-            observed -> {
-              String resolvedTarget =
-                  resolveSignalTargetForRawTarget(
-                      session, fromDisplay, fallbackTarget, networkId, observed.target());
-              bus.onNext(
-                  new ServerIrcEvent(
-                      session.serverId,
-                      new IrcEvent.ReadMarkerObserved(
-                          at, observedFrom, resolvedTarget, observed.marker())));
-            });
-  }
-
-  private void emitRedactionFromCommand(
-      QuasselSession session,
-      Instant at,
-      String fromDisplay,
-      String fallbackTarget,
-      int networkId,
-      ParsedIrcEnvelope envelope) {
-    if (session == null || envelope == null || !envelope.parsed()) return;
-    String observedFrom = Objects.toString(fromDisplay, "").trim();
-    String from = observedFrom.isEmpty() ? "server" : observedFrom;
-    ircv3RuntimeSupport
-        .redactionFromCommand(
-            from, envelope.command(), envelope.rawLine(), envelope.params(), envelope.ircv3Tags())
-        .ifPresent(
-            observed -> {
-              String resolvedTarget =
-                  resolveSignalTargetForRawTarget(
-                      session, fromDisplay, fallbackTarget, networkId, observed.target());
-              bus.onNext(
-                  new ServerIrcEvent(
-                      session.serverId,
-                      new IrcEvent.MessageRedactionObserved(
-                          at, from, resolvedTarget, observed.messageId())));
-            });
-  }
-
-  private String resolveSignalTarget(
-      QuasselSession session,
-      String fromDisplay,
-      String fallbackTarget,
-      int networkId,
-      ParsedIrcEnvelope envelope,
-      Map<String, String> tags) {
-    String channelContext =
-        ircv3RuntimeSupport.channelContext(
-            envelope.command(),
-            fromDisplay,
-            envelope.firstParam(),
-            envelope.params(),
-            tags,
-            envelope.rawLine());
-    String targetHint = stripLeadingColon(channelContext);
-    if (targetHint.isBlank()) {
-      targetHint = stripLeadingColon(envelope.firstParam());
-    }
-    return resolveSignalTargetForRawTarget(
-        session, fromDisplay, fallbackTarget, networkId, targetHint);
   }
 
   private String resolveSignalTargetForRawTarget(
@@ -3529,74 +3279,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return parsed.rawTarget();
     }
     return qualifyTargetForNetwork(session, base, networkId);
-  }
-
-  private ParsedIrcEnvelope parseIrcEnvelope(String content) {
-    String line = Objects.toString(content, "").trim();
-    if (line.isEmpty()) return ParsedIrcEnvelope.empty(content);
-
-    int idx = 0;
-    Map<String, String> tags = Map.of();
-    if (line.charAt(idx) == '@') {
-      tags = ircv3RuntimeSupport.messageTags(line);
-      int sp = line.indexOf(' ');
-      if (sp <= 0 || sp >= line.length() - 1) {
-        return ParsedIrcEnvelope.empty(content);
-      }
-      idx = sp + 1;
-      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
-    }
-
-    String source = "";
-    if (idx < line.length() && line.charAt(idx) == ':') {
-      int sp = line.indexOf(' ', idx);
-      if (sp <= idx || sp >= line.length() - 1) {
-        return ParsedIrcEnvelope.empty(content);
-      }
-      source = line.substring(idx + 1, sp).trim();
-      idx = sp + 1;
-      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
-    }
-    if (idx >= line.length()) {
-      return ParsedIrcEnvelope.empty(content);
-    }
-
-    int cmdStart = idx;
-    while (idx < line.length() && line.charAt(idx) != ' ') idx++;
-    String command = line.substring(cmdStart, idx).trim().toUpperCase(Locale.ROOT);
-    boolean commandOfInterest =
-        TARGET_ROUTED_RAW_COMMANDS.contains(command)
-            || EXTRA_PARSED_ENVELOPE_COMMANDS.contains(command)
-            || !tags.isEmpty();
-    if (command.isBlank() || !commandOfInterest) {
-      return ParsedIrcEnvelope.empty(content);
-    }
-
-    ArrayList<String> params = new ArrayList<>();
-    String trailing = "";
-    while (idx < line.length()) {
-      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
-      if (idx >= line.length()) break;
-      if (line.charAt(idx) == ':') {
-        trailing = line.substring(idx + 1);
-        break;
-      }
-      int start = idx;
-      while (idx < line.length() && line.charAt(idx) != ' ') idx++;
-      String param = line.substring(start, idx).trim();
-      if (!param.isEmpty()) {
-        params.add(param);
-      }
-    }
-
-    return new ParsedIrcEnvelope(
-        true,
-        line,
-        command,
-        source,
-        List.copyOf(params),
-        trailing,
-        tags == null || tags.isEmpty() ? Map.of() : tags);
   }
 
   private void handleJoinMessage(
@@ -4759,30 +4441,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return prefix + content;
     }
     return prefix + "(quassel message type " + message.typeBits() + ")";
-  }
-
-  private record ParsedIrcEnvelope(
-      boolean parsed,
-      String rawLine,
-      String command,
-      String source,
-      List<String> params,
-      String trailing,
-      Map<String, String> ircv3Tags) {
-    private static ParsedIrcEnvelope empty(String rawLine) {
-      return new ParsedIrcEnvelope(
-          false, Objects.toString(rawLine, ""), "", "", List.of(), "", Map.of());
-    }
-
-    private String firstParam() {
-      if (params == null || params.isEmpty()) return "";
-      return Objects.toString(params.get(0), "").trim();
-    }
-
-    private String secondParam() {
-      if (params == null || params.size() < 2) return "";
-      return Objects.toString(params.get(1), "").trim();
-    }
   }
 
   private record NetworkServerEndpoint(String host, int port, boolean useTls) {
