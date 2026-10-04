@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -249,6 +251,67 @@ class QuasselCoreNetworkCatalogTest {
     assertTrue(networks.knownIds(auth, List.of()).isEmpty());
     networks.reset();
     assertEquals(Set.of(9), networks.knownIds(auth, List.of()));
+  }
+
+  @Test
+  void pendingCreateNamesAreClaimedInOrderAndBlankRequestsAreIgnored() {
+    var catalog = new QuasselCoreNetworkCatalog(8, observedIdentities::add, () -> 1_000L);
+    catalog.rememberCreatedName(null);
+    catalog.rememberCreatedName(" ");
+    catalog.rememberCreatedName(" First ");
+    catalog.rememberCreatedName("Second");
+    assertEquals("First", catalog.claimCreatedName());
+    assertEquals("Second", catalog.claimCreatedName());
+    assertEquals("", catalog.claimCreatedName());
+    assertTrue(observedIdentities.isEmpty());
+  }
+
+  @Test
+  void pendingCreateNamesDropOldestRequestsWhenTheQueueReachesItsLimit() {
+    var catalog = new QuasselCoreNetworkCatalog(8, ignored -> {}, () -> 1_000L);
+    for (int i = 0; i < 40; i++) catalog.rememberCreatedName("Network " + i);
+    List<String> claimed = new ArrayList<>();
+    for (String name = catalog.claimCreatedName();
+        !name.isEmpty();
+        name = catalog.claimCreatedName()) {
+      claimed.add(name);
+    }
+    assertEquals(32, claimed.size());
+    assertEquals("Network 8", claimed.getFirst());
+    assertEquals("Network 39", claimed.getLast());
+  }
+
+  @Test
+  void pendingCreateNamesExpireAfterTwoMinutesWhileTheExactBoundaryRemainsValid() {
+    AtomicLong clock = new AtomicLong(1_000L);
+    var catalog = new QuasselCoreNetworkCatalog(8, ignored -> {}, clock::get);
+    catalog.rememberCreatedName("Boundary");
+    clock.addAndGet(TimeUnit.MINUTES.toMillis(2));
+    assertEquals("Boundary", catalog.claimCreatedName());
+    catalog.rememberCreatedName("Expired");
+    clock.addAndGet(TimeUnit.MINUTES.toMillis(2) + 1);
+    assertEquals("", catalog.claimCreatedName());
+  }
+
+  @Test
+  void aFreshCreateRequestPrunesExpiredNamesBeforeTheyCanBeAttachedToItsReply() {
+    AtomicLong clock = new AtomicLong(1_000L);
+    var catalog = new QuasselCoreNetworkCatalog(8, ignored -> {}, clock::get);
+    catalog.rememberCreatedName("Stale");
+    clock.addAndGet(TimeUnit.MINUTES.toMillis(2) + 1);
+    catalog.rememberCreatedName("Fresh");
+    assertEquals("Fresh", catalog.claimCreatedName());
+    assertEquals("", catalog.claimCreatedName());
+  }
+
+  @Test
+  void sessionCleanupAndAuthenticationResetReleasePendingCreationNames() {
+    networks.rememberCreatedName("Disconnected request");
+    networks.clearMetadata();
+    assertEquals("", networks.claimCreatedName());
+    networks.rememberCreatedName("Old session request");
+    networks.reset();
+    assertEquals("", networks.claimCreatedName());
   }
 
   private static AuthResult auth(int primary, List<Integer> ids) {

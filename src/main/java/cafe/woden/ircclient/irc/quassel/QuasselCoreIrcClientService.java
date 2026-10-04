@@ -87,7 +87,6 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -152,8 +151,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int MAX_TARGET_NETWORK_HINTS_PER_SESSION = 4_096;
   private static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
-  private static final int MAX_PENDING_NETWORK_CREATE_NAMES = 32;
-  private static final long PENDING_NETWORK_CREATE_NAME_TTL_MS = TimeUnit.MINUTES.toMillis(2);
   private static final String NETWORK_ADD_IRC_CHANNEL_SLOT = "addircchannel";
   private static final String NETWORK_REMOVE_IRC_CHANNEL_SLOT = "removeircchannel";
   private static final String NETWORK_QUALIFIER_PREFIX = "{net:";
@@ -1521,7 +1518,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.enabledCapabilitiesByNetworkId.clear();
       session.monitorSupportByNetworkId.clear();
       session.multilineLimitsByNetworkId.clear();
-      session.pendingCreatedNetworkNames.clear();
       session.capabilitySnapshotObserved.set(false);
       observeKnownNetworks(session, auth);
       session.identities.initialize(auth.initialIdentities());
@@ -1823,7 +1819,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               networkId);
           forgetKnownNetwork(session, networkId);
         } else {
-          String observedName = createLike ? claimPendingCreatedNetworkName(session) : "";
+          String observedName = createLike ? session.networks.claimCreatedName() : "";
           log.debug(
               "Quassel network lifecycle RPC observed network by id: serverId={}, networkId={}, nameHint={}",
               session.serverId,
@@ -1871,7 +1867,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (remove) {
       forgetKnownNetwork(session, networkId);
     } else {
-      String observedName = createLike ? claimPendingCreatedNetworkName(session) : "";
+      String observedName = createLike ? session.networks.claimCreatedName() : "";
       observeKnownNetwork(session, networkId, observedName);
     }
   }
@@ -3365,40 +3361,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return token;
   }
 
-  private static void rememberPendingCreatedNetworkName(
-      QuasselSession session, String networkName) {
-    if (session == null) return;
-    String name = Objects.toString(networkName, "").trim();
-    if (name.isEmpty()) return;
-    long nowMs = System.currentTimeMillis();
-    prunePendingCreatedNetworkNames(session, nowMs);
-    session.pendingCreatedNetworkNames.addLast(new PendingCreatedNetworkName(name, nowMs));
-    while (session.pendingCreatedNetworkNames.size() > MAX_PENDING_NETWORK_CREATE_NAMES) {
-      session.pendingCreatedNetworkNames.pollFirst();
-    }
-  }
-
-  private static String claimPendingCreatedNetworkName(QuasselSession session) {
-    if (session == null) return "";
-    long nowMs = System.currentTimeMillis();
-    prunePendingCreatedNetworkNames(session, nowMs);
-    PendingCreatedNetworkName pending = session.pendingCreatedNetworkNames.pollFirst();
-    if (pending == null) return "";
-    String name = Objects.toString(pending.networkName(), "").trim();
-    return name;
-  }
-
-  private static void prunePendingCreatedNetworkNames(QuasselSession session, long nowMs) {
-    if (session == null) return;
-    long cutoffMs = nowMs - PENDING_NETWORK_CREATE_NAME_TTL_MS;
-    for (; ; ) {
-      PendingCreatedNetworkName first = session.pendingCreatedNetworkNames.peekFirst();
-      if (first == null) break;
-      if (first.observedAtMs() >= cutoffMs) break;
-      session.pendingCreatedNetworkNames.pollFirst();
-    }
-  }
-
   private void observeKnownNetworks(
       QuasselSession session, QuasselCoreAuthHandshake.AuthResult authResult) {
     if (session == null || authResult == null || authResult.networkIds() == null) return;
@@ -3727,7 +3689,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.enabledCapabilitiesByNetworkId.clear();
     session.monitorSupportByNetworkId.clear();
     session.multilineLimitsByNetworkId.clear();
-    session.pendingCreatedNetworkNames.clear();
     session.capabilitySnapshotObserved.set(false);
     availabilityReasonByServer.put(session.serverId, session.closeReason.get());
     if (emitDisconnected) {
@@ -4340,7 +4301,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           codec.writeSignalProxyRpcCall(out, slot, params);
         });
     if (includeAutoJoinChannels) {
-      rememberPendingCreatedNetworkName(session, request.networkName());
+      session.networks.rememberCreatedName(request.networkName());
     }
   }
 
@@ -4794,8 +4755,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return fallbackAnyType;
   }
 
-  private record PendingCreatedNetworkName(String networkName, long observedAtMs) {}
-
   private static final class QuasselSession {
     private final String serverId;
     private final String initialNick;
@@ -4819,8 +4778,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         new ConcurrentHashMap<>();
     private final Map<Integer, MultilineLimitState> multilineLimitsByNetworkId =
         new ConcurrentHashMap<>();
-    private final ConcurrentLinkedDeque<PendingCreatedNetworkName> pendingCreatedNetworkNames =
-        new ConcurrentLinkedDeque<>();
     private final Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> bufferInfosById =
         new ConcurrentHashMap<>();
     private final QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();

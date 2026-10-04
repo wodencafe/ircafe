@@ -23,12 +23,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntConsumer;
+import java.util.function.LongSupplier;
 
 /** Session-owned network metadata, routing tokens, and side-effect-free catalog reads. */
 final class QuasselCoreNetworkCatalog {
+  private static final int MAX_PENDING_NETWORK_CREATE_NAMES = 32;
+  private static final long PENDING_NETWORK_CREATE_NAME_TTL_MS = TimeUnit.MINUTES.toMillis(2);
+
   private final int maxEntries;
   private final IntConsumer identityObserved;
+  private final LongSupplier nowMs;
+  private final ConcurrentLinkedDeque<PendingCreatedNetworkName> pendingCreatedNames =
+      new ConcurrentLinkedDeque<>();
   private final Map<Integer, String> displayNames = new ConcurrentHashMap<>();
   private final Map<Integer, String> tokens = new ConcurrentHashMap<>();
   private final Map<String, Integer> idsByToken = new ConcurrentHashMap<>();
@@ -36,6 +45,11 @@ final class QuasselCoreNetworkCatalog {
   private final Set<Integer> removedIds = ConcurrentHashMap.newKeySet();
 
   QuasselCoreNetworkCatalog(int maxEntries, IntConsumer identityObserved) {
+    this(maxEntries, identityObserved, System::currentTimeMillis);
+  }
+
+  QuasselCoreNetworkCatalog(int maxEntries, IntConsumer identityObserved, LongSupplier nowMs) {
+    this.nowMs = Objects.requireNonNull(nowMs, "nowMs");
     this.maxEntries = maxEntries;
     this.identityObserved = Objects.requireNonNull(identityObserved, "identityObserved");
   }
@@ -87,6 +101,7 @@ final class QuasselCoreNetworkCatalog {
     tokens.clear();
     idsByToken.clear();
     states.clear();
+    pendingCreatedNames.clear();
   }
 
   void reset() {
@@ -331,4 +346,36 @@ final class QuasselCoreNetworkCatalog {
     }
     return -1;
   }
+
+  void rememberCreatedName(String networkName) {
+    String name = Objects.toString(networkName, "").trim();
+    if (name.isEmpty()) return;
+    long observedAtMs = nowMs.getAsLong();
+    prunePendingCreatedNames(observedAtMs);
+    pendingCreatedNames.addLast(new PendingCreatedNetworkName(name, observedAtMs));
+    while (pendingCreatedNames.size() > MAX_PENDING_NETWORK_CREATE_NAMES) {
+      pendingCreatedNames.pollFirst();
+    }
+  }
+
+  String claimCreatedName() {
+    long observedAtMs = nowMs.getAsLong();
+    prunePendingCreatedNames(observedAtMs);
+    PendingCreatedNetworkName pending = pendingCreatedNames.pollFirst();
+    if (pending == null) return "";
+    String name = Objects.toString(pending.networkName(), "").trim();
+    return name;
+  }
+
+  private void prunePendingCreatedNames(long nowMs) {
+    long cutoffMs = nowMs - PENDING_NETWORK_CREATE_NAME_TTL_MS;
+    for (; ; ) {
+      PendingCreatedNetworkName first = pendingCreatedNames.peekFirst();
+      if (first == null) break;
+      if (first.observedAtMs() >= cutoffMs) break;
+      pendingCreatedNames.pollFirst();
+    }
+  }
+
+  private record PendingCreatedNetworkName(String networkName, long observedAtMs) {}
 }
