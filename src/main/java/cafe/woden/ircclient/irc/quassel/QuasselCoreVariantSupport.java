@@ -149,4 +149,17 @@ final class QuasselCoreVariantSupport {
     String v = Objects.toString(value, "");
     return v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0;
   }
+
+  static <K, V> void trimMapToMaxSize(Map<K, V> map, int maxSize) {
+    if (map == null || maxSize <= 0) return;
+    int size = map.size();
+    if (size <= maxSize) return;
+    int toRemove = size - maxSize;
+    for (K key : map.keySet()) {
+      if (toRemove <= 0) break;
+      if (map.remove(key) != null) {
+        toRemove--;
+      }
+    }
+  }
 }
