@@ -1669,7 +1669,8 @@ class QuasselCoreIrcClientServiceTest {
       @SuppressWarnings("unchecked")
       Map<Integer, Map<String, Object>> networkStates =
           (Map<Integer, Map<String, Object>>)
-              ReflectionTestUtils.getField(session, "networkStateByNetworkId");
+              ReflectionTestUtils.getField(
+                  ReflectionTestUtils.getField(session, "networks"), "states");
       @SuppressWarnings("unchecked")
       Map<String, Object> state = mock(Map.class);
       when(state.entrySet())
