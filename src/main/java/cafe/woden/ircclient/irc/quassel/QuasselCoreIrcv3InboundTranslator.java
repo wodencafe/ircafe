@@ -4,6 +4,7 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.stripLe
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ircv3.Ircv3StandardReplyRuntimeSupport;
+import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagRequest;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3InboundTagSignal;
 import java.time.Instant;
 import java.util.List;
@@ -57,18 +58,30 @@ final class QuasselCoreIrcv3InboundTranslator {
     Map<String, String> tags = envelope.ircv3Tags();
     if (tags == null || tags.isEmpty()) return;
 
-    String from = Objects.toString(fromDisplay, "").trim();
-    if (from.isEmpty()) from = "server";
-    String convTarget = resolveSignalTarget(fromDisplay, envelope, tags, resolveTarget);
-
-    List<Ircv3InboundTagSignal> signals =
-        ircv3RuntimeSupport.conversationSignals(
+    Ircv3InboundTagRequest request =
+        new Ircv3InboundTagRequest(
             envelope.command(),
-            from,
+            fromDisplay,
             envelope.firstParam(),
             envelope.params(),
             tags,
             envelope.rawLine());
+    String convTarget = resolveSignalTarget(request, resolveTarget);
+    String from = request.sourceNick();
+    if (from.isEmpty()) {
+      // Route senderless direct messages using their recipient before applying the event fallback.
+      from = "server";
+      request =
+          new Ircv3InboundTagRequest(
+              request.command(),
+              from,
+              request.rawTarget(),
+              request.parameters(),
+              request.tags(),
+              request.rawLine());
+    }
+
+    List<Ircv3InboundTagSignal> signals = ircv3RuntimeSupport.conversationSignals(request);
     for (Ircv3InboundTagSignal signal : signals) {
       if (signal == null) continue;
       switch (signal.type()) {
@@ -197,21 +210,11 @@ final class QuasselCoreIrcv3InboundTranslator {
   }
 
   private String resolveSignalTarget(
-      String fromDisplay,
-      QuasselCoreIrcEnvelope envelope,
-      Map<String, String> tags,
-      Function<String, String> resolveTarget) {
-    String channelContext =
-        ircv3RuntimeSupport.channelContext(
-            envelope.command(),
-            fromDisplay,
-            envelope.firstParam(),
-            envelope.params(),
-            tags,
-            envelope.rawLine());
+      Ircv3InboundTagRequest request, Function<String, String> resolveTarget) {
+    String channelContext = ircv3RuntimeSupport.channelContext(request);
     String targetHint = stripLeadingColon(channelContext);
     if (targetHint.isBlank()) {
-      targetHint = stripLeadingColon(envelope.firstParam());
+      targetHint = stripLeadingColon(request.rawTarget());
     }
     return resolveTarget.apply(targetHint);
   }

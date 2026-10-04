@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import cafe.woden.ircclient.irc.ircv3.Ircv3InboundCommandSignalRuntimeCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3InboundTagSignalRuntimeCatalog;
@@ -23,6 +24,7 @@ import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandOperation;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandProvider;
 import cafe.woden.ircclient.irc.ircv3.spi.Ircv3OutboundCommandRequest;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,6 +78,58 @@ class QuasselIrcv3RuntimeSupportTest {
             Ircv3InboundTagSignal.of(Ircv3InboundTagSignalType.TYPING, "active"),
             Ircv3InboundTagSignal.of(Ircv3InboundTagSignalType.READ_MARKER, "timestamp=plugin")),
         support.conversationSignals("TAGMSG", "alice", "quassel", List.of("quassel"), tags, "raw"));
+  }
+
+  @Test
+  void preparedRequestPreservesObservationMetadataAcrossProviderOperations() {
+    List<Ircv3InboundTagRequest> observedRequests = new ArrayList<>();
+    var delegate = new TagProvider();
+    var recordingProvider =
+        new Ircv3InboundTagSignalProvider() {
+          @Override
+          public String providerId() {
+            return "recording-tags";
+          }
+
+          @Override
+          public Set<Ircv3InboundTagOperation> inboundTagOperations() {
+            return delegate.inboundTagOperations();
+          }
+
+          @Override
+          public List<Ircv3InboundTagSignal> parse(
+              Ircv3InboundTagOperation operation, Ircv3InboundTagRequest request) {
+            observedRequests.add(request);
+            return delegate.parse(operation, request);
+          }
+        };
+    var support =
+        new QuasselIrcv3RuntimeSupport(
+            Ircv3OutboundCommandRuntimeCatalog.fromProviders(List.of(new OutboundProvider())),
+            Ircv3InboundTagSignalRuntimeCatalog.fromProviders(List.of(recordingProvider)),
+            Ircv3InboundCommandSignalRuntimeCatalog.fromProviders(List.of(new CommandProvider())),
+            Ircv3MessageTagsRuntimeCatalog.fromProviders(List.of(new MessageTagProvider())));
+    var request =
+        new Ircv3InboundTagRequest(
+            "PRIVMSG",
+            "alice",
+            "quassel",
+            List.of("quassel"),
+            Map.of("plugin/context", "#plugin"),
+            "@plugin/context=#plugin :alice PRIVMSG quassel :hello",
+            Instant.parse("2026-03-03T12:00:00Z").toEpochMilli(),
+            List.of("quassel", "quassel_"),
+            true);
+
+    assertEquals("#plugin", support.channelContext(request));
+    assertEquals(
+        List.of(
+            Ircv3InboundTagSignal.of(Ircv3InboundTagSignalType.REPLY, "plugin-reply"),
+            new Ircv3InboundTagSignal(
+                Ircv3InboundTagSignalType.REACT, "sparkle", "plugin-message")),
+        support.conversationSignals(request));
+    assertEquals(5, observedRequests.size());
+    observedRequests.forEach(observed -> assertSame(request, observed));
   }
 
   @Test
