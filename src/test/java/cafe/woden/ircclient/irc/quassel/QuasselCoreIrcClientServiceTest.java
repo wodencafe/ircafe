@@ -396,6 +396,96 @@ class QuasselCoreIrcClientServiceTest {
                 0));
   }
 
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"rpc", "BufferSyncer", "BufferViewConfig"})
+  void partialBufferUpdatesPreserveRoutingAndRemovalForgetsTheCachedBuffer(String source)
+      throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var known = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 0x02, 77, "#other");
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1, 2), Map.of(22, known)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      var partial = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 0, 0, -1, " ");
+      if ("rpc".equals(source)) {
+        socket.writeInbound(
+            encodeRpcCall(codec, "2bufferInfoUpdated(BufferInfo)", List.of(partial)));
+      } else {
+        socket.writeInbound(
+            encodeSignalProxyFrame(
+                List.of(
+                    QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
+                    source,
+                    "global",
+                    Map.of("nested", List.of(partial)))));
+      }
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("network", "buffer update complete")));
+      awaitEvent(
+          events,
+          ev ->
+              ev instanceof IrcEvent.ServerResponseLine response
+                  && response.message().contains("buffer update complete"));
+      service.sendToChannel("quassel", "#other{net:network-2}", "cached buffer").blockingAwait();
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(known, "cached buffer"));
+
+      socket.writeInbound(encodeRpcCall(codec, "2bufferInfoRemoved(BufferInfo)", List.of(known)));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("network", "buffer removal complete")));
+      awaitEvent(
+          events,
+          ev ->
+              ev instanceof IrcEvent.ServerResponseLine response
+                  && response.message().contains("buffer removal complete"));
+      service.sendToChannel("quassel", "#other{net:network-2}", "ephemeral buffer").blockingAwait();
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.BufferInfoValue(-1, 2, 0x02, -1, "#other"),
+                  "ephemeral buffer"));
+      assertThrows(
+          BackendNotAvailableException.class,
+          () ->
+              service
+                  .requestChatHistoryBefore("quassel", "#other{net:network-2}", "msgid=100", 20)
+                  .blockingAwait());
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
+  }
+
   @Test
   void capabilityFlagsReflectQuasselParityDefaults() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
