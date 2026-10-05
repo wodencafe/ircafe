@@ -40,6 +40,8 @@ import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -443,8 +445,18 @@ class QuasselCoreIrcClientServiceTest {
     }
   }
 
-  @Test
-  void sendRawRoutesTagmsgToTargetBufferAndStripsNetworkQualifier() throws Exception {
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "PRIVMSG|:hello #dupe{net:network-2}",
+        "NOTICE|:hello #dupe{net:network-2}",
+        "TAGMSG|''",
+        "MARKREAD|timestamp=2026-10-05T12:00:00.000Z",
+        "REDACT|42 :reason #dupe{net:network-2}"
+      })
+  void sendRawRoutesQualifiedCommandsAndPreservesTheirEnvelopes(String command, String trailing)
+      throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
@@ -474,15 +486,22 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
-    connectAndAwaitEstablishedSession(service, events);
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      String prefix = "@label=#dupe{net:network-2}  :nick!user@host " + command + "  ";
+      String suffix = trailing.isEmpty() ? "" : "   " + trailing;
 
-    service.sendRaw("quassel", "TAGMSG #dupe{net:network-2}").blockingAwait();
+      service.sendRaw("quassel", prefix + "#dupe{net:NETWORK-2}" + suffix).blockingAwait();
 
-    verify(datastreamCodec)
-        .writeSignalProxyRpcCall(
-            socket.getOutputStream(),
-            "2sendInput(BufferInfo,QString)",
-            List.of(net2Buffer, "/QUOTE TAGMSG #dupe"));
+      verify(datastreamCodec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(net2Buffer, "/QUOTE " + prefix + "#dupe" + suffix));
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test
