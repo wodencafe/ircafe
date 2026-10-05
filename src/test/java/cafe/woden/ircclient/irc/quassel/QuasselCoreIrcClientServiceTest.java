@@ -3480,6 +3480,107 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void networkChannelRemovalAndReconnectKeepMembershipIsolated() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue chan =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#ircafe");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel",
+                1,
+                List.of(1, 2),
+                Map.of(
+                    11,
+                    chan,
+                    22,
+                    new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 0x02, -1, "#ircafe"))));
+
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    connectAndAwaitEstablishedSession(service, events);
+
+    for (int networkId : List.of(1, 2)) {
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  Integer.toString(networkId).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "addIrcChannel".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "#ircafe")));
+    }
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "Network".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "removeIrcChannel".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "#ircafe")));
+    for (int networkId : List.of(2, 1)) {
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  Integer.toString(networkId).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "addIrcChannel".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "#ircafe")));
+    }
+    for (boolean connected : List.of(false, true)) {
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "NetworkInfo".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                  Map.of("isConnected", connected))));
+    }
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayStatusMsg(QString,QString)",
+            List.of("", "membership-isolation-complete")));
+    awaitEvent(
+        events,
+        event ->
+            event instanceof IrcEvent.ServerResponseLine line
+                && line.message().contains("membership-isolation-complete"));
+    assertEquals(
+        List.of(
+            "#ircafe{net:network-1}",
+            "#ircafe{net:network-2}",
+            "#ircafe{net:network-1}",
+            "#ircafe{net:network-1}"),
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.JoinedChannel.class::isInstance)
+            .map(IrcEvent.JoinedChannel.class::cast)
+            .map(IrcEvent.JoinedChannel::channel)
+            .toList());
+    assertTrue(
+        events.values().stream().noneMatch(event -> event.event() instanceof IrcEvent.LeftChannel));
+  }
+
+  @Test
   void networkAddIrcChannelSyncEmitsJoinedChannelAndDedupesDisplayJoin() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
