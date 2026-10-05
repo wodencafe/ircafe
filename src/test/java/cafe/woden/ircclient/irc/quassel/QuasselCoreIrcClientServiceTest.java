@@ -2169,6 +2169,15 @@ class QuasselCoreIrcClientServiceTest {
     ArrayList<Object> initData =
         new ArrayList<>(
             List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA, "BufferSyncer", ""));
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "BufferSyncer",
+                "global",
+                "setMarkerLine(BufferId,MsgId)",
+                11,
+                41)));
     initData.addAll(payload);
     socket.writeInbound(encodeSignalProxyFrame(initData));
     awaitCondition(() -> service.isReadMarkerAvailable("quassel"));
@@ -2186,6 +2195,14 @@ class QuasselCoreIrcClientServiceTest {
                 "receiveBacklog",
                 11,
                 List.of(
+                    new QuasselCoreDatastreamCodec.MessageValue(
+                        41L,
+                        anchorSeconds - 10,
+                        0x0001,
+                        0x80,
+                        chan,
+                        "alice!u@h",
+                        "superseded anchor"),
                     new QuasselCoreDatastreamCodec.MessageValue(
                         42L, anchorSeconds, 0x0001, 0x80, chan, "alice!u@h", "marker anchor")))));
 
@@ -2220,6 +2237,69 @@ class QuasselCoreIrcClientServiceTest {
         List.of(Map.of("bufferId", 11, "markerLine", 42)),
         List.of(List.of(Map.of("lastSeenMsgs", List.of(11, 42)))),
         List.of("MarkerLines", List.of(11, 42, 11, 42), Map.of("bufferId", 11, "msgId", 42)));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"buffer", "network"})
+  void removingBufferOrNetworkDiscardsItsPendingReadMarker(String removal) throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreDatastreamCodec.BufferInfoValue chan =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#ircafe");
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of(11, chan)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    connectAndAwaitEstablishedSession(service, events);
+
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "BufferSyncer",
+                "global",
+                "setMarkerLine(BufferId,MsgId)",
+                11,
+                42)));
+    if ("buffer".equals(removal)) {
+      socket.writeInbound(
+          encodeRpcCall(datastreamCodec, "2bufferInfoRemoved(BufferInfo)", List.of(chan)));
+    } else {
+      socket.writeInbound(
+          encodeRpcCall(
+              datastreamCodec,
+              "2networkRemoved(NetworkId)",
+              List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 1))));
+    }
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(
+                new QuasselCoreDatastreamCodec.MessageValue(
+                    42L, 1_700_000_500L, 0x0001, 0, chan, "alice!u@h", "removed marker anchor"))));
+    awaitEvent(
+        events,
+        ev -> ev instanceof IrcEvent.ChannelMessage message && "42".equals(message.messageId()));
+    assertTrue(service.isReadMarkerAvailable("quassel"));
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .noneMatch(IrcEvent.ReadMarkerObserved.class::isInstance));
   }
 
   @Test
