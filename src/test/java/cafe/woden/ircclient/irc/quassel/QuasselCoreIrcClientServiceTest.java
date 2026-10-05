@@ -125,9 +125,19 @@ class QuasselCoreIrcClientServiceTest {
     assertEquals("quassel", service.currentNick("quassel").orElseThrow());
     assertEquals("", service.backendAvailabilityReason("quassel"));
 
+    service.sendPrivateMessage("quassel", "alice", "hello").blockingAwait();
+    Map<?, ?> sessions =
+        assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
+    QuasselCoreTargetNetworkHints hints =
+        assertInstanceOf(
+            QuasselCoreTargetNetworkHints.class,
+            ReflectionTestUtils.getField(sessions.get("quassel"), "targetNetworkHints"));
+    assertEquals(1, hints.networkIdForTarget("alice"));
+
     service.disconnect("quassel").blockingAwait();
     events.awaitCount(4);
 
+    assertEquals(-1, hints.networkIdForTarget("alice"));
     IrcEvent.Disconnected disconnected =
         assertInstanceOf(IrcEvent.Disconnected.class, events.values().get(3).event());
     assertEquals("Client requested disconnect", disconnected.reason());
@@ -2502,7 +2512,17 @@ class QuasselCoreIrcClientServiceTest {
                     "alice!u@h",
                     "@+draft/unreact=thumbsup;+draft/reply=42 :alice!u@h TAGMSG #ircafe"))));
 
-    awaitEvent(events, ev -> ev instanceof IrcEvent.MessageRedactionObserved);
+    // The status RPC follows both TAGMSG frames, so suppression checks also see completed handling.
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayStatusMsg(QString,QString)",
+            List.of("network", "tagmsg replay complete")));
+    awaitEvent(
+        events,
+        ev ->
+            ev instanceof IrcEvent.ServerResponseLine response
+                && response.message().contains("tagmsg replay complete"));
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -3970,7 +3990,19 @@ class QuasselCoreIrcClientServiceTest {
             "hello from network 2");
     socket.writeInbound(
         encodeRpcCall(datastreamCodec, "2displayMsg(Message)", List.of(net2Inbound)));
-    events.awaitCount(4);
+    awaitEvent(
+        events,
+        ev -> ev instanceof IrcEvent.ChannelMessage message && "1001".equals(message.messageId()));
+
+    // A later buffer snapshot seeds defaults but must not replace the observed network hint.
+    socket.writeInbound(
+        encodeRpcCall(datastreamCodec, "2bufferInfoUpdated(BufferInfo)", List.of(net1Buffer)));
+    var heartbeat = QuasselCoreDatastreamCodec.utcDateTimeFromEpochMs(1_700_000_000_000L);
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT, heartbeat)));
+    verify(datastreamCodec, org.mockito.Mockito.timeout(1_000L))
+        .writeSignalProxyHeartBeatReply(socket.getOutputStream(), heartbeat);
 
     service.sendToChannel("quassel", "#dupe", "reply").blockingAwait();
 
@@ -3979,7 +4011,82 @@ class QuasselCoreIrcClientServiceTest {
             socket.getOutputStream(),
             "2sendInput(BufferInfo,QString)",
             List.of(net2Buffer, "reply"));
+    service.sendToChannel("quassel", "#dupe{net:unknown}", "unknown token reply").blockingAwait();
+    verify(datastreamCodec)
+        .writeSignalProxyRpcCall(
+            socket.getOutputStream(),
+            "2sendInput(BufferInfo,QString)",
+            List.of(net2Buffer, "unknown token reply"));
+    service.sendToChannel("quassel", "#dupe{net:network-1}", "explicit reply").blockingAwait();
+    verify(datastreamCodec)
+        .writeSignalProxyRpcCall(
+            socket.getOutputStream(),
+            "2sendInput(BufferInfo,QString)",
+            List.of(net1Buffer, "explicit reply"));
     service.disconnect("quassel").blockingAwait();
+  }
+
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"request", "rpc"})
+  void removingANetworkDiscardsHintsForTargetsWithoutKnownBuffers(String removal) throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1, 2), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    CountDownLatch removed = new CountDownLatch(1);
+    var removalSubscription =
+        service
+            .quasselCoreNetworkEvents()
+            .filter(event -> "forget-known-network".equals(event.source()))
+            .subscribe(event -> removed.countDown());
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      service.sendToChannel("quassel", "#fresh{net:network-2}", "before removal").blockingAwait();
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.BufferInfoValue(-1, 2, 0x02, -1, "#fresh"),
+                  "before removal"));
+      if ("request".equals(removal)) {
+        service.quasselCoreRemoveNetwork("quassel", "2").blockingAwait();
+      } else {
+        socket.writeInbound(
+            encodeRpcCall(
+                codec,
+                "2networkRemoved(NetworkId)",
+                List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 2))));
+      }
+      assertTrue(removed.await(2, TimeUnit.SECONDS));
+      service.sendToChannel("quassel", "#fresh", "after removal").blockingAwait();
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.BufferInfoValue(-1, 1, 0x02, -1, "#fresh"),
+                  "after removal"));
+    } finally {
+      removalSubscription.dispose();
+      events.cancel();
+      service.shutdownNow();
+    }
   }
 
   @Test

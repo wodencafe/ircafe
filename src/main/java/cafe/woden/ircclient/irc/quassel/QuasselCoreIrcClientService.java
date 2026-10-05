@@ -22,7 +22,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.par
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parsePrimaryNetworkServer;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.normalizeMembershipKey;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.normalizeTargetHintKey;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.parseQualifiedTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.routeOutboundRawLine;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
@@ -147,7 +146,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String BUFFER_SYNCER_LAST_SEEN_SLOT = "requestSetLastSeenMsg";
   private static final long LAG_SAMPLE_STALE_AFTER_MS = TimeUnit.MINUTES.toMillis(2);
   private static final int MAX_BUFFER_INFOS_PER_SESSION = 8_192;
-  private static final int MAX_TARGET_NETWORK_HINTS_PER_SESSION = 4_096;
   private static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
   private static final String NETWORK_ADD_IRC_CHANNEL_SLOT = "addircchannel";
@@ -1274,25 +1272,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselSession session, String target, int networkId, boolean preferObservedNetwork) {
     if (session == null || networkId < 0) return;
     observeKnownNetwork(session, networkId, "");
-    String key = normalizeTargetHintKey(target);
-    if (key.isEmpty()) return;
-
     if (preferObservedNetwork) {
-      session.targetNetworkHintsByTargetLower.put(key, networkId);
-      trimMapToMaxSize(
-          session.targetNetworkHintsByTargetLower, MAX_TARGET_NETWORK_HINTS_PER_SESSION);
-      return;
+      session.targetNetworkHints.observe(target, networkId);
+    } else {
+      session.targetNetworkHints.seed(target, networkId, () -> firstKnownNetworkId(session));
     }
-
-    int preferredDefault = firstKnownNetworkId(session);
-    if (preferredDefault >= 0 && networkId != preferredDefault) {
-      session.targetNetworkHintsByTargetLower.putIfAbsent(key, preferredDefault);
-      trimMapToMaxSize(
-          session.targetNetworkHintsByTargetLower, MAX_TARGET_NETWORK_HINTS_PER_SESSION);
-      return;
-    }
-    session.targetNetworkHintsByTargetLower.putIfAbsent(key, networkId);
-    trimMapToMaxSize(session.targetNetworkHintsByTargetLower, MAX_TARGET_NETWORK_HINTS_PER_SESSION);
   }
 
   private int preferredNetworkIdForTarget(
@@ -1305,13 +1289,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         return byToken.intValue();
       }
     }
-    String key = normalizeTargetHintKey(target);
-    if (!key.isEmpty()) {
-      Integer hinted = session.targetNetworkHintsByTargetLower.get(key);
-      if (hinted != null && hinted.intValue() >= 0) {
-        return hinted.intValue();
-      }
-    }
+    int hinted = session.targetNetworkHints.networkIdForTarget(target);
+    if (hinted >= 0) return hinted;
     return firstKnownNetworkId(session);
   }
 
@@ -1383,7 +1362,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.nativeReadMarkerSupportObserved.set(false);
       session.bufferInfosById.putAll(auth.initialBuffers());
       trimMapToMaxSize(session.bufferInfosById, MAX_BUFFER_INFOS_PER_SESSION);
-      session.targetNetworkHintsByTargetLower.clear();
+      session.targetNetworkHints.clear();
       session.networks.reset();
       session.identities.clear();
       session.networkCurrentNickByNetworkId.clear();
@@ -2936,13 +2915,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.bufferInfosById.remove(entry.getKey(), info);
       session.pendingReadMarkers.forgetBuffer(entry.getKey());
     }
-    for (Map.Entry<String, Integer> entry :
-        new ArrayList<>(session.targetNetworkHintsByTargetLower.entrySet())) {
-      if (entry == null) continue;
-      Integer mapped = entry.getValue();
-      if (mapped == null || mapped.intValue() != networkId) continue;
-      session.targetNetworkHintsByTargetLower.remove(entry.getKey(), mapped);
-    }
+    session.targetNetworkHints.forgetNetwork(networkId);
     String membershipPrefix = networkId + "|";
     for (String membershipKey : new ArrayList<>(session.joinedChannelMembershipKeys)) {
       if (membershipKey == null || !membershipKey.startsWith(membershipPrefix)) continue;
@@ -3215,7 +3188,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.pendingReadMarkers.clear();
     session.nativeReadMarkerSupportObserved.set(false);
     session.history.clear();
-    session.targetNetworkHintsByTargetLower.clear();
+    session.targetNetworkHints.clear();
     session.joinedChannelMembershipKeys.clear();
     session.networks.clearMetadata();
     session.identities.clear();
@@ -4248,7 +4221,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final QuasselCoreHistorySupport history = new QuasselCoreHistorySupport();
     private final QuasselCorePendingReadMarkers pendingReadMarkers =
         new QuasselCorePendingReadMarkers();
-    private final Map<String, Integer> targetNetworkHintsByTargetLower = new ConcurrentHashMap<>();
+    private final QuasselCoreTargetNetworkHints targetNetworkHints =
+        new QuasselCoreTargetNetworkHints();
     private final Set<String> joinedChannelMembershipKeys = ConcurrentHashMap.newKeySet();
     private final AtomicReference<QuasselCoreDatastreamCodec.QtDateTimeValue> lagProbeToken =
         new AtomicReference<>();
