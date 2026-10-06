@@ -18,7 +18,9 @@ import javax.swing.*;
  * <ul>
  *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark themes).
  *   <li>Idle (typing available): steady green arrow.
+ *   <li>Pending: alternate glowing violet and gray while waiting to send.
  *   <li>Active: fade into a glowing blue arrow pulse.
+ *   <li>Paused sent: briefly pulse green, then settle back to idle.
  *   <li>Paused/done: fade back to idle green.
  * </ul>
  */
@@ -26,9 +28,17 @@ final class TypingSignalIndicator extends JComponent {
 
   private static final int FRAME_MS = 33;
   private static final long ACTIVE_PULSE_MS = 1050L;
+  private static final long PENDING_COLOR_CYCLE_MS = 1200L;
+  private static final int PENDING_COLOR_FADE_MS = 200;
   private static final int ACTIVE_FADE_MS = 240;
   private static final int RETURN_TO_IDLE_MS = 420;
+  private static final int PAUSED_SENT_PULSE_MS = 500;
+  private static final int PAUSED_SENT_FADE_MS = 120;
   private static final float IDLE_GLOW_ALPHA = 0.12f;
+  private static final Color PENDING_VIOLET_BASE = new Color(0xA46BFF);
+  private static final Color PENDING_VIOLET_PEAK = new Color(0xCFABFF);
+  private static final Color PENDING_GRAY_BASE = new Color(0x939393);
+  private static final Color PENDING_GRAY_PEAK = new Color(0xB8B8B8);
   private static final Color DARK_THEME_FALLBACK_ARROW = new Color(0xFFFFFF);
   private static final Color LIGHT_THEME_FALLBACK_ARROW = new Color(0x2B313A);
 
@@ -89,12 +99,13 @@ final class TypingSignalIndicator extends JComponent {
     long now = nowMs();
     SignalEvent event = SignalEvent.fromState(state);
     switch (event) {
-      case ACTIVE -> {
-        if (mode == Mode.ACTIVE) return;
+      case PENDING, ACTIVE -> {
+        Mode nextMode = event == SignalEvent.PENDING ? Mode.PENDING : Mode.ACTIVE;
+        if (mode == nextMode) return;
         ArrowVisual current = visualAt(now);
         transitionFromColor = current.color();
         transitionFromGlow = current.glowAlpha();
-        mode = Mode.ACTIVE;
+        mode = nextMode;
         modeStartMs = now;
         startTimerIfDisplayable();
       }
@@ -107,6 +118,18 @@ final class TypingSignalIndicator extends JComponent {
 
   boolean isArrowVisible() {
     return isVisible();
+  }
+
+  void pulsePausedSent() {
+    if (!available || mode == Mode.PAUSED_SENT) return;
+    long now = nowMs();
+    ArrowVisual current = visualAt(now);
+    transitionFromColor = current.color();
+    transitionFromGlow = current.glowAlpha();
+    mode = Mode.PAUSED_SENT;
+    modeStartMs = now;
+    startTimerIfDisplayable();
+    repaint();
   }
 
   @Override
@@ -140,7 +163,7 @@ final class TypingSignalIndicator extends JComponent {
   @Override
   public void addNotify() {
     super.addNotify();
-    if (available && (mode == Mode.ACTIVE || mode == Mode.RETURNING) && !fadeTimer.isRunning()) {
+    if (available && mode != Mode.IDLE && !fadeTimer.isRunning()) {
       fadeTimer.start();
     }
   }
@@ -157,13 +180,14 @@ final class TypingSignalIndicator extends JComponent {
       mode = Mode.IDLE;
       return;
     }
-    if (mode == Mode.RETURNING) {
+    if (mode == Mode.RETURNING || mode == Mode.PAUSED_SENT) {
       long elapsed = Math.max(0L, nowMs() - modeStartMs);
-      if (elapsed >= RETURN_TO_IDLE_MS) {
+      int duration = mode == Mode.PAUSED_SENT ? PAUSED_SENT_PULSE_MS : RETURN_TO_IDLE_MS;
+      if (elapsed >= duration) {
         mode = Mode.IDLE;
         fadeTimer.stop();
       }
-    } else if (mode != Mode.ACTIVE) {
+    } else if (mode != Mode.ACTIVE && mode != Mode.PENDING) {
       fadeTimer.stop();
     }
     repaint();
@@ -220,9 +244,32 @@ final class TypingSignalIndicator extends JComponent {
     if (!available) {
       return new ArrowVisual(unavailableFallbackColor(), 0f);
     }
-    if (mode == Mode.ACTIVE) {
+    if (mode == Mode.PAUSED_SENT) {
+      long elapsed = Math.max(0L, now - modeStartMs);
+      if (elapsed >= PAUSED_SENT_PULSE_MS) {
+        return new ArrowVisual(idleGreenColor(), IDLE_GLOW_ALPHA);
+      }
+      float t = clamp01(elapsed / (float) PAUSED_SENT_PULSE_MS);
+      float pulse = (float) Math.sin(t * Math.PI);
+      float fade = easeOutCubic(clamp01(elapsed / (float) PAUSED_SENT_FADE_MS));
+      float glow =
+          transitionFromGlow
+              + (IDLE_GLOW_ALPHA - transitionFromGlow) * easeOutCubic(t)
+              + 0.46f * pulse;
+      return new ArrowVisual(mix(transitionFromColor, idleGreenColor(), fade), clamp01(glow));
+    }
+    if (mode == Mode.ACTIVE || mode == Mode.PENDING) {
       float pulse = activePulse(now);
-      Color c = mix(activeBlueBaseColor(), activeBluePeakColor(), 0.45f + (0.55f * pulse));
+      float grayMix = mode == Mode.PENDING ? pendingGrayMix(now) : 0f;
+      Color base =
+          mode == Mode.PENDING
+              ? mix(PENDING_VIOLET_BASE, PENDING_GRAY_BASE, grayMix)
+              : activeBlueBaseColor();
+      Color peak =
+          mode == Mode.PENDING
+              ? mix(PENDING_VIOLET_PEAK, PENDING_GRAY_PEAK, grayMix)
+              : activeBluePeakColor();
+      Color c = mix(base, peak, 0.45f + (0.55f * pulse));
       float glow = 0.20f + (0.46f * pulse);
       float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) ACTIVE_FADE_MS));
       float eased = easeOutCubic(t);
@@ -244,6 +291,16 @@ final class TypingSignalIndicator extends JComponent {
     long elapsed = Math.max(0L, now - modeStartMs);
     double phase = (elapsed % ACTIVE_PULSE_MS) / (double) ACTIVE_PULSE_MS;
     return (float) (0.5d + 0.5d * Math.sin(phase * Math.PI * 2d));
+  }
+
+  private float pendingGrayMix(long now) {
+    long elapsed = Math.max(0L, now - modeStartMs);
+    long halfCycle = PENDING_COLOR_CYCLE_MS / 2;
+    long phase = elapsed % PENDING_COLOR_CYCLE_MS;
+    // Hold each color before fading so the neutral gray phase is easy to recognize.
+    long fadeElapsed = (phase % halfCycle) - (halfCycle - PENDING_COLOR_FADE_MS);
+    float fade = easeOutCubic(clamp01(fadeElapsed / (float) PENDING_COLOR_FADE_MS));
+    return phase < halfCycle ? fade : 1f - fade;
   }
 
   private static Color idleGreenColor() {
@@ -326,6 +383,7 @@ final class TypingSignalIndicator extends JComponent {
   }
 
   private enum SignalEvent {
+    PENDING,
     ACTIVE,
     PAUSED,
     DONE;
@@ -333,6 +391,7 @@ final class TypingSignalIndicator extends JComponent {
     static SignalEvent fromState(String state) {
       String s = (state == null) ? "" : state.trim().toLowerCase(Locale.ROOT);
       return switch (s) {
+        case "pending" -> PENDING;
         case "paused" -> PAUSED;
         case "done", "inactive" -> DONE;
         default -> ACTIVE;
@@ -342,7 +401,9 @@ final class TypingSignalIndicator extends JComponent {
 
   private enum Mode {
     IDLE,
+    PENDING,
     ACTIVE,
+    PAUSED_SENT,
     RETURNING
   }
 

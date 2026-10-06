@@ -239,6 +239,7 @@ class QuasselCoreProtocolWireTest {
   private static void writeVariantNull(ByteArrayOutputStream out, int type) {
     writeInt32(out, type);
     out.write(1);
+    writeInt32(out, -1);
   }
 
   private static void writeVariantQByteArray(ByteArrayOutputStream out, String value)

@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
@@ -9,16 +11,80 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
+import cafe.woden.ircclient.ui.settings.SettingsColorSupport;
+import cafe.woden.ircclient.ui.util.UiColorKeys;
 import java.awt.Color;
 import java.awt.Font;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import javax.swing.UIManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class ServerTreeCellPresentationPolicyTest {
 
   private final ServerTreeCellPresentationPolicy policy = new ServerTreeCellPresentationPolicy();
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void blankColorsUseDistinctReadableDefaultsAndFollowThemeChanges(boolean dark) {
+    Object previous = UIManager.get(UiColorKeys.TREE_BACKGROUND);
+    try {
+      Color background = dark ? new Color(30, 30, 30) : Color.WHITE;
+      UIManager.put(UiColorKeys.TREE_BACKGROUND, background);
+      TestContext context = new TestContext();
+      context.unreadChannelTextColor = null;
+      context.highlightChannelTextColor = null;
+      ServerTreeNodeData data =
+          new ServerTreeNodeData(new TargetRef("libera", "#ircafe"), "#ircafe");
+      DefaultMutableTreeNode node = new DefaultMutableTreeNode(data);
+      data.unread = 3;
+      Color unread =
+          policy.presentationForNode(context, node, "IRC", "Application", false).foreground();
+      data.highlightUnread = 1;
+      Color notification =
+          policy.presentationForNode(context, node, "IRC", "Application", false).foreground();
+
+      assertNotNull(unread);
+      assertNotNull(notification);
+      assertNotEquals(unread, notification);
+      assertTrue(SettingsColorSupport.contrastRatio(unread, background) >= 4.5);
+      assertTrue(SettingsColorSupport.contrastRatio(notification, background) >= 4.5);
+      UIManager.put(UiColorKeys.TREE_BACKGROUND, dark ? Color.WHITE : new Color(30, 30, 30));
+      assertNotEquals(
+          notification,
+          policy.presentationForNode(context, node, "IRC", "Application", false).foreground());
+    } finally {
+      UIManager.put(UiColorKeys.TREE_BACKGROUND, previous);
+    }
+  }
+
+  @Test
+  void channelColorsApplyWithoutBadgesAndReturnToNormalWhenReadOrSelected() {
+    TestContext context = new TestContext();
+    context.serverTreeNotificationBadgesEnabled = false;
+    ServerTreeNodeData data = new ServerTreeNodeData(new TargetRef("libera", "#ircafe"), "#ircafe");
+    DefaultMutableTreeNode node = new DefaultMutableTreeNode(data);
+    data.unread = 3;
+    var unread = policy.presentationForNode(context, node, "IRC", "Application", false);
+    assertEquals(context.unreadChannelTextColor, unread.foreground());
+    assertEquals(0, unread.unreadBadgeCount());
+
+    data.highlightUnread = 1;
+    var notification = policy.presentationForNode(context, node, "IRC", "Application", false);
+    assertEquals(context.highlightChannelTextColor, notification.foreground());
+    assertEquals(Font.BOLD, notification.fontStyle());
+    assertEquals(0, notification.highlightBadgeCount());
+    assertNull(policy.presentationForNode(context, node, "IRC", "Application", true).foreground());
+
+    data.unread = 0;
+    data.highlightUnread = 0;
+    var read = policy.presentationForNode(context, node, "IRC", "Application", false);
+    assertNull(read.foreground());
+    assertEquals(Font.PLAIN, read.fontStyle());
+  }
 
   @Test
   void channelNodePresentationUsesPinnedHighlightBadgesAndTypingState() {

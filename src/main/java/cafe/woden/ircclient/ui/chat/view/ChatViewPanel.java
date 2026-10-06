@@ -29,6 +29,9 @@ import java.awt.Font;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -38,10 +41,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import javax.swing.AbstractAction;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
@@ -96,6 +101,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     } else {
       chat.setFont(defaultMonospaceChatFont());
     }
+    installChatFontZoomKeybindings();
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
     this.transcriptMenu =
         decorators.add(
@@ -286,7 +292,46 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     if (steps == 0) return true;
     zoomWheelAccumulator -= steps;
 
-    long requestedSize = (long) chat.getFont().getSize() - steps;
+    adjustChatFontSize(-(long) steps);
+    return true;
+  }
+
+  private void installChatFontZoomKeybindings() {
+    bindChatFontZoomAction(
+        "ircafe.chatFontZoomIn",
+        1,
+        KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK),
+        KeyStroke.getKeyStroke(
+            KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, InputEvent.CTRL_DOWN_MASK),
+        KeyStroke.getKeyStroke(
+            KeyEvent.VK_PLUS, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        KeyStroke.getKeyStroke(KeyEvent.VK_ADD, InputEvent.CTRL_DOWN_MASK));
+    bindChatFontZoomAction(
+        "ircafe.chatFontZoomOut",
+        -1,
+        KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK),
+        KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, InputEvent.CTRL_DOWN_MASK));
+  }
+
+  private void bindChatFontZoomAction(String name, int delta, KeyStroke... keys) {
+    getActionMap()
+        .put(
+            name,
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent event) {
+                zoomWheelAccumulator = 0;
+                adjustChatFontSize(delta);
+              }
+            });
+    for (KeyStroke key : keys) {
+      getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key, name);
+    }
+  }
+
+  private void adjustChatFontSize(long delta) {
+    long requestedSize = (long) chat.getFont().getSize() + delta;
     int size =
         SettingsRangeSupport.normalizeFontSize(
             (int) Math.clamp(requestedSize, Integer.MIN_VALUE, Integer.MAX_VALUE));
@@ -302,7 +347,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         chat.repaint();
       }
     }
-    return true;
   }
 
   private Font defaultMonospaceChatFont() {

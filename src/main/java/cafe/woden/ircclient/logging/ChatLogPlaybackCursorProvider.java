@@ -9,7 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-/** Playback cursor based on the embedded chat log DB. */
+/** Playback cursor based on received conversation messages in the embedded chat log DB. */
 @Component
 @Primary
 @ConditionalOnProperty(
@@ -24,7 +24,7 @@ public class ChatLogPlaybackCursorProvider implements PlaybackCursorProvider {
 
   @Override
   public OptionalLong lastSeenEpochSeconds(String serverId) {
-    OptionalLong maxMs = repo.maxTimestampForServer(serverId);
+    OptionalLong maxMs = repo.maxMessageTimestampForServer(serverId);
     if (maxMs.isEmpty()) return OptionalLong.empty();
     long sec = maxMs.getAsLong() / 1000L;
     if (sec < 0) sec = 0;

@@ -1537,6 +1537,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     return nickContextCoordinator.nickContextMenuFor(nick);
   }
 
+  /** Builds a nick menu for a separate chat buffer without changing the main chat selection. */
+  public JPopupMenu nickContextMenuFor(TargetRef target, String nick) {
+    return nickContextCoordinator.nickContextMenuFor(target, nick);
+  }
+
   @Override
   protected void onTranscriptClicked() {
     transcriptInteractionCoordinator.onTranscriptClicked();

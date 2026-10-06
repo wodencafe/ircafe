@@ -16,10 +16,13 @@ import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.MessageEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Emits structured channel message events for a single IRC connection. */
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxChannelMessageEmitter {
+  private static final Logger log = LoggerFactory.getLogger(PircbotxChannelMessageEmitter.class);
   @NonNull private final String serverId;
 
   @NonNull private final PircbotxRosterEmitter rosterEmitter;
@@ -113,9 +116,27 @@ public final class PircbotxChannelMessageEmitter {
 
     if (playbackCaptureRecorder.maybeCapture(
         channel, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) {
+      if (log.isDebugEnabled()) {
+        log.debug(
+            "[{}] inbound channel message target={} at={} batch={} msgid={} outcome=history-captured",
+            serverId,
+            channel,
+            at,
+            ircv3Tags.get("batch"),
+            messageId);
+      }
       return;
     }
 
+    if (log.isDebugEnabled()) {
+      log.debug(
+          "[{}] inbound channel message target={} at={} batch={} msgid={} outcome=event-emitted",
+          serverId,
+          channel,
+          at,
+          ircv3Tags.get("batch"),
+          messageId);
+    }
     emit.accept(
         new ServerIrcEvent(
             serverId, new IrcEvent.ChannelMessage(at, channel, from, msg, messageId, ircv3Tags)));

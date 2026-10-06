@@ -37,7 +37,7 @@ This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ir
 - Auto-join channels or PM targets and per-server perform-on-connect commands.
 - Native IRC flood protection in Preferences > Network > Flood protection is enabled by default
   for new and existing configurations. Ordinary commands share a two-command burst allowance per
-  connection, starting full and rebuilding one credit every 1500 ms, capped at two. Once the
+  connection, starting full and rebuilding one credit every 2000 ms, capped at two. Once the
   allowance is spent, further commands wait for credit to rebuild, without a warm-up penalty.
   Auto-joins start five seconds after registration (and NickServ identification when required), run in the
   background, and stop on disconnect. Both timings are configurable. Uncheck "Enable outgoing
@@ -265,6 +265,46 @@ make jar
 java -jar build/libs/*.jar
 ```
 
+## Release verification
+
+The **Release (jpackage + flatpak)** workflow verifies the exact tagged commit
+before building or publishing release assets. Its verification job runs the same
+five checks as CI, with the version from the tag:
+
+```bash
+./gradlew --no-daemon lint test integrationTest architectureTest functionalTest -Pversion=<release-version>
+```
+
+The checks use CI's headless mode; dialog-dependent functional tests are skipped.
+If verification fails, times out, or is cancelled, the JAR and platform packaging
+jobs cannot publish a release. Available test and analysis reports are uploaded to the
+workflow's `release-verification-<attempt>` artifact, including on failure, and
+retained for seven days.
+
+Manual workflow runs on branches skip the release checks and produce development
+artifacts without publishing a GitHub release. Manual runs on tags use the same
+verification gate as tag pushes.
+
+## Release notes
+
+Pushing a `v*` tag runs the **Release (jpackage + flatpak)** workflow and publishes
+a GitHub release with automatically generated notes. GitHub selects the previous
+release as the comparison base and includes merged pull requests, contributors,
+and a **Full Changelog** comparison link. The JAR publishing step generates the
+notes first; subsequent platform package uploads preserve that release body.
+Manual workflow runs on branches upload build artifacts without publishing a release.
+
+Notes use PR titles, so give pull requests descriptive titles. The categories in
+[.github/release.yml](.github/release.yml) use the existing `enhancement`, `bug`,
+and `documentation` labels; unlabeled PRs appear under **Other changes**.
+Direct commits are visible through the full comparison link rather than individual
+release-note bullets. Notes live on the GitHub release page; there is no generated
+`CHANGELOG.md` committed back to the repository.
+
+This applies to new releases after the workflow change is included in the tagged
+commit. To add notes to an existing release, edit it on GitHub, select the previous
+tag, click **Generate release notes**, review the result, and save it.
+
 ## Build an app image (jpackage)
 
 ```bash
@@ -491,7 +531,7 @@ Real Quassel Core integration (opt-in):
 # Validates live Quassel Core connect/auth/sync, lag probe heartbeat, disconnect, reconnect.
 # Requires a reachable Quassel Core and credentials.
 QUASSEL_IT_LOGIN=alice QUASSEL_IT_PASSWORD=secret \
-./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreRealServerIntegrationTest' \
+./gradlew :integrationTest --tests 'cafe.woden.ircclient.irc.quassel.QuasselCoreRealServerIntegrationTest' \
   -Dquassel.it.enabled=true \
   -Dquassel.it.host=127.0.0.1 \
   -Dquassel.it.port=4242 \
@@ -506,7 +546,7 @@ Containerized Quassel Core integration via Testcontainers (also opt-in):
 
 ```bash
 # Starts Quassel Core in Docker and validates setup/connect/sync/heartbeat/reconnect.
-./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerIntegrationTest' \
+./gradlew :integrationTest --tests 'cafe.woden.ircclient.irc.quassel.QuasselCoreContainerIntegrationTest' \
   -Dquassel.it.container.enabled=true
 ```
 
@@ -514,20 +554,29 @@ Optional knobs: `quassel.it.container.image`, `quassel.it.container.login`,
 `quassel.it.container.password`, `quassel.it.container.startup-timeout-seconds`.
 Default image is pinned to `linuxserver/quassel-core:0.14.0` for amd64 compatibility.
 
-Expanded two-container Quassel E2E (Quassel Core + local ngIRCd):
+Expanded Quassel E2E (Quassel Core + local ngIRCd, with a second IRC server for network isolation):
 
 ```bash
-# Validates Quassel create/connect network flow plus live channel message ingress.
-./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerNetworkE2eIntegrationTest' \
+# Validates network creation/connection, inbound and outbound messages/notices/actions,
+# backlog selector boundaries, ordering, stable IDs/timestamps after reconnect,
+# routing between networks with matching channel/nick names, automatic recovery,
+# native read-marker sync across clients/reconnects, and network edit/removal persistence.
+./gradlew :integrationTest --tests 'cafe.woden.ircclient.irc.quassel.QuasselCoreContainerNetworkE2eIntegrationTest' \
   -Dquassel.it.container.e2e.enabled=true
+```
+
+Transcript overlap and network isolation can also be checked without Docker or a display:
+
+```bash
+./gradlew :functionalTest --tests 'cafe.woden.ircclient.ui.chat.QuasselHistoryTranscriptFunctionalTest'
 ```
 
 Optional knobs: `quassel.it.container.e2e.quassel-image`,
 `quassel.it.container.e2e.irc-image`, `quassel.it.container.e2e.channel`,
 `quassel.it.container.e2e.message`, `quassel.it.container.e2e.login`,
 `quassel.it.container.e2e.password`.
-Note: this test skips when the selected Quassel image does not expose runtime
-network creation to remote clients.
+When enabled with Docker available, these tests require successful runtime network
+creation and round trips; missing network creation fails the suite.
 
 Direct IRC backend E2E (Pircbotx + local ngIRCd, no Quassel):
 

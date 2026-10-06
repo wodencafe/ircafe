@@ -13,7 +13,7 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/** Tracks outbound chat lines awaiting IRCv3 echo-message reconciliation. */
+/** Tracks outbound chat and action lines awaiting IRCv3 echo-message reconciliation. */
 @Component
 @ApplicationLayer
 @Lazy
@@ -23,6 +23,16 @@ public class PendingEchoMessageState implements PendingEchoMessagePort {
 
   public synchronized PendingEchoMessagePort.PendingOutboundChat register(
       TargetRef target, String fromNick, String text, Instant createdAt) {
+    return register(target, fromNick, text, createdAt, false);
+  }
+
+  public synchronized PendingEchoMessagePort.PendingOutboundChat registerAction(
+      TargetRef target, String fromNick, String text, Instant createdAt) {
+    return register(target, fromNick, text, createdAt, true);
+  }
+
+  private PendingEchoMessagePort.PendingOutboundChat register(
+      TargetRef target, String fromNick, String text, Instant createdAt, boolean action) {
     Instant at = (createdAt != null) ? createdAt : Instant.now();
     PendingEchoMessagePort.PendingOutboundChat entry =
         new PendingEchoMessagePort.PendingOutboundChat(
@@ -30,7 +40,8 @@ public class PendingEchoMessageState implements PendingEchoMessagePort {
             target,
             Objects.toString(fromNick, "").trim(),
             Objects.toString(text, "").trim(),
-            at);
+            at,
+            action);
     pending.add(entry);
     return entry;
   }
@@ -50,11 +61,22 @@ public class PendingEchoMessageState implements PendingEchoMessagePort {
 
   public synchronized Optional<PendingEchoMessagePort.PendingOutboundChat> consumeByTargetAndText(
       TargetRef target, String fromNick, String text) {
+    return consumeByTargetAndText(target, text, false);
+  }
+
+  public synchronized Optional<PendingEchoMessagePort.PendingOutboundChat>
+      consumeActionByTargetAndText(TargetRef target, String fromNick, String text) {
+    return consumeByTargetAndText(target, text, true);
+  }
+
+  private Optional<PendingEchoMessagePort.PendingOutboundChat> consumeByTargetAndText(
+      TargetRef target, String text, boolean action) {
     if (target == null) return Optional.empty();
     String textNorm = normalizeText(text);
     for (int i = 0; i < pending.size(); i++) {
       PendingEchoMessagePort.PendingOutboundChat entry = pending.get(i);
       if (!targetMatches(entry.target(), target)) continue;
+      if (entry.action() != action) continue;
       if (!normalizeText(entry.text()).equals(textNorm)) continue;
       pending.remove(i);
       return Optional.of(entry);
@@ -76,6 +98,16 @@ public class PendingEchoMessageState implements PendingEchoMessagePort {
 
   public synchronized Optional<PendingEchoMessagePort.PendingOutboundChat> consumePrivateFallback(
       String serverId, String fromNick, String text) {
+    return consumePrivateFallback(serverId, text, false);
+  }
+
+  public synchronized Optional<PendingEchoMessagePort.PendingOutboundChat>
+      consumePrivateActionFallback(String serverId, String fromNick, String text) {
+    return consumePrivateFallback(serverId, text, true);
+  }
+
+  private Optional<PendingEchoMessagePort.PendingOutboundChat> consumePrivateFallback(
+      String serverId, String text, boolean action) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return Optional.empty();
     String textNorm = normalizeText(text);
@@ -84,6 +116,7 @@ public class PendingEchoMessageState implements PendingEchoMessagePort {
       TargetRef target = entry.target();
       if (target == null || !sid.equals(target.serverId())) continue;
       if (target.isStatus() || target.isChannel()) continue;
+      if (entry.action() != action) continue;
       if (!normalizeText(entry.text()).equals(textNorm)) continue;
       pending.remove(i);
       return Optional.of(entry);

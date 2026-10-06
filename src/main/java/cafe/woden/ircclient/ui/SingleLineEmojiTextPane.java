@@ -3,6 +3,8 @@ package cafe.woden.ircclient.ui;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.util.Objects;
+import javax.swing.Action;
+import javax.swing.ActionMap;
 import javax.swing.JTextPane;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
@@ -14,9 +16,30 @@ public final class SingleLineEmojiTextPane extends JTextPane {
 
   public SingleLineEmojiTextPane() {
     setEditorKit(EmojiEditorKits.singleLine());
+    installEditorActionFallbacks();
     if (getDocument() instanceof AbstractDocument doc) {
       doc.setDocumentFilter(new SingleLineDocumentFilter());
     }
+  }
+
+  private void installEditorActionFallbacks() {
+    ActionMap editorActions = new ActionMap();
+    for (Action action : getEditorKit().getActions()) {
+      editorActions.put(action.getValue(Action.NAME), action);
+    }
+    // DarkLAF's shared editor UI bridge can remove another pane's standard actions during a
+    // component-tree refresh. Keep the editor kit's actions available locally, while allowing
+    // application bindings and the current LAF's actions to take precedence.
+    ActionMap actions =
+        new ActionMap() {
+          @Override
+          public Action get(Object key) {
+            Action action = super.get(key);
+            return action != null ? action : editorActions.get(key);
+          }
+        };
+    actions.setParent(getActionMap());
+    setActionMap(actions);
   }
 
   @Override

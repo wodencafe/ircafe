@@ -283,7 +283,7 @@ final class MessageInputNickCompletionSupport {
     if (t.isEmpty()) return List.of();
 
     String text = component.getText();
-    if (startsWithSlashCommand(text)) return List.of();
+    if (!isWordSuggestionContext(text, component.getCaretPosition())) return List.of();
     if (isKnownNick(t)) return List.of();
 
     List<String> suggestions = wordSuggestionProvider.suggestWords(t, MAX_WORD_SUGGESTIONS);
@@ -471,7 +471,6 @@ final class MessageInputNickCompletionSupport {
 
   private NickCycleRequest nickCycleRequest(String beforeText, int beforeCaret) {
     String text = beforeText == null ? "" : beforeText;
-    if (text.stripLeading().startsWith("/")) return null;
     if (beforeCaret < 0 || beforeCaret > text.length()) return null;
 
     NickCycleState state = nickCycleState;
@@ -530,24 +529,30 @@ final class MessageInputNickCompletionSupport {
   }
 
   private boolean shouldForcePopupInsteadOfImmediateCompletion(String beforeText, int beforeCaret) {
-    if (cycleNickCompletionsWithTab) return false;
     if (autoCompletion.isPopupVisible()) return false;
     if (beforeText == null) beforeText = "";
-    if (startsWithSlashCommand(beforeText)) return false;
     if (beforeCaret < 0 || beforeCaret > beforeText.length()) return false;
 
     String token = completionProvider.getAlreadyEnteredText(input);
     if (token == null || token.isBlank()) return false;
-    if (firstCompletionHint(token) != null) return true;
+    if (firstCompletionHint(token) != null) return !cycleNickCompletionsWithTab;
     return shouldForcePopupForWordSuggestion(beforeText, beforeCaret, token);
   }
 
   private boolean shouldForcePopupForWordSuggestion(String text, int caret, String token) {
     if (wordSuggestionProvider == null) return false;
-    if (startsWithSlashCommand(text)) return false;
     if (caret < 0 || text == null || caret > text.length()) return false;
+    if (!isWordSuggestionContext(text, caret)) return false;
     if (isKnownNick(token)) return false;
     return isPotentialWordSuggestionToken(token);
+  }
+
+  private static boolean isWordSuggestionContext(String text, int caret) {
+    if (!startsWithSlashCommand(text)) return true;
+    // /me carries ordinary message text; other command arguments may be identifiers or options.
+    int start = firstNonWhitespace(text);
+    int end = wordEnd(text, start);
+    return text.substring(start, end).equalsIgnoreCase("/me") && caret > end;
   }
 
   private void maybeScheduleAsyncWordCompletionPopup(

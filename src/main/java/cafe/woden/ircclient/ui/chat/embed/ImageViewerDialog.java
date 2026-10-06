@@ -7,21 +7,22 @@ import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.List;
-import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
-import javax.swing.JDialog;
-import javax.swing.JLabel;
+import javax.swing.JFrame;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 /**
- * Simple modal viewer for an embedded image.
+ * Simple maximizable viewer for an embedded image.
  *
  * <p>We keep it intentionally lightweight: no JavaFX, no WebView. Swing's {@link
  * javax.swing.ImageIcon} will animate GIFs automatically.
@@ -51,32 +52,68 @@ final class ImageViewerDialog {
       return;
     }
 
-    JDialog dlg =
-        new JDialog(parent, message("imageViewer.title"), JDialog.ModalityType.APPLICATION_MODAL);
+    createWindow(parent, url, bytes, extensionProviders).setVisible(true);
+  }
+
+  static JFrame createWindow(
+      Window parent,
+      String url,
+      byte[] bytes,
+      List<? extends cafe.woden.ircclient.ui.chat.embed.spi.ImageUrlExtensionProvider>
+          extensionProviders) {
+    JFrame dlg = new JFrame(message("imageViewer.title"));
+    dlg.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
     dlg.setLayout(new BorderLayout(8, 8));
 
-    JLabel img = new JLabel();
-    try {
-      // Keep GIFs animated by using ImageIcon directly on the bytes.
-      if (ImageDecodeUtil.looksLikeGif(url, bytes)) {
-        img.setIcon(new javax.swing.ImageIcon(bytes));
-      } else {
-        java.awt.image.BufferedImage bi =
-            javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
-        if (bi != null) {
-          img.setIcon(new javax.swing.ImageIcon(bi));
-        } else {
-          // Fallback.
-          img.setIcon(new javax.swing.ImageIcon(bytes));
-        }
-      }
-    } catch (Exception ex) {
-      img.setIcon(new javax.swing.ImageIcon(bytes));
-    }
-    img.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    ImageViewerPanel img = new ImageViewerPanel();
+    dlg.add(img, BorderLayout.CENTER);
 
-    JScrollPane scroller = new JScrollPane(img);
-    dlg.add(scroller, BorderLayout.CENTER);
+    SwingWorker<ImageIcon, Void> loader =
+        new SwingWorker<>() {
+          @Override
+          protected ImageIcon doInBackground() {
+            // ImageIcon retains GIF animation; static formats use the ImageIO plugins.
+            if (!ImageDecodeUtil.looksLikeGif(url, bytes)) {
+              try {
+                java.awt.image.BufferedImage bi =
+                    javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+                if (bi != null) return new ImageIcon(bi);
+              } catch (IOException ignored) {
+              }
+            }
+            return new ImageIcon(bytes);
+          }
+
+          @Override
+          protected void done() {
+            if (isCancelled() || !dlg.isDisplayable()) return;
+            try {
+              img.setImage(get());
+            } catch (Exception ignored) {
+            }
+          }
+        };
+
+    WindowAdapter parentListener =
+        new WindowAdapter() {
+          @Override
+          public void windowClosed(WindowEvent e) {
+            dlg.dispose();
+          }
+        };
+    if (parent != null) {
+      dlg.setIconImages(parent.getIconImages());
+      parent.addWindowListener(parentListener);
+    }
+    dlg.addWindowListener(
+        new WindowAdapter() {
+          @Override
+          public void windowClosed(WindowEvent e) {
+            loader.cancel(true);
+            img.setImage(null);
+            if (parent != null) parent.removeWindowListener(parentListener);
+          }
+        });
 
     JPanel buttons = new JPanel();
     JButton openExternal = new JButton(message("imageViewer.button.openExternally"));
@@ -122,7 +159,8 @@ final class ImageViewerDialog {
     dlg.setPreferredSize(new Dimension(900, 650));
     dlg.pack();
     dlg.setLocationRelativeTo(parent);
-    dlg.setVisible(true);
+    loader.execute();
+    return dlg;
   }
 
   private static String message(String key, Object... args) {

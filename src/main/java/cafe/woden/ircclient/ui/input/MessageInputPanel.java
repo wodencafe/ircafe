@@ -1114,6 +1114,14 @@ public class MessageInputPanel extends JPanel {
     }
   }
 
+  public void onLocalTypingIndicatorFailed(String state) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      typingSupport.onLocalTypingIndicatorFailed(state);
+    } else {
+      SwingUtilities.invokeLater(() -> typingSupport.onLocalTypingIndicatorFailed(state));
+    }
+  }
+
   /**
    * Normalize staged IRCv3 /quote drafts against currently negotiated capabilities.
    *

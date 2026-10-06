@@ -34,8 +34,6 @@ import org.springframework.stereotype.Component;
 @InfrastructureLayer
 public final class QuasselIrcv3RuntimeSupport {
 
-  private final Ircv3OutboundCommandRuntimeCatalog outboundCatalog;
-  private final Ircv3InboundTagSignalRuntimeCatalog inboundTagCatalog;
   private final Ircv3InboundCommandSignalRuntimeCatalog inboundCommandCatalog;
   private final Ircv3MessageTagsRuntimeCatalog messageTagsCatalog;
   private final Ircv3IsupportRuntimeSupport isupportRuntimeSupport;
@@ -60,27 +58,26 @@ public final class QuasselIrcv3RuntimeSupport {
       Ircv3InboundTagSignalRuntimeCatalog inboundTagCatalog,
       Ircv3InboundCommandSignalRuntimeCatalog inboundCommandCatalog,
       Ircv3MessageTagsRuntimeCatalog messageTagsCatalog) {
-    this.outboundCatalog = Objects.requireNonNull(outboundCatalog, "outboundCatalog");
-    this.inboundTagCatalog = Objects.requireNonNull(inboundTagCatalog, "inboundTagCatalog");
+    Objects.requireNonNull(outboundCatalog, "outboundCatalog");
+    Objects.requireNonNull(inboundTagCatalog, "inboundTagCatalog");
     this.inboundCommandCatalog =
         Objects.requireNonNull(inboundCommandCatalog, "inboundCommandCatalog");
     this.messageTagsCatalog = Objects.requireNonNull(messageTagsCatalog, "messageTagsCatalog");
     this.isupportRuntimeSupport = new Ircv3IsupportRuntimeSupport(this.inboundCommandCatalog);
     this.standardReplyRuntimeSupport =
         new Ircv3StandardReplyRuntimeSupport(
-            this.inboundCommandCatalog, new Ircv3MessageIdRuntimeSupport(this.inboundTagCatalog));
-    this.chatHistoryRuntimeSupport = new Ircv3ChatHistoryRuntimeSupport(this.outboundCatalog);
-    this.channelContextRuntimeSupport =
-        new Ircv3ChannelContextRuntimeSupport(this.inboundTagCatalog);
+            this.inboundCommandCatalog, new Ircv3MessageIdRuntimeSupport(inboundTagCatalog));
+    this.chatHistoryRuntimeSupport = new Ircv3ChatHistoryRuntimeSupport(outboundCatalog);
+    this.channelContextRuntimeSupport = new Ircv3ChannelContextRuntimeSupport(inboundTagCatalog);
     this.messageMutationRuntimeSupport =
         Ircv3MessageMutationRuntimeSupport.inboundOnly(
-            this.inboundTagCatalog, this.inboundCommandCatalog);
+            inboundTagCatalog, this.inboundCommandCatalog);
     this.readMarkerRuntimeSupport =
         new Ircv3ReadMarkerRuntimeSupport(
-            this.outboundCatalog, this.inboundTagCatalog, this.inboundCommandCatalog);
+            outboundCatalog, inboundTagCatalog, this.inboundCommandCatalog);
     this.typingRuntimeSupport =
         new Ircv3TypingRuntimeSupport(
-            this.outboundCatalog, this.inboundTagCatalog, this.inboundCommandCatalog);
+            outboundCatalog, inboundTagCatalog, this.inboundCommandCatalog);
   }
 
   public List<String> typingRawLines(String target, String state) {
@@ -121,8 +118,11 @@ public final class QuasselIrcv3RuntimeSupport {
       List<String> parameters,
       Map<String, String> tags,
       String rawLine) {
-    Ircv3InboundTagRequest request =
-        request(command, sourceNick, rawTarget, parameters, tags, rawLine);
+    return channelContext(
+        new Ircv3InboundTagRequest(command, sourceNick, rawTarget, parameters, tags, rawLine));
+  }
+
+  String channelContext(Ircv3InboundTagRequest request) {
     return channelContextRuntimeSupport.resolve(request);
   }
 
@@ -133,8 +133,11 @@ public final class QuasselIrcv3RuntimeSupport {
       List<String> parameters,
       Map<String, String> tags,
       String rawLine) {
-    Ircv3InboundTagRequest request =
-        request(command, sourceNick, rawTarget, parameters, tags, rawLine);
+    return conversationSignals(
+        new Ircv3InboundTagRequest(command, sourceNick, rawTarget, parameters, tags, rawLine));
+  }
+
+  List<Ircv3InboundTagSignal> conversationSignals(Ircv3InboundTagRequest request) {
     ArrayList<Ircv3InboundTagSignal> signals =
         new ArrayList<>(messageMutationRuntimeSupport.conversationSignals(request));
     typingRuntimeSupport
@@ -207,15 +210,5 @@ public final class QuasselIrcv3RuntimeSupport {
     }
     return standardReplyRuntimeSupport.observe(
         command, rawLine, providerParameters, tags, fallbackMessageId);
-  }
-
-  private static Ircv3InboundTagRequest request(
-      String command,
-      String sourceNick,
-      String rawTarget,
-      List<String> parameters,
-      Map<String, String> tags,
-      String rawLine) {
-    return new Ircv3InboundTagRequest(command, sourceNick, rawTarget, parameters, tags, rawLine);
   }
 }

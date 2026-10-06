@@ -299,7 +299,7 @@ irc:
     # Also editable in Preferences > Network > Flood protection; reconnect to apply.
     floodProtection:
       enabled: true
-      commandIntervalMs: 1500
+      commandIntervalMs: 2000
       autoJoinDelayMs: 5000
 
     # Auto-reconnect policy (client-side). These defaults are safe for most setups.

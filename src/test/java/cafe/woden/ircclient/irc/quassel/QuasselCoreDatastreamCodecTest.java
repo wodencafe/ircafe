@@ -125,8 +125,8 @@ class QuasselCoreDatastreamCodecTest {
     codec.writeSignalProxySync(
         out,
         "BacklogManager",
-        "global",
-        "requestBacklog(BufferId,MsgId,MsgId,int,int)",
+        "",
+        "requestBacklog",
         List.of(
             new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
             new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
@@ -141,8 +141,8 @@ class QuasselCoreDatastreamCodecTest {
 
     assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, decoded.requestType());
     assertEquals("BacklogManager", decoded.className());
-    assertEquals("global", decoded.objectName());
-    assertEquals("requestBacklog(BufferId,MsgId,MsgId,int,int)", decoded.slotName());
+    assertEquals("", decoded.objectName());
+    assertEquals("requestBacklog", decoded.slotName());
   }
 
   @Test
@@ -221,12 +221,25 @@ class QuasselCoreDatastreamCodecTest {
   }
 
   @Test
+  void writesInitRequestForUnnamedBufferSyncer() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    codec.writeSignalProxyInitRequest(out, "BufferSyncer", "", List.of());
+    var decoded = codec.readSignalProxyMessage(new java.io.ByteArrayInputStream(out.toByteArray()));
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_REQUEST, decoded.requestType());
+    assertEquals("BufferSyncer", decoded.className());
+    assertEquals("", decoded.objectName());
+    assertTrue(decoded.params().isEmpty());
+  }
+
+  @Test
   void writesSignalProxyHeartbeatProbeFrame() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     QuasselCoreDatastreamCodec.QtDateTimeValue dt =
         QuasselCoreDatastreamCodec.utcDateTimeFromEpochMs(1_700_000_123_456L);
 
+    assertEquals(2, dt.timeSpec(), "Qt_4_2 uses the legacy UTC discriminator");
     codec.writeSignalProxyHeartBeat(out, dt);
 
     byte[] frame = out.toByteArray();
@@ -413,12 +426,13 @@ class QuasselCoreDatastreamCodecTest {
   @Test
   void decodesSyncPayloadWhenVariantParamIsNull() throws Exception {
     ByteArrayOutputStream payload = new ByteArrayOutputStream();
-    writeInt32(payload, 5);
+    writeInt32(payload, 6);
     writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC);
     writeVariantQByteArray(payload, "Network");
     writeVariantQByteArray(payload, "5");
     writeVariantQByteArray(payload, "sync()");
     writeVariantNullQString(payload);
+    writeVariantInt(payload, 42);
 
     QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
         QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload.toByteArray());
@@ -427,8 +441,28 @@ class QuasselCoreDatastreamCodecTest {
     assertEquals("Network", decoded.className());
     assertEquals("5", decoded.objectName());
     assertEquals("sync()", decoded.slotName());
-    assertEquals(1, decoded.params().size());
+    assertEquals(2, decoded.params().size());
     assertEquals(null, decoded.params().get(0));
+    assertEquals(42, decoded.params().get(1));
+  }
+
+  @Test
+  void decodesBacklogReturnListWithQtNullFlagStillSet() throws Exception {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 10);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC);
+    writeVariantQByteArray(payload, "BacklogManager");
+    writeVariantQByteArray(payload, "");
+    writeVariantQByteArray(payload, "receiveBacklog");
+    for (int value : new int[] {11, -1, -1, 2, 0}) writeVariantInt(payload, value);
+    writeInt32(payload, 9); // QVariantList return value constructed by SignalProxy
+    payload.write(1); // Qt retains the null flag when the slot fills the return value.
+    writeInt32(payload, 2);
+    writeVariantInt(payload, 101);
+    writeVariantInt(payload, 102);
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload.toByteArray());
+    assertEquals(List.of(101, 102), decoded.params().getLast());
   }
 
   private static void writeVariantInt(ByteArrayOutputStream out, int value) {
@@ -448,6 +482,7 @@ class QuasselCoreDatastreamCodecTest {
   private static void writeVariantNullQString(ByteArrayOutputStream out) {
     writeInt32(out, 10);
     out.write(1);
+    writeInt32(out, -1);
   }
 
   private static void writeInt32(ByteArrayOutputStream out, int value) {

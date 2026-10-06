@@ -12,6 +12,7 @@ import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.subjects.CompletableSubject;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
@@ -276,6 +277,36 @@ class ChatTypingCoordinatorTest {
   }
 
   @Test
+  void delayedTypingSendOnlyAcknowledgesAfterCompletion() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    CompletableSubject send = CompletableSubject.create();
+    when(irc.isTypingAvailable("libera")).thenReturn(true);
+    when(irc.sendTyping("libera", "#ircafe", "active")).thenReturn(send);
+    ChatTypingCoordinator coordinator = typingCoordinator(inputPanel, irc);
+
+    coordinator.onLocalTypingStateChanged("active");
+    verify(inputPanel, never()).onLocalTypingIndicatorSent("active");
+    send.onComplete();
+    verify(inputPanel).onLocalTypingIndicatorSent("active");
+    verify(inputPanel, never()).onLocalTypingIndicatorFailed("active");
+  }
+
+  @Test
+  void failedTypingSendClearsPendingSignalWithoutAcknowledgingSuccess() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    when(irc.isTypingAvailable("libera")).thenReturn(true);
+    when(irc.sendTyping("libera", "#ircafe", "active"))
+        .thenReturn(Completable.error(new IllegalStateException("disconnected")));
+    ChatTypingCoordinator coordinator = typingCoordinator(inputPanel, irc);
+
+    coordinator.onLocalTypingStateChanged("active");
+    verify(inputPanel).onLocalTypingIndicatorFailed("active");
+    verify(inputPanel, never()).onLocalTypingIndicatorSent("active");
+  }
+
+  @Test
   void onLocalTypingStateChangedDoesNotSendWhenUnavailable() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
@@ -303,6 +334,20 @@ class ChatTypingCoordinatorTest {
     verify(inputPanel).setTypingSignalAvailable(false);
     verify(irc, never()).sendTyping("libera", "#ircafe", "active");
     assertTrue(drafts.isEmpty());
+  }
+
+  private static ChatTypingCoordinator typingCoordinator(
+      MessageInputPanel inputPanel, IrcClientService irc) {
+    return new ChatTypingCoordinator(
+        inputPanel,
+        new IrcTypingPortAdapter(irc),
+        mock(MessageActionCapabilityPolicy.class),
+        () -> new TargetRef("libera", "#ircafe"),
+        () -> false,
+        () -> {},
+        () -> false,
+        () -> {},
+        new HashMap<>());
   }
 
   private static void flushEdt() throws InvocationTargetException, InterruptedException {

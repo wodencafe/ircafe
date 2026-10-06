@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
@@ -20,8 +22,51 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class ChatNickContextCoordinatorTest {
+
+  @ParameterizedTest
+  @CsvSource({"libera, #other", "oftc, #ircafe", "quassel, #ircafe{net:7}"})
+  void explicitTargetControlsActionsAndIgnoreStatus(String serverId, String channel)
+      throws Exception {
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    TargetRef pinned = new TargetRef(serverId, channel);
+    NickContextMenuFactory.Callbacks callbacks = mock(NickContextMenuFactory.Callbacks.class);
+    UserListStore users = mock(UserListStore.class);
+    IgnoreStatusService ignores = mock(IgnoreStatusService.class);
+    String scope =
+        pinned.hasNetworkQualifier()
+            ? TargetRef.withNetworkQualifier(serverId, pinned.networkQualifierToken())
+            : serverId;
+    when(users.get(serverId, pinned.target()))
+        .thenReturn(List.of(new NickInfo("alice", "", "alice!user@pinned.example")));
+    when(ignores.status(scope, "alice", "alice!user@pinned.example"))
+        .thenReturn(new IgnoreStatusService.Status(true, false, true, ""));
+    ChatNickContextCoordinator coordinator =
+        new ChatNickContextCoordinator(
+            null,
+            ignores,
+            users,
+            new NickContextMenuFactory().create(callbacks),
+            () -> active,
+            new JPanel());
+
+    javax.swing.SwingUtilities.invokeAndWait(
+        () -> {
+          JPopupMenu popup = coordinator.nickContextMenuFor(pinned, " alice ");
+          assertNotNull(popup);
+          assertTrue(findMenuItem(popup, "Unignore...").isEnabled());
+          findMenuItem(popup, "Whois").doClick(0);
+          findMenuItem(popup, "Open Query").doClick(0);
+        });
+
+    verify(callbacks).emitUserAction(pinned, "alice", UserActionRequest.Action.WHOIS);
+    verify(callbacks).openQuery(pinned, "alice");
+    verify(users).get(serverId, pinned.target());
+    verify(ignores).status(scope, "alice", "alice!user@pinned.example");
+  }
 
   @Test
   void nickContextMenuForBuildsMenuWithIgnoreStatusMarks() {

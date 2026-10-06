@@ -7,6 +7,7 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
+import cafe.woden.ircclient.ui.settings.SettingsColorSupport;
 import cafe.woden.ircclient.ui.util.UiColorKeys;
 import java.awt.Color;
 import java.awt.Font;
@@ -28,6 +29,10 @@ public final class ServerTreeCellPresentationPolicy {
 
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
+  private static final Color UNREAD_LIGHT = new Color(0x1967D2);
+  private static final Color UNREAD_DARK = new Color(0x82B1FF);
+  private static final Color NOTIFICATION_LIGHT = new Color(0xC62828);
+  private static final Color NOTIFICATION_DARK = new Color(0xFF8A80);
 
   public interface Context {
     boolean serverTreeNotificationBadgesEnabled();
@@ -349,6 +354,16 @@ public final class ServerTreeCellPresentationPolicy {
     return Presentation.plain();
   }
 
+  private static Color channelActivityColor(Color configured, boolean notification) {
+    if (configured != null) return configured;
+    Color background = UIManager.getColor(UiColorKeys.TREE_BACKGROUND);
+    if (background == null) background = UIManager.getColor(UiColorKeys.PANEL_BACKGROUND);
+    boolean dark = SettingsColorSupport.isDark(background);
+    return notification
+        ? (dark ? NOTIFICATION_DARK : NOTIFICATION_LIGHT)
+        : (dark ? UNREAD_DARK : UNREAD_LIGHT);
+  }
+
   private Presentation presentationForNodeData(
       Context context, DefaultMutableTreeNode node, ServerTreeNodeData nodeData, boolean selected) {
     boolean detachedChannel = nodeData.ref != null && nodeData.ref.isChannel() && nodeData.detached;
@@ -371,8 +386,10 @@ public final class ServerTreeCellPresentationPolicy {
       if (!selected) {
         foreground =
             nodeData.highlightUnread > 0
-                ? context.highlightChannelTextColor()
-                : (nodeData.unread > 0 ? context.unreadChannelTextColor() : null);
+                ? channelActivityColor(context.highlightChannelTextColor(), true)
+                : (nodeData.unread > 0
+                    ? channelActivityColor(context.unreadChannelTextColor(), false)
+                    : null);
       }
     } else if (context.isPrivateMessageTarget(nodeData.ref)) {
       boolean online = context.isPrivateMessageOnline(nodeData.ref);

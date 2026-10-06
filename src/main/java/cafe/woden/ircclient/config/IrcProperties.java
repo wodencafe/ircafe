@@ -259,12 +259,12 @@ public record IrcProperties(Client client, List<Server> servers) {
   /** Per-connection pacing for ordinary IRC commands and startup channel joins. */
   public record FloodProtection(
       @DefaultValue("true") boolean enabled,
-      @DefaultValue("1500") long commandIntervalMs,
+      @DefaultValue("2000") long commandIntervalMs,
       @DefaultValue("5000") long autoJoinDelayMs) {
     @ConstructorBinding
     public FloodProtection {
       commandIntervalMs =
-          commandIntervalMs <= 0 ? 1500 : Math.clamp(commandIntervalMs, 100, 10_000);
+          commandIntervalMs <= 0 ? 2000 : Math.clamp(commandIntervalMs, 100, 10_000);
       autoJoinDelayMs = Math.clamp(autoJoinDelayMs, 0, 120_000);
     }
 
@@ -273,7 +273,7 @@ public record IrcProperties(Client client, List<Server> servers) {
     }
 
     public static FloodProtection defaults() {
-      return new FloodProtection(true, 1500, 5000);
+      return new FloodProtection(true, 2000, 5000);
     }
   }
 

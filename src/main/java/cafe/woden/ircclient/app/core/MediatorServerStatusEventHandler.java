@@ -299,8 +299,13 @@ public class MediatorServerStatusEventHandler {
       if (pending == null || pending.target() == null) {
         continue;
       }
-      ui.failPendingOutgoingChat(
-          pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      if (pending.action()) {
+        ui.failPendingOutgoingAction(
+            pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      } else {
+        ui.failPendingOutgoingChat(
+            pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      }
     }
   }
 
@@ -506,13 +511,23 @@ public class MediatorServerStatusEventHandler {
     }
 
     String pendingReason = "[" + event.code() + "] " + reason;
-    ui.failPendingOutgoingChat(
-        pmTarget,
-        pending.pendingId(),
-        event.at(),
-        pending.fromNick(),
-        pending.text(),
-        pendingReason);
+    if (pending.action()) {
+      ui.failPendingOutgoingAction(
+          pmTarget,
+          pending.pendingId(),
+          event.at(),
+          pending.fromNick(),
+          pending.text(),
+          pendingReason);
+    } else {
+      ui.failPendingOutgoingChat(
+          pmTarget,
+          pending.pendingId(),
+          event.at(),
+          pending.fromNick(),
+          pending.text(),
+          pendingReason);
+    }
 
     ui.ensureTargetExists(pmTarget);
     ui.appendErrorAt(

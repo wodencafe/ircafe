@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -29,14 +30,19 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.coordinator.ChatChannelListCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -57,8 +63,114 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ServerTreeDockableFunctionalTest {
+
+  @Test
+  void channelNamesDistinguishUnreadMessagesAndNotificationsAndResetWhenRead() throws Exception {
+    ServerTreeDockable dockable = onEdtCall(ServerTreeDockableFunctionalTest::newDockable);
+    TargetRef channel = new TargetRef("libera", "#activity");
+    try {
+      onEdt(() -> dockable.ensureNode(channel));
+      Color normal = renderedChannelColor(dockable, channel);
+      onEdt(() -> dockable.markUnread(channel));
+      Color unread = renderedChannelColor(dockable, channel);
+      assertNotEquals(normal, unread);
+      onEdt(() -> dockable.markHighlight(channel));
+      Color notification = renderedChannelColor(dockable, channel);
+      assertNotEquals(normal, notification);
+      assertNotEquals(unread, notification);
+      onEdt(() -> dockable.markUnread(channel));
+      assertEquals(notification, renderedChannelColor(dockable, channel));
+      onEdt(() -> dockable.clearUnread(channel));
+      assertEquals(normal, renderedChannelColor(dockable, channel));
+    } finally {
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void preferenceColorChangesUpdateUnreadChannelNamesImmediately() throws Exception {
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    UiSettings settings = mock(UiSettings.class);
+    when(settingsBus.get()).thenReturn(settings);
+    when(settings.serverTreeUnreadChannelColor()).thenReturn("#123ABC");
+    when(settings.serverTreeHighlightChannelColor()).thenReturn("#DE4567");
+    ServerTreeDockable dockable =
+        onEdtCall(
+            () ->
+                FunctionalTestWiringSupport.newServerTreeDockable(
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    new ConnectButton(),
+                    new DisconnectButton(),
+                    null,
+                    null,
+                    settingsBus,
+                    null));
+    ArgumentCaptor<PropertyChangeListener> listener =
+        ArgumentCaptor.forClass(PropertyChangeListener.class);
+    verify(settingsBus).addListener(listener.capture());
+    TargetRef channel = new TargetRef("libera", "#colors");
+    try {
+      onEdt(
+          () -> {
+            dockable.ensureNode(channel);
+            dockable.markUnread(channel);
+          });
+      assertEquals(new Color(0x123ABC), renderedChannelColor(dockable, channel));
+      onEdt(() -> dockable.markHighlight(channel));
+      assertEquals(new Color(0xDE4567), renderedChannelColor(dockable, channel));
+
+      when(settings.serverTreeUnreadChannelColor()).thenReturn("#345678");
+      when(settings.serverTreeHighlightChannelColor()).thenReturn("#AB2345");
+      onEdt(
+          () ->
+              listener
+                  .getValue()
+                  .propertyChange(
+                      new PropertyChangeEvent(
+                          settingsBus, UiSettingsBus.PROP_UI_SETTINGS, null, settings)));
+      assertEquals(new Color(0xAB2345), renderedChannelColor(dockable, channel));
+      onEdt(
+          () -> {
+            dockable.clearUnread(channel);
+            dockable.markUnread(channel);
+          });
+      assertEquals(new Color(0x345678), renderedChannelColor(dockable, channel));
+    } finally {
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+    verify(settingsBus).removeListener(listener.getValue());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Color renderedChannelColor(ServerTreeDockable dockable, TargetRef channel)
+      throws Exception {
+    return onEdtCall(
+        () -> {
+          JTree tree = field(dockable, "tree", JTree.class);
+          Map<TargetRef, DefaultMutableTreeNode> leaves = field(dockable, "leaves", Map.class);
+          DefaultMutableTreeNode node = leaves.get(channel);
+          assertNotNull(node);
+          return tree.getCellRenderer()
+              .getTreeCellRendererComponent(
+                  tree,
+                  node,
+                  false,
+                  false,
+                  true,
+                  tree.getRowForPath(new TreePath(node.getPath())),
+                  false)
+              .getForeground();
+        });
+  }
 
   @Test
   void autoJoinCatalogUpdatePreservesServerRootSelectionAndScrollPosition() throws Exception {

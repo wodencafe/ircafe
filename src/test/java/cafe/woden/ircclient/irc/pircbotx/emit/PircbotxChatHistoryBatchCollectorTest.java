@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static cafe.woden.ircclient.irc.pircbotx.PircbotxRuntimeTestFixtures.chatHistoryBatches;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,6 +11,10 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.ircv3.spi.*;
 import cafe.woden.ircclient.irc.playback.*;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,8 +22,104 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 class PircbotxChatHistoryBatchCollectorTest {
+
+  @Test
+  void nativePlaybackDiagnosticsCountMessagesWithoutCapturingOrLoggingTheirContent() {
+    List<ServerIrcEvent> events = new ArrayList<>();
+    var collector = chatHistoryBatches("znc", events::add);
+    try (var logs = new DiagnosticLogs()) {
+      collector.handleBatchControlLine(":znc BATCH +replay znc.in/playback ##Llamas");
+      assertFalse(
+          collector.appendIfActive(
+              "replay",
+              ChatHistoryEntry.Kind.PRIVMSG,
+              Instant.parse("2026-10-02T22:39:00Z"),
+              "##Llamas",
+              "alice",
+              "private-test-content",
+              "msg-1",
+              Map.of("batch", "replay")));
+      assertFalse(
+          collector.appendIfActive(
+              "replay",
+              ChatHistoryEntry.Kind.NOTICE,
+              Instant.parse("2026-10-02T22:25:00Z"),
+              "status",
+              "bob",
+              "private-test-content",
+              "msg-2",
+              Map.of("batch", "replay")));
+      collector.handleBatchControlLine(":znc BATCH -replay");
+      String capture = logs.text();
+      assertTrue(
+          capture.contains(
+              "target=##Llamas observedMessages=2 earliest=2026-10-02T22:25:00Z latest=2026-10-02T22:39:00Z"));
+      assertFalse(capture.contains("private-test-content"));
+      assertFalse(capture.contains("alice"));
+      assertTrue(capture.contains("target=##Llamas kind=NOTICE"));
+      assertFalse(capture.contains("target=status"));
+      assertTrue(events.isEmpty(), "native playback must still use the ordinary message path");
+    }
+  }
+
+  @Test
+  void nativePlaybackDiagnosticsReportEmptyBatchesAndClearUnfinishedBatches() {
+    var collector = chatHistoryBatches("znc", ignored -> {});
+    try (var logs = new DiagnosticLogs()) {
+      collector.handleBatchControlLine(":znc BATCH +empty znc.in/playback ##Llamas");
+      collector.handleBatchControlLine(":znc BATCH -empty");
+      assertTrue(logs.text().contains("observedMessages=0 earliest=null latest=null"));
+      collector.handleBatchControlLine(":znc BATCH +unfinished znc.in/playback ##Llamas");
+      collector.clear();
+      collector.handleBatchControlLine(":znc BATCH -unfinished");
+      assertTrue(logs.text().contains("cleared unfinishedBatches=1"));
+      assertFalse(logs.text().contains("batch ended id=unfinished"));
+    }
+  }
+
+  @Test
+  void nativePlaybackDiagnosticsEvictUnfinishedBatchesAtTheirLimit() {
+    var collector = chatHistoryBatches("znc", ignored -> {});
+    try (var logs = new DiagnosticLogs()) {
+      for (int i = 0; i < 65; i++) {
+        collector.handleBatchControlLine(":znc BATCH +b" + i + " znc.in/playback ##Llamas");
+      }
+      collector.handleBatchControlLine(":znc BATCH -b0");
+      collector.clear();
+      assertTrue(logs.text().contains("evicted unfinished batch id=b0"));
+      assertTrue(logs.text().contains("cleared unfinishedBatches=64"));
+      assertFalse(logs.text().contains("batch ended id=b0 "));
+    }
+  }
+
+  private static final class DiagnosticLogs implements AutoCloseable {
+    private final Logger logger =
+        (Logger) LoggerFactory.getLogger(PircbotxChatHistoryBatchCollector.class);
+    private final Level previousLevel = logger.getLevel();
+    private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+
+    private DiagnosticLogs() {
+      appender.start();
+      logger.addAppender(appender);
+      logger.setLevel(Level.DEBUG);
+    }
+
+    private String text() {
+      return appender.list.stream()
+          .map(ILoggingEvent::getFormattedMessage)
+          .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    @Override
+    public void close() {
+      logger.detachAppender(appender);
+      logger.setLevel(previousLevel);
+      appender.stop();
+    }
+  }
 
   @Test
   void appendIfActiveBuffersEntriesUntilBatchEnds() {

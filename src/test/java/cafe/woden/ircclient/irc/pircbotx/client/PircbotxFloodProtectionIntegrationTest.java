@@ -144,7 +144,9 @@ class PircbotxFloodProtectionIntegrationTest {
   @Test
   void productionBotReadsAndAnswersPingDuringPacedJoinsAndCancelsOnDisconnect() throws Exception {
     IrcProperties.FloodProtection previous = NetFloodProtectionContext.settings();
-    NetFloodProtectionContext.configure(new IrcProperties.FloodProtection(2000, 300));
+    NetFloodProtectionContext.configure(
+        new IrcProperties.FloodProtection(
+            IrcProperties.FloodProtection.defaults().commandIntervalMs(), 300));
     try {
       // Each reconnect builds a fresh bot and must start a fresh, independently cancellable plan.
       for (int attempt = 0; attempt < 2; attempt++) {
@@ -159,6 +161,7 @@ class PircbotxFloodProtectionIntegrationTest {
                       if (event.getMessage().equals("reader-alive")) notice.countDown();
                     }
                   });
+          assertEquals(2000, bot.getConfiguration().getMessageDelay().getDelay());
           assertTrue(
               bot.getConfiguration().getAutoJoinChannels().isEmpty(),
               "PircBotX must not auto-join synchronously inside its input parser");

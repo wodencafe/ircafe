@@ -80,6 +80,12 @@ public abstract class UiTranscriptPortDecorator implements UiTranscriptPort {
   }
 
   @Override
+  public void appendPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text) {
+    delegate.appendPendingOutgoingAction(target, pendingId, at, from, text);
+  }
+
+  @Override
   public boolean resolvePendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -93,9 +99,28 @@ public abstract class UiTranscriptPortDecorator implements UiTranscriptPort {
   }
 
   @Override
+  public boolean resolvePendingOutgoingAction(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return delegate.resolvePendingOutgoingAction(
+        target, pendingId, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void failPendingOutgoingChat(
       TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
     delegate.failPendingOutgoingChat(target, pendingId, at, from, text, reason);
+  }
+
+  @Override
+  public void failPendingOutgoingAction(
+      TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
+    delegate.failPendingOutgoingAction(target, pendingId, at, from, text, reason);
   }
 
   @Override

@@ -29,7 +29,7 @@ class FloodProtectionPreferencesFunctionalTest {
               var controls = build(closeables);
               assertTrue(controls.floodProtection.enabled().isSelected());
               assertTrue(controls.floodProtection.commandIntervalMs().isEnabled());
-              assertEquals(1500, controls.floodProtection.commandIntervalMs().getValue());
+              assertEquals(2000, controls.floodProtection.commandIntervalMs().getValue());
               assertEquals(5, controls.floodProtection.autoJoinDelaySeconds().getValue());
               controls.floodProtection.commandIntervalMs().setValue(2500);
               controls.floodProtection.autoJoinDelaySeconds().setValue(8);

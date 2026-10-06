@@ -32,8 +32,13 @@ public class MediatorPendingEchoFailureHandler {
       if (target == null) {
         continue;
       }
-      ui.failPendingOutgoingChat(
-          target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      if (pending.action()) {
+        ui.failPendingOutgoingAction(
+            target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      } else {
+        ui.failPendingOutgoingChat(
+            target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+      }
     }
   }
 }

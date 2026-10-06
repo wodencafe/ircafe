@@ -16,30 +16,33 @@ class IrcPropertiesBindingTest {
 
   @Test
   void floodProtectionDefaultsPartialBindingAndBounds() {
+    assertEquals(
+        new IrcProperties.FloodProtection(true, 2000, 5000),
+        IrcProperties.FloodProtection.defaults());
     runner.run(
         ctx ->
             assertEquals(
-                IrcProperties.FloodProtection.defaults(),
+                new IrcProperties.FloodProtection(true, 2000, 5000),
                 ctx.getBean(IrcProperties.class).client().floodProtection()));
     runner
         .withPropertyValues("irc.client.flood-protection.auto-join-delay-ms=0")
         .run(
             ctx ->
                 assertEquals(
-                    new IrcProperties.FloodProtection(1500, 0),
+                    new IrcProperties.FloodProtection(2000, 0),
                     ctx.getBean(IrcProperties.class).client().floodProtection()));
     runner
-        .withPropertyValues("irc.client.flood-protection.command-interval-ms=2000")
+        .withPropertyValues("irc.client.flood-protection.command-interval-ms=1500")
         .run(
             ctx ->
                 assertEquals(
-                    new IrcProperties.FloodProtection(2000, 5000),
+                    new IrcProperties.FloodProtection(1500, 5000),
                     ctx.getBean(IrcProperties.class).client().floodProtection()));
     assertEquals(
         new IrcProperties.FloodProtection(100, 120000),
         new IrcProperties.FloodProtection(1, Long.MAX_VALUE));
     assertEquals(
-        new IrcProperties.FloodProtection(1500, 0), new IrcProperties.FloodProtection(-1, -1));
+        new IrcProperties.FloodProtection(2000, 0), new IrcProperties.FloodProtection(-1, -1));
   }
 
   private final ApplicationContextRunner runner =
@@ -61,7 +64,7 @@ class IrcPropertiesBindingTest {
         .run(
             ctx ->
                 assertEquals(
-                    new IrcProperties.FloodProtection(false, 1500, 5000),
+                    new IrcProperties.FloodProtection(false, 2000, 5000),
                     ctx.getBean(IrcProperties.class).client().floodProtection()));
     assertTrue(IrcProperties.FloodProtection.defaults().enabled());
   }

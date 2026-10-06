@@ -380,6 +380,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     messageLineCoordinator.appendPendingOutgoingChat(ref, pendingId, from, text, tsEpochMs);
   }
 
+  public synchronized void appendPendingOutgoingAction(
+      TargetRef ref, String pendingId, String from, String text, long tsEpochMs) {
+    messageLineCoordinator.appendPendingOutgoingAction(ref, pendingId, from, text, tsEpochMs);
+  }
+
   public synchronized boolean resolvePendingOutgoingChat(
       TargetRef ref,
       String pendingId,
@@ -392,9 +397,27 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         ref, pendingId, from, text, tsEpochMs, messageId, ircv3Tags);
   }
 
+  public synchronized boolean resolvePendingOutgoingAction(
+      TargetRef ref,
+      String pendingId,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return messageLineCoordinator.resolvePendingOutgoingAction(
+        ref, pendingId, from, text, tsEpochMs, messageId, ircv3Tags);
+  }
+
   public synchronized boolean failPendingOutgoingChat(
       TargetRef ref, String pendingId, String from, String text, long tsEpochMs, String reason) {
     return messageLineCoordinator.failPendingOutgoingChat(
+        ref, pendingId, from, text, tsEpochMs, reason);
+  }
+
+  public synchronized boolean failPendingOutgoingAction(
+      TargetRef ref, String pendingId, String from, String text, long tsEpochMs, String reason) {
+    return messageLineCoordinator.failPendingOutgoingAction(
         ref, pendingId, from, text, tsEpochMs, reason);
   }
 
