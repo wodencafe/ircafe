@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,7 +22,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -30,6 +35,37 @@ class LinkPreviewFetchServiceTest {
   private static final List<String> NO_ARG_BUILT_IN_RESOLVER_CLASS_NAMES = List.of();
 
   @TempDir Path tempDir;
+
+  @Test
+  void concurrentViewsSharePendingResolutionAndCachedResult() throws Exception {
+    String url = "https://example.org/article";
+    LinkPreview preview = new LinkPreview(url, "Shared article", null, "News", null, 1);
+    AtomicInteger resolutions = new AtomicInteger();
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    LinkPreviewResolver resolver =
+        (uri, originalUrl, http) -> {
+          assertFalse(SwingUtilities.isEventDispatchThread());
+          resolutions.incrementAndGet();
+          started.countDown();
+          assertTrue(release.await(5, TimeUnit.SECONDS));
+          return preview;
+        };
+    LinkPreviewFetchService service = new LinkPreviewFetchService(null, List.of(resolver));
+    try {
+      var main = service.fetch("server", url).test();
+      assertTrue(started.await(5, TimeUnit.SECONDS));
+      var extra = service.fetch("server", url).test();
+      release.countDown();
+
+      main.awaitDone(5, TimeUnit.SECONDS).assertResult(preview);
+      extra.awaitDone(5, TimeUnit.SECONDS).assertResult(preview);
+      assertSame(preview, service.fetch("server", url).blockingGet());
+      assertEquals(1, resolutions.get(), "multiple views must share a single article resolution");
+    } finally {
+      release.countDown();
+    }
+  }
 
   @Test
   void rejectsPrivateHostsBeforeInvokingResolvers() {

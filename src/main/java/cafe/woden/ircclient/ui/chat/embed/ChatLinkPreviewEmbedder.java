@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.DocumentComponentFactory;
 import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
 import cafe.woden.ircclient.ui.settings.EmbedCardStyleBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -139,16 +140,20 @@ public class ChatLinkPreviewEmbedder {
         && !policyMatcher.allow(ctx, fromNick, ircv3Tags, request.url())) {
       return EmbedApplicationResult.blocked(insertAt, request.url());
     }
-    ChatLinkPreviewComponent comp =
-        new ChatLinkPreviewComponent(
-            request.serverId(),
-            request.url(),
-            fetch,
-            imageFetch,
-            request.collapsedByDefault(),
-            embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT,
-            request.imageEmbedsMaxWidthPx(),
-            request.imageEmbedsMaxHeightPx());
+    EmbedCardStyle cardStyle =
+        embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
+    DocumentComponentFactory comp =
+        new DocumentComponentFactory(
+            () ->
+                new ChatLinkPreviewComponent(
+                    request.serverId(),
+                    request.url(),
+                    fetch,
+                    imageFetch,
+                    request.collapsedByDefault(),
+                    cardStyle,
+                    request.imageEmbedsMaxWidthPx(),
+                    request.imageEmbedsMaxHeightPx()));
 
     EmbedDocumentApplicationService.InsertResult result =
         documentApplication.insertComponent(doc, request.url(), comp, insertAt);

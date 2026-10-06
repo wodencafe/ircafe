@@ -1,9 +1,12 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.util.EmojiFontSupport;
+import java.awt.Component;
+import javax.swing.text.ComponentView;
 import javax.swing.text.Element;
 import javax.swing.text.LabelView;
 import javax.swing.text.ParagraphView;
+import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledEditorKit;
 import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
@@ -45,6 +48,15 @@ final class EmojiEditorKits {
 
     @Override
     public View create(Element elem) {
+      if (StyleConstants.getComponent(elem.getAttributes())
+          instanceof DocumentComponentFactory factory) {
+        return new ComponentView(elem) {
+          @Override
+          protected Component createComponent() {
+            return factory.createComponent();
+          }
+        };
+      }
       if (EmojiFontSupport.isEmojiRun(elem.getAttributes())) {
         return new EmojiInlineView(elem);
       }
