@@ -49,6 +49,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -97,6 +98,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final Function<String, String> currentNickLookup;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
+  private Function<String, JPopupMenu> nickContextMenuProvider;
 
   private final ActiveInputRouter activeInputRouter;
 
@@ -344,6 +346,15 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   public void setOnTopicPanelHeightChanged(IntConsumer listener) {
     topicHeightChanged = listener != null ? listener : heightPx -> {};
+  }
+
+  public void setNickContextMenuProvider(Function<String, JPopupMenu> provider) {
+    nickContextMenuProvider = provider;
+  }
+
+  @Override
+  protected JPopupMenu nickContextMenuFor(String nick) {
+    return nickContextMenuProvider == null ? null : nickContextMenuProvider.apply(nick);
   }
 
   @Override
@@ -827,6 +838,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     } catch (Exception ignored) {
     }
     closeDecorators();
+    nickContextMenuProvider = null;
   }
 
   private static String b64(String s) {

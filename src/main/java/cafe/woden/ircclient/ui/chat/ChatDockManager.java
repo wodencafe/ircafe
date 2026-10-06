@@ -457,6 +457,7 @@ public class ChatDockManager {
               pinnedDrafts.put(t, draft == null ? "" : draft);
             });
     created.setExternalBrowserLauncher(externalBrowserLauncher);
+    created.setNickContextMenuProvider(nick -> mainChat.nickContextMenuFor(target, nick));
     created.setDraftText(initialDraft);
     applyPinnedInputEnabled(target, created);
     created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));

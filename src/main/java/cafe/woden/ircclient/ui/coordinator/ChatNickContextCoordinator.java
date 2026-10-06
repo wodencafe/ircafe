@@ -45,17 +45,20 @@ public final class ChatNickContextCoordinator {
 
   public JPopupMenu nickContextMenuFor(String nick) {
     if (nick == null || nick.isBlank()) return null;
+    return nickContextMenuFor(activeTargetSupplier.get(), nick);
+  }
 
-    TargetRef activeTarget = activeTargetSupplier.get();
-    if (activeTarget == null) return null;
+  public JPopupMenu nickContextMenuFor(TargetRef target, String nick) {
+    if (nick == null || nick.isBlank()) return null;
+    if (target == null) return null;
 
-    String sid = ignoreScopeServerId(activeTarget);
+    String sid = ignoreScopeServerId(target);
     if (sid.isEmpty()) return null;
 
     String normalizedNick = nick.trim();
     if (normalizedNick.isEmpty()) return null;
 
-    NickInfo nickInfo = findNickInfo(activeTarget, normalizedNick);
+    NickInfo nickInfo = findNickInfo(target, normalizedNick);
     String hostmask = Objects.toString(nickInfo == null ? "" : nickInfo.hostmask(), "").trim();
 
     IgnoreStatusService.Status status =
@@ -64,7 +67,7 @@ public final class ChatNickContextCoordinator {
             : ignoreStatusService.status(sid, normalizedNick, hostmask);
 
     return nickContextMenu.forNick(
-        activeTarget,
+        target,
         normalizedNick,
         new NickContextMenuFactory.IgnoreMark(status.hard(), status.soft()));
   }
