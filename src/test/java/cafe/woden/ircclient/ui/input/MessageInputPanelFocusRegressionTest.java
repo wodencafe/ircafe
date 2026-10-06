@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.input;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -10,14 +11,62 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.Action;
+import javax.swing.JComponent;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.text.JTextComponent;
 import org.junit.jupiter.api.Test;
 
 class MessageInputPanelFocusRegressionTest {
+
+  @Test
+  void lookAndFeelActionMapCleanupKeepsMainInputEditing() throws Exception {
+    SwingUtilities.invokeAndWait(
+        () -> {
+          MessageInputPanel main =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          MessageInputPanel separate =
+              new MessageInputPanel(mock(UiSettingsBus.class), mock(CommandHistoryStore.class));
+          try {
+            JTextComponent editor = findFirst(main, JTextComponent.class);
+            Action send = editor.getActionMap().get("ircafe.emit");
+            separate.setDraftText("separate draft");
+            // A dock UI refresh can clear editor-kit actions while leaving their bindings intact.
+            SwingUtilities.getUIActionMap(editor).clear();
+            main.setInputEnabled(false);
+            main.setInputEnabled(true);
+            main.setDraftText("abc");
+            editor.setCaretPosition(1);
+            invokeKeyAction(editor, KeyEvent.VK_BACK_SPACE);
+            assertEquals("bc", main.getDraftText());
+            invokeKeyAction(editor, KeyEvent.VK_DELETE);
+            assertEquals("c", main.getDraftText());
+            editor.setCaretPosition(1);
+            invokeKeyAction(editor, KeyEvent.VK_LEFT);
+            assertEquals(0, editor.getCaretPosition());
+            assertSame(send, editor.getActionMap().get("ircafe.emit"));
+            assertEquals("separate draft", separate.getDraftText());
+          } finally {
+            main.shutdownResources();
+            separate.shutdownResources();
+          }
+        });
+  }
+
+  private static void invokeKeyAction(JTextComponent editor, int keyCode) {
+    Object binding =
+        editor.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke(keyCode, 0));
+    Action action = editor.getActionMap().get(binding);
+    assertNotNull(action, "editing binding must retain its action");
+    action.actionPerformed(new ActionEvent(editor, ActionEvent.ACTION_PERFORMED, ""));
+  }
 
   @Test
   void editableInputViewportUsesTextCursorAcrossClickableSurface() throws Exception {
