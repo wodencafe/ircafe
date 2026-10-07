@@ -1378,6 +1378,143 @@ class QuasselCoreIrcClientServiceTest {
     assertEquals(1, ((Number) removeNetworkId.value()).intValue());
   }
 
+  @ParameterizedTest
+  @CsvSource({"update, 1, 0", "fallback, 2, 1"})
+  void quasselConnectWaitsForCoreConfirmedIdentityRepair(
+      String repairStage, int expectedInitRequests, int expectedCreates) throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel",
+                1,
+                List.of(1),
+                Map.of(),
+                Map.of(
+                    7,
+                    Map.of(
+                        "identityId", 7, "identityName", "quassel", "nicks", List.of("quassel")))));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    connectAndAwaitEstablishedSession(service, events);
+    verify(codec, org.mockito.Mockito.timeout(500L))
+        .writeSignalProxyInitRequest(socket.getOutputStream(), "Network", "1", List.of());
+    org.mockito.Mockito.clearInvocations(codec);
+
+    socket.writeInbound(
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "NetworkInfo".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                Map.of(
+                    "networkName",
+                    "broken",
+                    "identity",
+                    0,
+                    "ServerList",
+                    List.of(Map.of("Host", "irc.example.net", "Port", 6667))))));
+    socket.writeInbound(
+        encodeRpcCall(
+            codec, "2displayStatusMsg(QString,QString)", List.of("", "preflight-state-loaded")));
+    awaitEvent(
+        events,
+        event ->
+            event instanceof IrcEvent.ServerResponseLine line
+                && line.message().contains("preflight-state-loaded"));
+    byte[] confirmation =
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "NetworkInfo".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                Map.of("identity", 7)));
+
+    if ("update".equals(repairStage)) {
+      org.mockito.Mockito.doAnswer(
+              invocation -> {
+                Object result = invocation.callRealMethod();
+                socket.writeInbound(confirmation);
+                return result;
+              })
+          .when(codec)
+          .writeSignalProxySync(
+              eq(socket.getOutputStream()),
+              eq("Network"),
+              eq("1"),
+              eq("requestSetNetworkInfo"),
+              any());
+    } else {
+      org.mockito.Mockito.doAnswer(
+              invocation -> {
+                Object result = invocation.callRealMethod();
+                socket.writeInbound(confirmation);
+                return result;
+              })
+          .when(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+    }
+
+    service
+        .quasselCoreConnectNetwork("quassel", "1")
+        .test()
+        .awaitDone(8, TimeUnit.SECONDS)
+        .assertComplete();
+    assertEquals(7, service.quasselCoreNetworks("quassel").getFirst().identityId());
+    var order = org.mockito.Mockito.inOrder(codec);
+    order
+        .verify(codec)
+        .writeSignalProxySync(
+            eq(socket.getOutputStream()),
+            eq("Network"),
+            eq("1"),
+            eq("requestSetNetworkInfo"),
+            any());
+    order
+        .verify(codec)
+        .writeSignalProxyInitRequest(socket.getOutputStream(), "Network", "1", List.of());
+    if (expectedCreates > 0) {
+      order
+          .verify(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+      order
+          .verify(codec)
+          .writeSignalProxyInitRequest(socket.getOutputStream(), "Network", "1", List.of());
+    }
+    order
+        .verify(codec)
+        .writeSignalProxySync(
+            eq(socket.getOutputStream()),
+            eq("Network"),
+            eq("1"),
+            eq("requestConnect"),
+            eq(List.of()));
+    verify(codec, times(expectedInitRequests))
+        .writeSignalProxyInitRequest(socket.getOutputStream(), "Network", "1", List.of());
+    verify(codec, times(expectedCreates))
+        .writeSignalProxyRpcCall(
+            eq(socket.getOutputStream()), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+    service.disconnect("quassel").blockingAwait();
+  }
+
   @Test
   void quasselConnectSkipsConnectWhenIdentityRepairIsNotConfirmedByCore() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);

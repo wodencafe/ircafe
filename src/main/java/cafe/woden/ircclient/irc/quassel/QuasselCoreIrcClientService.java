@@ -12,15 +12,14 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseNickC
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseTopic;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.collectPotentialNetworkStateMaps;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.flattenNetworkStateFromKeyValueParams;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.networkIdFromStateMap;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.networkStateLooksUsableForConnect;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkEnabled;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parsePrimaryNetworkServer;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.parseQualifiedTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.routeOutboundRawLine;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
@@ -56,7 +55,6 @@ import cafe.woden.ircclient.irc.quassel.QuasselCoreBufferSyncerParser.ReadMarker
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.KickDetails;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelector;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelectorKind;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.NetworkServerEndpoint;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.OutboundRawRoute;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.QualifiedTarget;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
@@ -3133,185 +3131,33 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private boolean maybeRepairNetworkIdentityBeforeConnect(QuasselSession session, int networkId)
       throws Exception {
     if (session == null || networkId < 0) return true;
-    Map<String, Object> existing = refreshNetworkStateForConnectPreflight(session, networkId);
-    int configuredIdentityId = parseNetworkIdentityId(existing);
-    Map<String, Object> identityState =
-        configuredIdentityId > 0 ? session.identities.state(configuredIdentityId) : Map.of();
-    boolean identityStateUsable = QuasselCoreIdentityState.looksUsable(identityState);
-    boolean identityKnown =
-        configuredIdentityId > 0 && session.identities.isKnown(configuredIdentityId);
-    NetworkServerEndpoint endpoint = parsePrimaryNetworkServer(existing);
-    String networkName =
-        firstNonBlank(
-            mapValueIgnoreCase(existing, "networkName"),
-            mapValueIgnoreCase(existing, "networkname"),
-            mapValueIgnoreCase(existing, "name"),
-            session.networks.displayNames().get(networkId),
-            "network-" + networkId);
-    boolean enabled = parseNetworkEnabled(existing);
-    log.debug(
-        "Quassel connect preflight state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, identityNames={}, identityStateKeys={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, enabled={}, knownNetworkIds={}, networkStateKeys={}, rawState={}",
-        session.serverId,
-        networkId,
-        configuredIdentityId,
-        identityKnown,
-        identityStateUsable,
-        session.identities.knownIds(),
-        session.identities.names(),
-        session.identities.stateIds(),
-        networkName,
-        endpoint.host(),
-        endpoint.port(),
-        endpoint.useTls(),
-        enabled,
-        collectKnownNetworkIds(session),
-        session.networks.stateIds(),
-        summarizeNetworkInfoForLog(existing));
-    if (identityKnown && identityStateUsable) {
-      log.debug(
-          "Skipping network identity repair before connect because identity is already known and state looks usable: serverId={}, networkId={}, identityId={}",
-          session.serverId,
-          networkId,
-          configuredIdentityId);
-      return true;
-    }
-
-    int replacementIdentityId = resolveQuasselIdentityId(session, null);
-    if (replacementIdentityId < 0) {
-      log.debug(
-          "Skipping network identity repair before connect because no replacement identity id is available: serverId={}, networkId={}",
-          session.serverId,
-          networkId);
-      return true;
-    }
-
-    log.debug(
-        "Quassel connect preflight found invalid/unknown identity or unusable identity state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, replacementIdentityId={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, rawState={}",
-        session.serverId,
-        networkId,
-        configuredIdentityId,
-        identityKnown,
-        identityStateUsable,
-        session.identities.knownIds(),
-        replacementIdentityId,
-        networkName,
-        endpoint.host(),
-        endpoint.port(),
-        endpoint.useTls(),
-        summarizeNetworkInfoForLog(existing));
-    if (endpoint.host().isBlank()) {
-      log.debug(
-          "Skipping network identity repair before connect due to missing host in network state: serverId={}, networkId={}",
-          session.serverId,
-          networkId);
-      return true;
-    }
-
-    QuasselCoreNetworkUpdateRequest repairRequest =
-        new QuasselCoreNetworkUpdateRequest(
-            networkName,
-            endpoint.host(),
-            endpoint.port(),
-            endpoint.useTls(),
-            "",
-            true,
-            replacementIdentityId,
-            enabled);
-    sendUpdateNetworkRequest(
-        session, networkId, QuasselCoreNetworkRequests.normalizeUpdateRequest(repairRequest));
-    log.debug(
-        "Submitted pre-connect network identity repair: serverId={}, networkId={}, identityId={}, host={}, port={}, tls={}, enabled={}",
-        session.serverId,
-        networkId,
-        replacementIdentityId,
-        endpoint.host(),
-        endpoint.port(),
-        endpoint.useTls(),
-        enabled);
-    // Network updates are async on core side; request a fresh snapshot before connect.
-    requestNetworkInitState(session, networkId);
-    Map<String, Object> repaired =
-        awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_500L);
-    int confirmedIdentityId = parseNetworkIdentityId(repaired);
-    if (confirmedIdentityId != replacementIdentityId) {
-      log.debug(
-          "Quassel connect preflight identity repair not yet confirmed by core: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
-          session.serverId,
-          networkId,
-          replacementIdentityId,
-          confirmedIdentityId,
-          summarizeNetworkInfoForLog(repaired));
-      QuasselCoreNetworkCreateRequest fallbackRequest =
-          new QuasselCoreNetworkCreateRequest(
-              networkName,
-              endpoint.host(),
-              endpoint.port(),
-              endpoint.useTls(),
-              "",
-              true,
-              replacementIdentityId,
-              List.of());
-      log.debug(
-          "Attempting createNetwork fallback to force identity repair: serverId={}, networkId={}, networkName={}, identityId={}",
-          session.serverId,
-          networkId,
-          networkName,
-          replacementIdentityId);
-      sendCreateNetworkRequest(
-          session, replacementIdentityId, fallbackRequest, RPC_CREATE_NETWORK_SLOT, true);
-      requestNetworkInitState(session, networkId);
-      Map<String, Object> fallbackSnapshot =
-          awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_000L);
-      int fallbackConfirmedIdentityId = parseNetworkIdentityId(fallbackSnapshot);
-      if (fallbackConfirmedIdentityId != replacementIdentityId) {
-        log.debug(
-            "Quassel createNetwork fallback did not confirm identity repair: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
+    return new QuasselCoreNetworkConnectPreflight(
             session.serverId,
-            networkId,
-            replacementIdentityId,
-            fallbackConfirmedIdentityId,
-            summarizeNetworkInfoForLog(fallbackSnapshot));
-        return false;
-      }
-      log.debug(
-          "Quassel createNetwork fallback confirmed identity repair: serverId={}, networkId={}, confirmedIdentityId={}",
-          session.serverId,
-          networkId,
-          fallbackConfirmedIdentityId);
-      return true;
-    }
-    log.debug(
-        "Post-repair network state snapshot: serverId={}, networkId={}, configuredIdentityId={}, state={}",
-        session.serverId,
-        networkId,
-        confirmedIdentityId,
-        summarizeNetworkInfoForLog(repaired));
-    return true;
-  }
+            session.networks,
+            session.identities,
+            observations,
+            () -> resolveQuasselIdentityId(session, null),
+            () -> collectKnownNetworkIds(session),
+            new QuasselCoreNetworkConnectPreflight.Commands() {
+              @Override
+              public void requestNetworkInitState(int id) throws Exception {
+                QuasselCoreIrcClientService.this.requestNetworkInitState(session, id);
+              }
 
-  private Map<String, Object> refreshNetworkStateForConnectPreflight(
-      QuasselSession session, int networkId) throws Exception {
-    if (session == null || networkId < 0) return Map.of();
-    Map<String, Object> existing = session.networks.state(networkId);
-    if (networkStateLooksUsableForConnect(existing)) {
-      return existing;
-    }
+              @Override
+              public void updateNetwork(int id, QuasselCoreNetworkUpdateRequest request)
+                  throws Exception {
+                sendUpdateNetworkRequest(session, id, request);
+              }
 
-    log.debug(
-        "Quassel connect preflight requesting init-data refresh for network state: serverId={}, networkId={}, knownNetworkIds={}, networkStateKeys={}",
-        session.serverId,
-        networkId,
-        collectKnownNetworkIds(session),
-        session.networks.stateIds());
-    requestNetworkInitState(session, networkId);
-    Map<String, Object> refreshed = awaitNetworkStateSnapshot(session, networkId, 800L);
-    log.debug(
-        "Quassel connect preflight init-data refresh result: serverId={}, networkId={}, refreshedStateLooksUsable={}, refreshedState={}",
-        session.serverId,
-        networkId,
-        networkStateLooksUsableForConnect(refreshed),
-        summarizeNetworkInfoForLog(refreshed));
-    return refreshed;
+              @Override
+              public void createNetwork(int identityId, QuasselCoreNetworkCreateRequest request)
+                  throws Exception {
+                sendCreateNetworkRequest(
+                    session, identityId, request, RPC_CREATE_NETWORK_SLOT, true);
+              }
+            })
+        .prepare(networkId);
   }
 
   private void requestNetworkInitState(QuasselSession session, int networkId) throws Exception {
@@ -3337,51 +3183,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         (codec, out) -> {
           codec.writeSignalProxyInitRequest(out, clazz, object, List.of());
         });
-  }
-
-  private Map<String, Object> awaitNetworkStateSnapshot(
-      QuasselSession session, int networkId, long timeoutMs) {
-    if (session == null || networkId < 0) return Map.of();
-    Map<String, Object> current = session.networks.state(networkId);
-    if (networkStateLooksUsableForConnect(current)) {
-      return current;
-    }
-    if (timeoutMs <= 0L) {
-      return current == null ? Map.of() : current;
-    }
-    awaitQuasselNetworkCondition(
-        session,
-        timeoutMs,
-        () -> {
-          Map<String, Object> state = session.networks.state(networkId);
-          return networkStateLooksUsableForConnect(state);
-        });
-    current = session.networks.state(networkId);
-    return current == null ? Map.of() : current;
-  }
-
-  private Map<String, Object> awaitNetworkStateSnapshotForIdentity(
-      QuasselSession session, int networkId, int expectedIdentityId, long timeoutMs) {
-    if (session == null || networkId < 0) return Map.of();
-    if (expectedIdentityId <= 0) {
-      return awaitNetworkStateSnapshot(session, networkId, timeoutMs);
-    }
-    Map<String, Object> current = session.networks.state(networkId);
-    if (parseNetworkIdentityId(current) == expectedIdentityId) {
-      return current;
-    }
-    if (timeoutMs <= 0L) {
-      return current == null ? Map.of() : current;
-    }
-    awaitQuasselNetworkCondition(
-        session,
-        timeoutMs,
-        () -> {
-          Map<String, Object> state = session.networks.state(networkId);
-          return parseNetworkIdentityId(state) == expectedIdentityId;
-        });
-    current = session.networks.state(networkId);
-    return current == null ? Map.of() : current;
   }
 
   private void awaitQuasselNetworkCondition(
@@ -3782,75 +3583,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               RPC_REMOVE_NETWORK_SLOT,
               List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", networkId)));
         });
-  }
-
-  private static String summarizeNetworkInfoForLog(Map<String, Object> payload) {
-    if (payload == null || payload.isEmpty()) return "{}";
-    return summarizeValueForLog(payload, 0);
-  }
-
-  @SuppressWarnings("unchecked")
-  private static String summarizeValueForLog(Object value, int depth) {
-    if (value == null) return "null";
-    if (depth > 3) return "<depth-limit>";
-    if (value instanceof String s) return '"' + s + '"';
-    if (value instanceof Number || value instanceof Boolean) return String.valueOf(value);
-    if (value instanceof byte[] bytes) return "byte[" + bytes.length + "]";
-    if (value instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
-      return "UserType("
-          + userType.typeName()
-          + "="
-          + summarizeValueForLog(userType.value(), depth + 1)
-          + ")";
-    }
-    if (value instanceof List<?> list) {
-      StringBuilder out = new StringBuilder();
-      out.append("List[");
-      int index = 0;
-      for (Object item : list) {
-        if (index > 0) out.append(", ");
-        if (index >= 8) {
-          out.append("...");
-          break;
-        }
-        out.append(summarizeValueForLog(item, depth + 1));
-        index++;
-      }
-      out.append(']');
-      return out.toString();
-    }
-    if (value instanceof Map<?, ?> map) {
-      StringBuilder out = new StringBuilder();
-      out.append('{');
-      int index = 0;
-      for (Map.Entry<?, ?> entry : map.entrySet()) {
-        if (index > 0) out.append(", ");
-        if (index >= 32) {
-          out.append("...");
-          break;
-        }
-        String key = Objects.toString(entry.getKey(), "");
-        out.append(key).append('=');
-        if (looksSensitiveLogKey(key)) {
-          out.append("<redacted>");
-        } else {
-          out.append(summarizeValueForLog(entry.getValue(), depth + 1));
-        }
-        index++;
-      }
-      out.append('}');
-      return out.toString();
-    }
-    return value.getClass().getSimpleName() + "(" + value + ")";
-  }
-
-  private static boolean looksSensitiveLogKey(String key) {
-    String token = Objects.toString(key, "").trim().toLowerCase(Locale.ROOT);
-    if (token.isEmpty()) return false;
-    return token.contains("pass")
-        || token.contains("secret")
-        || token.contains("token")
-        || token.contains("auth");
   }
 
   private void sendInput(
