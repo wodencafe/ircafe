@@ -159,6 +159,35 @@ class SlashCommandPresentationCatalogTest {
   }
 
   @Test
+  void loadsOperServAutocompleteAndHelpThroughClasspathServiceLoader() {
+    RuntimeConfigPathPort runtimeConfigPathPort = () -> tempDir.resolve("ircafe.yml");
+    SlashCommandPresentationCatalog catalog =
+        new SlashCommandPresentationCatalog(
+            List.of(),
+            BackendNamedCommandCatalog.empty(),
+            new InstalledPluginServices(runtimeConfigPathPort));
+    List<String> commands =
+        catalog.autocompleteCommands().stream().map(SlashCommandDescriptor::command).toList();
+    assertTrue(commands.contains("/os"));
+    assertTrue(commands.contains("/operserv"));
+
+    TargetRef status = new TargetRef("libera", "status");
+    ArrayList<String> rendered = new ArrayList<>();
+    catalog.appendGeneralHelp(status, (target, line) -> rendered.add(line));
+    assertTrue(rendered.stream().anyMatch(line -> line.contains("/os")));
+
+    Map<String, Consumer<TargetRef>> handlers =
+        catalog.topicHelpHandlers((target, line) -> rendered.add(line));
+    for (String topic : List.of("os", "operserv")) {
+      rendered.clear();
+      handlers.get(topic).accept(status);
+      assertTrue(rendered.contains("Usage: /os [command [args...]]"));
+      assertTrue(rendered.contains("Alias: /operserv [command [args...]]"));
+      assertTrue(rendered.contains("With no command, requests OperServ HELP."));
+    }
+  }
+
+  @Test
   void includesAppOwnedFilterAutocompleteCommandWithoutProviderContributors() {
     SlashCommandPresentationCatalog catalog =
         new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
@@ -406,7 +435,7 @@ class SlashCommandPresentationCatalogTest {
         (target, line) -> generalHelp.add(target.target() + ":" + line));
     assertTrue(
         generalHelp.contains(
-            "status:Common: /join /part /msg /cs /ns /ms /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
+            "status:Common: /join /part /msg /cs /ns /ms /os /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
     assertTrue(generalHelp.contains("status:/plugin-help - plugin jar help"));
 
     AtomicReference<String> topicHelp = new AtomicReference<>();
@@ -448,7 +477,7 @@ class SlashCommandPresentationCatalogTest {
         (target, line) -> generalHelp.add(target.target() + ":" + line));
     assertTrue(
         generalHelp.contains(
-            "status:Common: /join /part /msg /cs /ns /ms /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
+            "status:Common: /join /part /msg /cs /ns /ms /os /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
     assertTrue(generalHelp.contains("status:/plugin-help - plugin jar help"));
 
     AtomicReference<String> topicHelp = new AtomicReference<>();
@@ -505,7 +534,7 @@ class SlashCommandPresentationCatalogTest {
 
     assertTrue(
         rendered.contains(
-            "Common: /join /part /msg /cs /ns /ms /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
+            "Common: /join /part /msg /cs /ns /ms /os /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc"));
     assertTrue(
         rendered.contains(
             "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)"));

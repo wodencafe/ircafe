@@ -36,6 +36,8 @@ public final class BuiltInSlashCommandPresentationContributor
           new SlashCommandDescriptor("/nickserv", "Alias: /ns"),
           new SlashCommandDescriptor("/ms", "Send command to MemoServ"),
           new SlashCommandDescriptor("/memoserv", "Alias: /ms"),
+          new SlashCommandDescriptor("/os", "Send command to OperServ"),
+          new SlashCommandDescriptor("/operserv", "Alias: /os"),
           new SlashCommandDescriptor("/notice", "Send notice"),
           new SlashCommandDescriptor("/me", "Send action"),
           new SlashCommandDescriptor("/topic", "View/change topic"),
@@ -105,7 +107,7 @@ public final class BuiltInSlashCommandPresentationContributor
       return;
     }
     help.appendLine(
-        "Common: /join /part /msg /cs /ns /ms /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
+        "Common: /join /part /msg /cs /ns /ms /os /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
     help.appendLine(
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
     help.appendLine("Tip: /help dcc for direct-chat/file-transfer commands.");
@@ -137,6 +139,8 @@ public final class BuiltInSlashCommandPresentationContributor
         Map.entry("nickserv", BuiltInSlashCommandPresentationContributor::appendNickServHelp),
         Map.entry("ms", BuiltInSlashCommandPresentationContributor::appendMemoServHelp),
         Map.entry("memoserv", BuiltInSlashCommandPresentationContributor::appendMemoServHelp),
+        Map.entry("os", BuiltInSlashCommandPresentationContributor::appendOperServHelp),
+        Map.entry("operserv", BuiltInSlashCommandPresentationContributor::appendOperServHelp),
         Map.entry("notice", BuiltInSlashCommandPresentationContributor::appendNoticeHelp),
         Map.entry("me", BuiltInSlashCommandPresentationContributor::appendMeHelp),
         Map.entry("whois", BuiltInSlashCommandPresentationContributor::appendWhoisHelp),
@@ -319,6 +323,19 @@ public final class BuiltInSlashCommandPresentationContributor
         "Sends a private message to MemoServ on the active server, like /msg MemoServ.");
     help.appendLine("With no command, requests MemoServ HELP.");
     help.appendLine("Examples: /ms HELP, /ms LIST, /ms READ 1, /ms SEND nickname message");
+  }
+
+  private static void appendOperServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /os [command [args...]]");
+    help.appendLine("Alias: /operserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to OperServ on the active server, like /msg OperServ.");
+    help.appendLine("With no command, requests OperServ HELP.");
+    help.appendLine("Available commands and required privileges depend on the network's services.");
+    help.appendLine("Examples: /os HELP, /os HELP command");
   }
 
   private static void appendNoticeHelp(SlashCommandHelpSink help) {

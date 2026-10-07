@@ -122,7 +122,10 @@ class OutboundMessagingCommandServiceTest {
     "/ns,NickServ,HELP",
     "/ms SEND Alice hello there,MemoServ,SEND Alice hello there",
     "/memoserv READ 1,MemoServ,READ 1",
-    "/ms,MemoServ,HELP"
+    "/ms,MemoServ,HELP",
+    "/os HELP STATS,OperServ,HELP STATS",
+    "/operserv HELP,OperServ,HELP",
+    "/os,OperServ,HELP"
   })
   void serviceCommandSendsThroughPrivateMessagingFlow(
       String line, String serviceNick, String expectedBody) {

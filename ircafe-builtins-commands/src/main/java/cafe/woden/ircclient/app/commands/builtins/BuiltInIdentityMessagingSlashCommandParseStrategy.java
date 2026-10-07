@@ -17,7 +17,9 @@ public final class BuiltInIdentityMessagingSlashCommandParseStrategy
           "/ns", "NickServ",
           "/nickserv", "NickServ",
           "/ms", "MemoServ",
-          "/memoserv", "MemoServ");
+          "/memoserv", "MemoServ",
+          "/os", "OperServ",
+          "/operserv", "OperServ");
 
   @Override
   public SlashCommandParseResult tryParse(String line) {
