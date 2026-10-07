@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CommandParserTest {
 
@@ -118,6 +120,34 @@ class CommandParserTest {
     ParsedInput.Join join = (ParsedInput.Join) in;
     assertEquals("#secret", join.channel());
     assertEquals("hunter2", join.key());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cs", "/chanserv", "/CS", "/ChanServ"})
+  void parsesChanServCommandsAsPrivateMessages(String command) {
+    ParsedInput.Msg msg =
+        assertInstanceOf(
+            ParsedInput.Msg.class, parser.parse(command + "  OP #ircafe Alice  Bob  "));
+
+    assertEquals(new ParsedInput.Msg("ChanServ", "OP #ircafe Alice  Bob"), msg);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cs", "/chanserv", "/CS  ", "/chanserv\t"})
+  void bareChanServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("ChanServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cstuff HELP", "/chanservfoo HELP"})
+  void chanServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
+  void chanServCommandAcceptsTabSeparator() {
+    assertEquals(
+        new ParsedInput.Msg("ChanServ", "INFO #ircafe"), parser.parse("/cs\tINFO #ircafe"));
   }
 
   @Test

@@ -41,6 +41,13 @@ public final class BuiltInIdentityMessagingSlashCommandParseStrategy
           "whois", BuiltInSlashCommandParsingSupport.argAfter(line, "/wi"));
     }
 
+    for (String command : new String[] {"/cs", "/chanserv"}) {
+      if (BuiltInSlashCommandParsingSupport.matchesCommand(line, command)) {
+        String body = BuiltInSlashCommandParsingSupport.argAfter(line, command);
+        return SlashCommandParseResult.command("msg", "ChanServ", body.isEmpty() ? "HELP" : body);
+      }
+    }
+
     if (BuiltInSlashCommandParsingSupport.matchesCommand(line, "/msg")) {
       String rest = BuiltInSlashCommandParsingSupport.argAfter(line, "/msg");
       int sp = rest.indexOf(' ');
