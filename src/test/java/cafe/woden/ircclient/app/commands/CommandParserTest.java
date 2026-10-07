@@ -176,6 +176,31 @@ class CommandParserTest {
   }
 
   @Test
+  void memoServCommandAcceptsTabSeparator() {
+    assertEquals(new ParsedInput.Msg("MemoServ", "READ 1"), parser.parse("/ms\tREAD 1"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ms", "/memoserv", "/MS", "/MemoServ"})
+  void parsesMemoServCommandsAsPrivateMessages(String command) {
+    assertEquals(
+        new ParsedInput.Msg("MemoServ", "SEND Alice hello  there"),
+        parser.parse(command + "  SEND Alice hello  there  "));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ms", "/memoserv", "/MS  ", "/memoserv\t"})
+  void bareMemoServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("MemoServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/mstuff HELP", "/memoservfoo HELP"})
+  void memoServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
   void treatsDoubleSlashAsEscapedLeadingSlashMessage() {
     ParsedInput escaped = parser.parse("//hello world");
     assertTrue(escaped instanceof ParsedInput.Say);
