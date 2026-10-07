@@ -1,6 +1,10 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isActionMessage;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isHistoryTextMessage;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isNoticeMessage;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isPlainMessage;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNick;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNumericCode;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.firstChannelToken;
@@ -32,7 +36,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.parseBo
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.stripLeadingColon;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.tryParseInt;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.tryParseLong;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -83,7 +86,6 @@ import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -109,9 +111,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
   private static final int BUFFER_QUERY = 0x04;
-  private static final int MESSAGE_TYPE_PLAIN = 0x0001;
-  private static final int MESSAGE_TYPE_NOTICE = 0x0002;
-  private static final int MESSAGE_TYPE_ACTION = 0x0004;
   private static final int MESSAGE_TYPE_NICK = 0x0008;
   private static final int MESSAGE_TYPE_MODE = 0x0010;
   private static final int MESSAGE_TYPE_JOIN = 0x0020;
@@ -2024,67 +2023,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void handleBacklogSync(QuasselSession session, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-
-    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo = null;
-    if (values.getFirst() instanceof Number bufferId) {
-      bufferInfo = session.buffers.get(bufferId.intValue());
-      // A late response for a removed buffer must not complete another target's request.
-      if (bufferInfo == null) return;
-    }
-    ArrayList<QuasselCoreDatastreamCodec.MessageValue> messages = new ArrayList<>();
-    for (Object value : values) {
-      if (bufferInfo == null && value instanceof QuasselCoreDatastreamCodec.BufferInfoValue info) {
-        bufferInfo = resolveBufferInfo(session, info);
-      }
-      collectMessages(value, messages);
-    }
-    if (bufferInfo == null && !messages.isEmpty()) {
-      bufferInfo = resolveBufferInfo(session, messages.getFirst().bufferInfo());
-    }
-    if (bufferInfo == null) return;
-    String from = messages.isEmpty() ? "" : extractNick(messages.getFirst().sender());
-    String target = historyTargetForBuffer(session, bufferInfo, from);
-    if (target.isEmpty()) return;
-    noteTargetNetworkHint(session, target, bufferInfo.networkId(), true);
-
-    ArrayList<ChatHistoryEntry> entries = new ArrayList<>(messages.size());
-    for (QuasselCoreDatastreamCodec.MessageValue msg : messages) {
-      ChatHistoryEntry entry = toHistoryEntry(session, msg, target);
-      if (entry != null) {
-        noteHistoryObservation(session, entry.target(), msg.messageId(), entry.at());
-        entries.add(entry);
-      }
-    }
-    // Core backlog queries return newest first; consumers replay in chronological order.
-    entries.sort(java.util.Comparator.comparingLong(entry -> tryParseLong(entry.messageId())));
-
-    String batchId = "quassel-backlog-sync-" + session.backlogBatchSeq.incrementAndGet();
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.ChatHistoryBatchReceived(
-                Instant.now(), target, batchId, List.copyOf(entries))));
-  }
-
-  private static void collectMessages(
-      Object raw, List<QuasselCoreDatastreamCodec.MessageValue> out) {
-    if (raw == null || out == null) return;
-    if (raw instanceof QuasselCoreDatastreamCodec.MessageValue msg) {
-      out.add(msg);
-      return;
-    }
-    if (raw instanceof List<?> list) {
-      for (Object value : list) {
-        collectMessages(value, out);
-      }
-      return;
-    }
-    if (raw instanceof Map<?, ?> map) {
-      for (Object value : map.values()) {
-        collectMessages(value, out);
-      }
-    }
+    IrcEvent.ChatHistoryBatchReceived batch =
+        session.backlog.sync(
+            values,
+            session.buffers::get,
+            info -> resolveBufferInfo(session, info),
+            (info, from) -> historyTargetForBuffer(session, info, from),
+            (target, networkId) -> noteTargetNetworkHint(session, target, networkId, true),
+            (message, entry) ->
+                noteHistoryObservation(session, entry.target(), message.messageId(), entry.at()));
+    if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
   }
 
   private void handleDisplayMessage(
@@ -2388,47 +2336,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       String targetFromBuffer,
       QuasselCoreDatastreamCodec.MessageValue message,
       String messageId) {
-    ChatHistoryEntry entry = toHistoryEntry(session, message, targetFromBuffer);
-    if (entry == null) return;
-    String base = messageId.isEmpty() ? Long.toString(message.timestampEpochSeconds()) : messageId;
-    if (base.isBlank()) base = Long.toString(System.currentTimeMillis());
-    String batchId = "quassel-backlog-" + base + "-" + session.backlogBatchSeq.incrementAndGet();
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.ChatHistoryBatchReceived(at, entry.target(), batchId, List.of(entry))));
-  }
-
-  private ChatHistoryEntry toHistoryEntry(
-      QuasselSession session,
-      QuasselCoreDatastreamCodec.MessageValue message,
-      String targetFromBuffer) {
-    if (message == null) return null;
-    int typeBits = message.typeBits();
-    if (!isHistoryTextMessage(typeBits)) return null;
-
-    Instant at =
-        message.timestampEpochSeconds() > 0
-            ? Instant.ofEpochSecond(message.timestampEpochSeconds())
-            : Instant.now();
-    String from = extractNick(message.sender());
-    String text = Objects.toString(message.content(), "");
-    String target = historyTargetForBuffer(session, message.bufferInfo(), from);
-    if (target.isEmpty()) {
-      target = Objects.toString(targetFromBuffer, "").trim();
-    }
-    if (target.isEmpty()) return null;
-
-    String messageId = message.messageId() > 0 ? Long.toString(message.messageId()) : "";
-    ChatHistoryEntry.Kind kind;
-    if (isActionMessage(typeBits)) {
-      kind = ChatHistoryEntry.Kind.ACTION;
-    } else if (isNoticeMessage(typeBits)) {
-      kind = ChatHistoryEntry.Kind.NOTICE;
-    } else {
-      kind = ChatHistoryEntry.Kind.PRIVMSG;
-    }
-    return new ChatHistoryEntry(at, kind, target, from, text, messageId, Map.of());
+    IrcEvent.ChatHistoryBatchReceived batch =
+        session.backlog.display(
+            at,
+            targetFromBuffer,
+            message,
+            messageId,
+            (info, from) -> historyTargetForBuffer(session, info, from));
+    if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
   }
 
   private QuasselCoreDatastreamCodec.BufferInfoValue resolveBufferInfo(
@@ -2466,10 +2381,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static boolean isStatusBuffer(QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
     if (bufferInfo == null) return false;
     return (bufferInfo.typeBits() & BUFFER_STATUS) != 0;
-  }
-
-  private static boolean isPlainMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_PLAIN) != 0;
   }
 
   private static boolean isNickMessage(int typeBits) {
@@ -2512,20 +2423,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return (typeBits & MESSAGE_TYPE_ERROR) != 0;
   }
 
-  private static boolean isNoticeMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_NOTICE) != 0;
-  }
-
-  private static boolean isActionMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_ACTION) != 0;
-  }
-
   private static boolean isBacklogMessage(int flags) {
     return (flags & MESSAGE_FLAG_BACKLOG) != 0;
-  }
-
-  private static boolean isHistoryTextMessage(int typeBits) {
-    return isPlainMessage(typeBits) || isActionMessage(typeBits) || isNoticeMessage(typeBits);
   }
 
   private String targetForBuffer(
@@ -3431,7 +3330,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final AtomicBoolean syncObserved = new AtomicBoolean(false);
     private final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
-    private final AtomicLong backlogBatchSeq = new AtomicLong(0L);
+    private final QuasselCoreBacklogTranslator backlog = new QuasselCoreBacklogTranslator();
     private final AtomicReference<QuasselSessionPhase> phase =
         new AtomicReference<>(QuasselSessionPhase.TRANSPORT_CONNECTING);
     private final AtomicReference<String> closeReason =

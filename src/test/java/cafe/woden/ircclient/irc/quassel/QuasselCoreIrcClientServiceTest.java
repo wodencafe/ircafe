@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.net.Socket;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -3641,6 +3642,214 @@ class QuasselCoreIrcClientServiceTest {
     } finally {
       events.cancel();
       service.shutdownNow();
+    }
+  }
+
+  @Test
+  void nativeBacklogKeepsQualifiedTargetsStableOrderingAndReadMarkerBeforeBatch() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var first = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 2, -1, "#dupe");
+    var second = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 2, -1, "#dupe");
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1, 2), Map.of(11, first, 22, second)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      long seconds = 1_700_000_000L;
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BufferSyncer",
+                  "",
+                  "setMarkerLine",
+                  22,
+                  30)));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  22,
+                  List.of(
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          30, seconds + 30, 2, 0x80, second, "alice!u@h", "first duplicate"),
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          20, seconds + 20, 0x20, 0x80, second, "alice!u@h", "joined"),
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          10, seconds + 10, 1, 0x80, second, "alice!u@h", "oldest"),
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          30, seconds + 30, 4, 0x80, second, "bob!u@h", "second duplicate")))));
+      awaitEvent(events, event -> event instanceof IrcEvent.ChatHistoryBatchReceived);
+      List<IrcEvent> observed = events.values().stream().map(ServerIrcEvent::event).toList();
+      var batch =
+          observed.stream()
+              .filter(IrcEvent.ChatHistoryBatchReceived.class::isInstance)
+              .map(IrcEvent.ChatHistoryBatchReceived.class::cast)
+              .findFirst()
+              .orElseThrow();
+      var marker =
+          observed.stream()
+              .filter(IrcEvent.ReadMarkerObserved.class::isInstance)
+              .map(IrcEvent.ReadMarkerObserved.class::cast)
+              .findFirst()
+              .orElseThrow();
+      String target = "#dupe{net:network-2}";
+      assertEquals(target, batch.target());
+      assertEquals(
+          List.of("10", "30", "30"),
+          batch.entries().stream().map(ChatHistoryEntry::messageId).toList());
+      assertEquals(
+          List.of("oldest", "first duplicate", "second duplicate"),
+          batch.entries().stream().map(ChatHistoryEntry::text).toList());
+      assertEquals(
+          List.of(
+              ChatHistoryEntry.Kind.PRIVMSG,
+              ChatHistoryEntry.Kind.NOTICE,
+              ChatHistoryEntry.Kind.ACTION),
+          batch.entries().stream().map(ChatHistoryEntry::kind).toList());
+      assertTrue(batch.entries().stream().allMatch(entry -> target.equals(entry.target())));
+      assertEquals(target, marker.target());
+      assertEquals(
+          Instant.ofEpochSecond(seconds + 30),
+          Instant.parse(marker.marker().substring("timestamp=".length())));
+      assertTrue(observed.indexOf(marker) < observed.indexOf(batch));
+      assertEquals("quassel-backlog-sync-1", batch.batchId());
+
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayMsg(Message)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.MessageValue(
+                      40, seconds + 40, 4, 0x80, second, "bob!u@h", "single backlog action"))));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ChatHistoryBatchReceived history
+                  && "quassel-backlog-40-2".equals(history.batchId())
+                  && target.equals(history.target()));
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @Test
+  void removedBufferBacklogCannotCompleteAnotherBuffersRequest() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var removed = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 2, -1, "#removed");
+    var remaining = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 1, 2, -1, "#remaining");
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(11, removed, 22, remaining)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(encodeRpcCall(codec, "2bufferInfoRemoved(BufferInfo)", List.of(removed)));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  11,
+                  remaining,
+                  List.of(
+                      new QuasselCoreDatastreamCodec.MessageValue(
+                          41,
+                          1_700_000_000L,
+                          1,
+                          0x80,
+                          remaining,
+                          "alice!u@h",
+                          "stale response")))));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  22,
+                  List.of())));
+      awaitEvent(events, event -> event instanceof IrcEvent.ChatHistoryBatchReceived);
+      List<IrcEvent.ChatHistoryBatchReceived> batches =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(IrcEvent.ChatHistoryBatchReceived.class::isInstance)
+              .map(IrcEvent.ChatHistoryBatchReceived.class::cast)
+              .toList();
+      assertEquals(1, batches.size());
+      assertEquals("#remaining", batches.getFirst().target());
+      assertTrue(batches.getFirst().entries().isEmpty());
+      assertEquals("quassel-backlog-sync-1", batches.getFirst().batchId());
+
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BacklogManager",
+                  "",
+                  "receiveBacklog",
+                  Map.of(
+                      "messages",
+                      List.of(
+                          new QuasselCoreDatastreamCodec.MessageValue(
+                              42,
+                              1_700_000_001L,
+                              1,
+                              0x80,
+                              remaining,
+                              "alice!u@h",
+                              "nested fallback"))))));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ChatHistoryBatchReceived batch
+                  && "quassel-backlog-sync-2".equals(batch.batchId())
+                  && "#remaining".equals(batch.target())
+                  && batch.entries().size() == 1
+                  && "nested fallback".equals(batch.entries().getFirst().text()));
+    } finally {
+      service.shutdownNow();
+      events.cancel();
     }
   }
 
