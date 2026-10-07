@@ -32,6 +32,8 @@ public final class BuiltInSlashCommandPresentationContributor
           new SlashCommandDescriptor("/msg", "Send private message"),
           new SlashCommandDescriptor("/cs", "Send command to ChanServ"),
           new SlashCommandDescriptor("/chanserv", "Alias: /cs"),
+          new SlashCommandDescriptor("/ns", "Send command to NickServ"),
+          new SlashCommandDescriptor("/nickserv", "Alias: /ns"),
           new SlashCommandDescriptor("/notice", "Send notice"),
           new SlashCommandDescriptor("/me", "Send action"),
           new SlashCommandDescriptor("/topic", "View/change topic"),
@@ -101,7 +103,7 @@ public final class BuiltInSlashCommandPresentationContributor
       return;
     }
     help.appendLine(
-        "Common: /join /part /msg /cs /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
+        "Common: /join /part /msg /cs /ns /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
     help.appendLine(
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
     help.appendLine("Tip: /help dcc for direct-chat/file-transfer commands.");
@@ -129,6 +131,8 @@ public final class BuiltInSlashCommandPresentationContributor
         Map.entry("msg", BuiltInSlashCommandPresentationContributor::appendMsgHelp),
         Map.entry("cs", BuiltInSlashCommandPresentationContributor::appendChanServHelp),
         Map.entry("chanserv", BuiltInSlashCommandPresentationContributor::appendChanServHelp),
+        Map.entry("ns", BuiltInSlashCommandPresentationContributor::appendNickServHelp),
+        Map.entry("nickserv", BuiltInSlashCommandPresentationContributor::appendNickServHelp),
         Map.entry("notice", BuiltInSlashCommandPresentationContributor::appendNoticeHelp),
         Map.entry("me", BuiltInSlashCommandPresentationContributor::appendMeHelp),
         Map.entry("whois", BuiltInSlashCommandPresentationContributor::appendWhoisHelp),
@@ -287,6 +291,18 @@ public final class BuiltInSlashCommandPresentationContributor
         "Sends a private message to ChanServ on the active server, like /msg ChanServ.");
     help.appendLine("With no command, requests ChanServ HELP.");
     help.appendLine("Examples: /cs HELP, /cs OP #channel, /cs INFO #channel");
+  }
+
+  private static void appendNickServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /ns [command [args...]]");
+    help.appendLine("Alias: /nickserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to NickServ on the active server, like /msg NickServ.");
+    help.appendLine("With no command, requests NickServ HELP.");
+    help.appendLine("Examples: /ns HELP, /ns INFO nickname, /ns IDENTIFY password");
   }
 
   private static void appendNoticeHelp(SlashCommandHelpSink help) {

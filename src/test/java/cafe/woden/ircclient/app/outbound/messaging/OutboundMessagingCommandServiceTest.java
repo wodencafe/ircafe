@@ -113,24 +113,32 @@ class OutboundMessagingCommandServiceTest {
   }
 
   @ParameterizedTest
-  @CsvSource({"/cs OP #ircafe,OP #ircafe", "/chanserv INFO #ircafe,INFO #ircafe", "/cs,HELP"})
-  void chanServCommandSendsThroughPrivateMessagingFlow(String line, String expectedBody) {
+  @CsvSource({
+    "/cs OP #ircafe,ChanServ,OP #ircafe",
+    "/chanserv INFO #ircafe,ChanServ,INFO #ircafe",
+    "/cs,ChanServ,HELP",
+    "/ns IDENTIFY secret,NickServ,IDENTIFY secret",
+    "/nickserv INFO Alice,NickServ,INFO Alice",
+    "/ns,NickServ,HELP"
+  })
+  void serviceCommandSendsThroughPrivateMessagingFlow(
+      String line, String serviceNick, String expectedBody) {
     CommandParser parser =
         new CommandParser(
             new FilterCommandParser(),
             new BackendNamedCommandParser(BackendNamedCommandCatalog.empty()));
     TargetRef at = new TargetRef("libera", "#ircafe");
-    TargetRef pm = new TargetRef("libera", "ChanServ");
+    TargetRef pm = new TargetRef("libera", serviceNick);
     when(targetCoordinator.getActiveTarget()).thenReturn(at);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.sendMessage("libera", "ChanServ", expectedBody)).thenReturn(Completable.complete());
+    when(irc.sendMessage("libera", serviceNick, expectedBody)).thenReturn(Completable.complete());
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
 
     ParsedInput.Msg msg = assertInstanceOf(ParsedInput.Msg.class, parser.parse(line));
     service.handleMsg(disposables, msg.nick(), msg.body());
 
-    verify(irc).sendMessage("libera", "ChanServ", expectedBody);
+    verify(irc).sendMessage("libera", serviceNick, expectedBody);
     verify(ui).ensureTargetExists(pm);
     verify(ui).selectTarget(pm);
     verify(ui).appendChat(pm, "(me)", expectedBody, true);

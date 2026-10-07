@@ -48,6 +48,13 @@ public final class BuiltInIdentityMessagingSlashCommandParseStrategy
       }
     }
 
+    for (String command : new String[] {"/ns", "/nickserv"}) {
+      if (BuiltInSlashCommandParsingSupport.matchesCommand(line, command)) {
+        String body = BuiltInSlashCommandParsingSupport.argAfter(line, command);
+        return SlashCommandParseResult.command("msg", "NickServ", body.isEmpty() ? "HELP" : body);
+      }
+    }
+
     if (BuiltInSlashCommandParsingSupport.matchesCommand(line, "/msg")) {
       String rest = BuiltInSlashCommandParsingSupport.argAfter(line, "/msg");
       int sp = rest.indexOf(' ');

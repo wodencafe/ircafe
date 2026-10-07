@@ -151,6 +151,31 @@ class CommandParserTest {
   }
 
   @Test
+  void nickServCommandAcceptsTabSeparator() {
+    assertEquals(new ParsedInput.Msg("NickServ", "INFO Alice"), parser.parse("/ns\tINFO Alice"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ns", "/nickserv", "/NS", "/NickServ"})
+  void parsesNickServCommandsAsPrivateMessages(String command) {
+    assertEquals(
+        new ParsedInput.Msg("NickServ", "IDENTIFY Alice  secret"),
+        parser.parse(command + "  IDENTIFY Alice  secret  "));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ns", "/nickserv", "/NS  ", "/nickserv\t"})
+  void bareNickServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("NickServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/nstuff HELP", "/nickservfoo HELP"})
+  void nickServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
   void treatsDoubleSlashAsEscapedLeadingSlashMessage() {
     ParsedInput escaped = parser.parse("//hello world");
     assertTrue(escaped instanceof ParsedInput.Say);
