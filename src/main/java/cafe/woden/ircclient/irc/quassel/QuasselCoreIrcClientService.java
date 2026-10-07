@@ -137,7 +137,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String BUFFER_SYNCER_OBJECT = "";
   private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine";
   private static final String BUFFER_SYNCER_LAST_SEEN_SLOT = "requestSetLastSeenMsg";
-  private static final long LAG_SAMPLE_STALE_AFTER_MS = TimeUnit.MINUTES.toMillis(2);
   private static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
   private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
@@ -1082,11 +1081,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 throw new IllegalStateException("Quassel socket is closed");
               }
 
-              long nowMs = System.currentTimeMillis();
-              QuasselCoreDatastreamCodec.QtDateTimeValue token =
-                  QuasselCoreDatastreamCodec.utcDateTimeFromEpochMs(nowMs);
-              session.lagProbeToken.set(token);
-              session.lagProbeSentAtMs.set(nowMs);
+              QuasselCoreDatastreamCodec.QtDateTimeValue token = session.lag.beginProbe();
 
               try {
                 session.outbound.send(
@@ -1095,8 +1090,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                       codec.writeSignalProxyHeartBeat(out, token);
                     });
               } catch (Exception e) {
-                session.lagProbeToken.set(null);
-                session.lagProbeSentAtMs.set(0L);
+                session.lag.cancelProbe();
                 throw e;
               }
             })
@@ -1107,12 +1101,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   public OptionalLong lastMeasuredLagMs(String serverId) {
     QuasselSession session = sessions.get(normalizeServerId(serverId));
     if (session == null || session.socketRef.get() == null) return OptionalLong.empty();
-    long measuredAt = session.lagLastMeasuredAtMs.get();
-    if (measuredAt <= 0L) return OptionalLong.empty();
-    long ageMs = Math.max(0L, System.currentTimeMillis() - measuredAt);
-    if (ageMs > LAG_SAMPLE_STALE_AFTER_MS) return OptionalLong.empty();
-    long lagMs = Math.max(0L, session.lagLastMeasuredMs.get());
-    return OptionalLong.of(lagMs);
+    return session.lag.lastMeasuredLagMs();
   }
 
   private QuasselSession findEstablishedSession(String serverId) {
@@ -1335,10 +1324,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         noteTargetNetworkHint(session, initial.bufferName(), initial.networkId(), false);
       }
       trimMapToMaxSize(session.networkCurrentNickByNetworkId, MAX_NETWORK_NICKS_PER_SESSION);
-      session.lagProbeToken.set(null);
-      session.lagProbeSentAtMs.set(0L);
-      session.lagLastMeasuredMs.set(-1L);
-      session.lagLastMeasuredAtMs.set(0L);
+      session.lag.clear();
       session.syncObserved.set(false);
       session.connectionReadyEmitted.set(false);
       session.reconnectScheduled.set(false);
@@ -1497,21 +1483,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void handleHeartbeatReply(QuasselSession session, List<Object> params) {
-    if (session == null || params == null || params.isEmpty()) return;
-    Object value = params.get(0);
-    if (!(value instanceof QuasselCoreDatastreamCodec.QtDateTimeValue timestamp)) return;
-
-    QuasselCoreDatastreamCodec.QtDateTimeValue expected = session.lagProbeToken.get();
-    if (expected == null || !expected.equals(timestamp)) return;
-    if (!session.lagProbeToken.compareAndSet(expected, null)) return;
-
-    long nowMs = System.currentTimeMillis();
-    long sentAtMs = session.lagProbeSentAtMs.getAndSet(0L);
-    long fallbackSentMs = QuasselCoreDatastreamCodec.epochMsFromQtDateTime(timestamp);
-    long effectiveSentAt = sentAtMs > 0L ? sentAtMs : fallbackSentMs;
-    long lagMs = Math.max(0L, nowMs - effectiveSentAt);
-    session.lagLastMeasuredMs.set(lagMs);
-    session.lagLastMeasuredAtMs.set(nowMs);
+    if (session != null) session.lag.observeReply(params);
   }
 
   private void handleRpcCall(QuasselSession session, String slotName, List<Object> params) {
@@ -2880,10 +2852,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     closeQuietly(session.socketRef.getAndSet(null));
-    session.lagProbeToken.set(null);
-    session.lagProbeSentAtMs.set(0L);
-    session.lagLastMeasuredMs.set(-1L);
-    session.lagLastMeasuredAtMs.set(0L);
+    session.lag.clear();
     session.buffers.clear();
     session.pendingReadMarkers.clear();
     session.nativeReadMarkerSupportObserved.set(false);
@@ -3457,11 +3426,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final QuasselCoreTargetNetworkHints targetNetworkHints =
         new QuasselCoreTargetNetworkHints();
     private final QuasselCoreChannelMembership membership;
-    private final AtomicReference<QuasselCoreDatastreamCodec.QtDateTimeValue> lagProbeToken =
-        new AtomicReference<>();
-    private final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);
-    private final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
-    private final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
+    private final QuasselCoreLagTracker lag = new QuasselCoreLagTracker();
     private final AtomicBoolean nativeReadMarkerSupportObserved = new AtomicBoolean(false);
     private final AtomicBoolean syncObserved = new AtomicBoolean(false);
     private final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);

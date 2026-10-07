@@ -3124,6 +3124,168 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void failedHeartbeatWriteCancelsProbeAndPreservesPreviousLagSample() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      service.requestLagProbe("quassel").blockingAwait();
+      ArgumentCaptor<QuasselCoreDatastreamCodec.QtDateTimeValue> tokens =
+          ArgumentCaptor.forClass(QuasselCoreDatastreamCodec.QtDateTimeValue.class);
+      verify(codec).writeSignalProxyHeartBeat(eq(socket.getOutputStream()), tokens.capture());
+      var first = tokens.getValue();
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, first)));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "first-lag-recorded")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("first-lag-recorded"));
+      var measured = service.lastMeasuredLagMs("quassel");
+      assertTrue(measured.isPresent());
+
+      IOException failure = new IOException("heartbeat write failed");
+      org.mockito.Mockito.doThrow(failure)
+          .when(codec)
+          .writeSignalProxyHeartBeat(eq(socket.getOutputStream()), any());
+      service.requestLagProbe("quassel").test().awaitDone(2, TimeUnit.SECONDS).assertError(failure);
+      verify(codec, times(2))
+          .writeSignalProxyHeartBeat(eq(socket.getOutputStream()), tokens.capture());
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, tokens.getValue())));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, first)));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "canceled-probe-ignored")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("canceled-probe-ignored"));
+      assertEquals(measured, service.lastMeasuredLagMs("quassel"));
+      assertTrue(service.hasEstablishedQuasselCoreSession("quassel"));
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @Test
+  void heartbeatLagIsSessionScopedAcrossDisconnectAndReconnect() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket firstSocket = new BlockingSocket();
+    BlockingSocket secondSocket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(firstSocket, secondSocket);
+    when(protocolProbe.negotiate(any(Socket.class)))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(any(Socket.class), eq(server)))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      service.requestLagProbe("quassel").blockingAwait();
+      ArgumentCaptor<QuasselCoreDatastreamCodec.QtDateTimeValue> tokens =
+          ArgumentCaptor.forClass(QuasselCoreDatastreamCodec.QtDateTimeValue.class);
+      verify(codec).writeSignalProxyHeartBeat(eq(firstSocket.getOutputStream()), tokens.capture());
+      var oldToken = tokens.getValue();
+      firstSocket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, oldToken)));
+      firstSocket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "old-session-lag-recorded")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("old-session-lag-recorded"));
+      assertTrue(service.lastMeasuredLagMs("quassel").isPresent());
+      service.disconnect("quassel").blockingAwait();
+      assertTrue(service.lastMeasuredLagMs("quassel").isEmpty());
+      connectAndAwaitEstablishedSession(service, events);
+      assertTrue(service.lastMeasuredLagMs("quassel").isEmpty());
+
+      secondSocket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, oldToken)));
+      secondSocket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT, oldToken)));
+      secondSocket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "unsolicited-heartbeat-handled")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("unsolicited-heartbeat-handled"));
+      assertTrue(service.lastMeasuredLagMs("quassel").isEmpty());
+      verify(codec).writeSignalProxyHeartBeatReply(secondSocket.getOutputStream(), oldToken);
+
+      service.requestLagProbe("quassel").blockingAwait();
+      verify(codec).writeSignalProxyHeartBeat(eq(secondSocket.getOutputStream()), tokens.capture());
+      secondSocket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, tokens.getValue())));
+      secondSocket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "new-session-lag-recorded")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("new-session-lag-recorded"));
+      assertTrue(service.lastMeasuredLagMs("quassel").isPresent());
+    } finally {
+      service.shutdownNow();
+      firstSocket.close();
+      secondSocket.close();
+      events.cancel();
+    }
+  }
+
+  @Test
   void requestChatHistoryBeforeSelectorUsesBacklogSyncCall() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
