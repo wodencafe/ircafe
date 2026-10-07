@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.quassel;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -1727,6 +1728,234 @@ class QuasselCoreIrcClientServiceTest {
     verify(datastreamCodec, times(0))
         .writeSignalProxyRpcCall(
             eq(socket.getOutputStream()), eq("2createIdentity(Identity,QVariantMap)"), any());
+  }
+
+  @Test
+  void createNetworkBootstrapsIdentityAndUsesCoreObservedIdentityId() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", -1, List.of(), Map.of(), Map.of()));
+    byte[] identityCreated =
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                "2identityCreated(Identity)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                new QuasselCoreDatastreamCodec.UserTypeValue(
+                    "Identity",
+                    Map.of(
+                        "identityId", 7, "identityName", "created", "nicks", List.of("quassel")))));
+    CountDownLatch identitySent = new CountDownLatch(1);
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              Object result = invocation.callRealMethod();
+              identitySent.countDown();
+              return result;
+            })
+        .when(codec)
+        .writeSignalProxyRpcCall(
+            eq(socket.getOutputStream()), eq("2createIdentity(Identity,QVariantMap)"), any());
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      TestObserver<Void> create =
+          service
+              .quasselCoreCreateNetwork(
+                  "quassel",
+                  new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
+                      "libera", "irc.libera.chat", 6697, true, "", true, null, List.of("#ircafe")))
+              .test();
+      assertTrue(identitySent.await(3, TimeUnit.SECONDS));
+      socket.writeInbound(identityCreated);
+      create.awaitDone(5, TimeUnit.SECONDS).assertComplete();
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      ArgumentCaptor<List<Object>> identityParams =
+          (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      ArgumentCaptor<List<Object>> networkParams =
+          (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+      var order = org.mockito.Mockito.inOrder(codec);
+      order
+          .verify(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()),
+              eq("2createIdentity(Identity,QVariantMap)"),
+              identityParams.capture());
+      order
+          .verify(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()),
+              eq("2createNetwork(NetworkInfo,QStringList)"),
+              networkParams.capture());
+      var identity =
+          assertInstanceOf(
+              QuasselCoreDatastreamCodec.UserTypeValue.class, identityParams.getValue().getFirst());
+      assertEquals("Identity", identity.typeName());
+      var identityMap = assertInstanceOf(Map.class, identity.value());
+      assertEquals(-1, identityMap.get("identityId"));
+      assertEquals(List.of(server.nick()), identityMap.get("nicks"));
+      assertEquals(Map.of(), identityParams.getValue().get(1));
+      var network =
+          assertInstanceOf(
+              QuasselCoreDatastreamCodec.UserTypeValue.class, networkParams.getValue().getFirst());
+      assertEquals("NetworkInfo", network.typeName());
+      var info = assertInstanceOf(Map.class, network.value());
+      assertEquals(
+          new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", 7), info.get("Identity"));
+      assertEquals(List.of("#ircafe"), networkParams.getValue().get(1));
+      verify(codec, times(0))
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()), eq("2createNetwork(NetworkInfo)"), any());
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource({"modern, 0", "legacy, 1", "unconfirmed, 1"})
+  void createNetworkUsesCoreConfirmationAndOnlyOneLegacyRetry(
+      String confirmationStage, int legacyCalls) throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel",
+                -1,
+                List.of(),
+                Map.of(),
+                Map.of(7, Map.of("identityId", 7, "identityName", "quassel"))));
+    CountDownLatch createSent = new CountDownLatch(1);
+    byte[] confirmation =
+        encodeSignalProxyFrame(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                "2networkCreated(NetworkId)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 9)));
+    if (!"unconfirmed".equals(confirmationStage)) {
+      org.mockito.Mockito.doAnswer(
+              invocation -> {
+                Object result = invocation.callRealMethod();
+                createSent.countDown();
+                return result;
+              })
+          .when(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()),
+              eq(
+                  "modern".equals(confirmationStage)
+                      ? "2createNetwork(NetworkInfo,QStringList)"
+                      : "2createNetwork(NetworkInfo)"),
+              any());
+    }
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      TestObserver<Void> create =
+          service
+              .quasselCoreCreateNetwork(
+                  "quassel",
+                  new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
+                      "libera", "irc.libera.chat", 6697, true, "", true, null, List.of()))
+              .test();
+      if (!"unconfirmed".equals(confirmationStage)) {
+        assertTrue(createSent.await(3, TimeUnit.SECONDS));
+        socket.writeInbound(confirmation);
+      }
+      create.awaitDone(5, TimeUnit.SECONDS).assertComplete();
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      ArgumentCaptor<List<Object>> modernParams =
+          (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()),
+              eq("2createNetwork(NetworkInfo,QStringList)"),
+              modernParams.capture());
+      assertEquals(2, modernParams.getValue().size());
+      assertEquals(List.of(), modernParams.getValue().get(1));
+      var info =
+          assertInstanceOf(
+              Map.class,
+              assertInstanceOf(
+                      QuasselCoreDatastreamCodec.UserTypeValue.class,
+                      modernParams.getValue().getFirst())
+                  .value());
+      assertEquals(
+          new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", 7), info.get("Identity"));
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      ArgumentCaptor<List<Object>> legacyParams =
+          (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+      verify(codec, times(legacyCalls))
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()),
+              eq("2createNetwork(NetworkInfo)"),
+              legacyParams.capture());
+      if (legacyCalls > 0) {
+        assertEquals(1, legacyParams.getValue().size());
+        assertArrayEquals(
+            QuasselCoreDatastreamCodec.encodeSignalProxyPayload(
+                List.of(modernParams.getValue().getFirst())),
+            QuasselCoreDatastreamCodec.encodeSignalProxyPayload(legacyParams.getValue()));
+      }
+      if (!"unconfirmed".equals(confirmationStage)) {
+        awaitCondition(
+            () ->
+                service.quasselCoreNetworks("quassel").stream()
+                    .anyMatch(
+                        n ->
+                            n.networkId() == 9
+                                && (!"legacy".equals(confirmationStage)
+                                    || "libera".equals(n.networkName()))));
+      }
+      if ("legacy".equals(confirmationStage)) {
+        socket.writeInbound(
+            encodeSignalProxyFrame(
+                List.of(
+                    QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                    "2networkCreated(NetworkId)".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 10))));
+        awaitCondition(
+            () ->
+                service.quasselCoreNetworks("quassel").stream()
+                    .anyMatch(n -> n.networkId() == 10 && "network-10".equals(n.networkName())));
+      }
+      verify(codec, times(0))
+          .writeSignalProxyRpcCall(
+              eq(socket.getOutputStream()), eq("2createIdentity(Identity,QVariantMap)"), any());
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
   }
 
   @Test
