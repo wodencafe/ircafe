@@ -1760,12 +1760,23 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     if ("IrcUser".equals(classToken)) {
-      handleIrcUserStateSync(session, objectName, values);
+      QuasselCoreStateSyncTranslator.userState(
+          Instant.now(),
+          objectName,
+          values,
+          (networkId, networkName) -> observeKnownNetwork(session, networkId, networkName),
+          event -> bus.onNext(new ServerIrcEvent(session.serverId, event)));
       return;
     }
 
     if ("IrcChannel".equals(classToken)) {
-      handleIrcChannelStateSync(session, objectName, values);
+      QuasselCoreStateSyncTranslator.channelState(
+          Instant.now(),
+          objectName,
+          values,
+          (networkId, networkName) -> observeKnownNetwork(session, networkId, networkName),
+          (target, networkId) -> qualifyTargetForNetwork(session, target, networkId),
+          event -> bus.onNext(new ServerIrcEvent(session.serverId, event)));
       return;
     }
 
@@ -2038,102 +2049,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (session == null) return;
     int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
     session.features.observeMonitor(resolvedNetworkId, stateMap);
-  }
-
-  private void handleIrcUserStateSync(
-      QuasselSession session, String objectName, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-    int objectNetworkId = parseNetworkId(objectName);
-    String objectNick = parseObjectLeafToken(objectName);
-    Instant now = Instant.now();
-    for (Object value : values) {
-      if (!(value instanceof Map<?, ?> map)) continue;
-      int networkId = networkIdFromStateMap(map, objectNetworkId);
-      String networkName =
-          firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
-      observeKnownNetwork(session, networkId, networkName);
-
-      String nick = firstNonBlank(map.get("nick"), map.get("nickname"), objectNick);
-      if (nick.isEmpty()) continue;
-
-      String user = firstNonBlank(map.get("user"), map.get("username"));
-      String host = firstNonBlank(map.get("host"), map.get("hostname"));
-      if (!user.isEmpty() && !host.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId, new IrcEvent.UserHostChanged(now, nick, user, host)));
-      }
-
-      String realName =
-          firstNonBlank(map.get("realName"), map.get("realname"), map.get("real_name"));
-      if (!realName.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserSetNameObserved(
-                    now, nick, realName, IrcEvent.UserSetNameObserved.Source.SETNAME)));
-      }
-
-      String account = firstNonBlank(map.get("account"), map.get("accountName"));
-      if (!account.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserAccountStateObserved(
-                    now, nick, IrcEvent.AccountState.LOGGED_IN, account)));
-      } else if (map.containsKey("account") || map.containsKey("accountName")) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserAccountStateObserved(
-                    now, nick, IrcEvent.AccountState.LOGGED_OUT)));
-      }
-
-      Boolean awayFlag = parseBoolean(map.get("away"));
-      String awayMessage =
-          firstNonBlank(map.get("awayMessage"), map.get("awayMsg"), map.get("awayReason"));
-      if (awayFlag != null) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserAwayStateObserved(
-                    now,
-                    nick,
-                    awayFlag ? IrcEvent.AwayState.AWAY : IrcEvent.AwayState.HERE,
-                    awayMessage)));
-      } else if (!awayMessage.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserAwayStateObserved(
-                    now, nick, IrcEvent.AwayState.AWAY, awayMessage)));
-      }
-    }
-  }
-
-  private void handleIrcChannelStateSync(
-      QuasselSession session, String objectName, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-    int objectNetworkId = parseNetworkId(objectName);
-    String objectChannel = parseObjectLeafToken(objectName);
-    Instant now = Instant.now();
-    for (Object value : values) {
-      if (!(value instanceof Map<?, ?> map)) continue;
-      int networkId = networkIdFromStateMap(map, objectNetworkId);
-      String networkName =
-          firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("network"));
-      observeKnownNetwork(session, networkId, networkName);
-
-      String channel =
-          firstNonBlank(map.get("name"), map.get("channel"), map.get("bufferName"), objectChannel);
-      if (!looksLikeChannel(channel)) continue;
-      String topic = firstNonBlank(map.get("topic"), map.get("topicText"), map.get("topicString"));
-      if (topic.isEmpty()) continue;
-      String qualifiedChannel = qualifyTargetForNetwork(session, channel, networkId);
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId, new IrcEvent.ChannelTopicUpdated(now, qualifiedChannel, topic)));
-    }
   }
 
   private void handleBacklogSync(QuasselSession session, List<Object> values) {
@@ -2723,16 +2638,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return session == null
         ? -1
         : session.networks.primaryNetworkId(session.authResult.get(), session.buffers.values());
-  }
-
-  private static String parseObjectLeafToken(String objectName) {
-    String token = Objects.toString(objectName, "").trim();
-    if (token.isEmpty()) return "";
-    int slash = token.lastIndexOf('/');
-    if (slash >= 0 && slash < token.length() - 1) {
-      token = token.substring(slash + 1).trim();
-    }
-    return token;
   }
 
   private void observeKnownNetworks(

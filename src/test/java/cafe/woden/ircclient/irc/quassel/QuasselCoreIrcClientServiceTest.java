@@ -43,6 +43,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -4237,6 +4238,142 @@ class QuasselCoreIrcClientServiceTest {
                         && "Topic from sync".equals(topic.topic())));
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      ints = {
+        QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+        QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA
+      })
+  void nativeStateSnapshotsKeepUserEventOrderAndQualifyNewNetworks(int requestType)
+      throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    TestSubscriber<ServerIrcEvent> stateEvents =
+        service
+            .events()
+            .filter(
+                envelope -> {
+                  IrcEvent event = envelope.event();
+                  return event instanceof IrcEvent.UserHostChanged
+                      || event instanceof IrcEvent.UserSetNameObserved
+                      || event instanceof IrcEvent.UserAccountStateObserved
+                      || event instanceof IrcEvent.UserAwayStateObserved
+                      || event instanceof IrcEvent.ChannelTopicUpdated;
+                })
+            .test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeStateSnapshot(
+              requestType,
+              "IrcUser",
+              "2/alice",
+              Map.of(
+                  "networkId",
+                  2,
+                  "networkName",
+                  "second",
+                  "nickname",
+                  "alice",
+                  "username",
+                  "auser",
+                  "hostname",
+                  "example.net",
+                  "real_name",
+                  "Alice",
+                  "accountName",
+                  "",
+                  "away",
+                  "off",
+                  "awayReason",
+                  "coffee")));
+      socket.writeInbound(
+          encodeStateSnapshot(
+              requestType,
+              "IrcChannel",
+              "3/#ircafe",
+              Map.of(
+                  "networkId",
+                  3,
+                  "networkName",
+                  "third",
+                  "channel",
+                  "#ircafe",
+                  "topicText",
+                  "Third topic")));
+      socket.writeInbound(
+          encodeStateSnapshot(
+              requestType,
+              "IrcChannel",
+              "2/#ircafe",
+              Map.of("networkId", 2, "networkName", "second", "topicString", "Second topic")));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "state-snapshots-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("state-snapshots-complete"));
+
+      List<IrcEvent> translated = stateEvents.values().stream().map(ServerIrcEvent::event).toList();
+      assertEquals(6, translated.size());
+      var userAt = assertInstanceOf(IrcEvent.UserHostChanged.class, translated.getFirst()).at();
+      assertEquals(
+          List.of(
+              new IrcEvent.UserHostChanged(userAt, "alice", "auser", "example.net"),
+              new IrcEvent.UserSetNameObserved(
+                  userAt, "alice", "Alice", IrcEvent.UserSetNameObserved.Source.SETNAME),
+              new IrcEvent.UserAccountStateObserved(
+                  userAt, "alice", IrcEvent.AccountState.LOGGED_OUT),
+              new IrcEvent.UserAwayStateObserved(
+                  userAt, "alice", IrcEvent.AwayState.HERE, "coffee"),
+              new IrcEvent.ChannelTopicUpdated(
+                  assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, translated.get(4)).at(),
+                  "#ircafe{net:third}",
+                  "Third topic"),
+              new IrcEvent.ChannelTopicUpdated(
+                  assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, translated.get(5)).at(),
+                  "#ircafe{net:second}",
+                  "Second topic")),
+          translated);
+      assertTrue(
+          stateEvents.values().stream()
+              .allMatch(envelope -> "quassel".equals(envelope.serverId())));
+      assertTrue(
+          service.quasselCoreNetworks("quassel").stream()
+              .anyMatch(
+                  network -> network.networkId() == 2 && "second".equals(network.networkName())));
+      assertTrue(
+          service.quasselCoreNetworks("quassel").stream()
+              .anyMatch(
+                  network -> network.networkId() == 3 && "third".equals(network.networkName())));
+    } finally {
+      service.shutdownNow();
+      stateEvents.cancel();
+      events.cancel();
+    }
+  }
+
   @Test
   void backlogFlagDisplayMessageBridgesToChatHistoryBatch() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -4842,6 +4979,22 @@ class QuasselCoreIrcClientServiceTest {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     codec.writeSignalProxyRpcCall(out, slotName, params);
     return out.toByteArray();
+  }
+
+  private static byte[] encodeStateSnapshot(
+      int requestType, String className, String objectName, Map<String, Object> state)
+      throws IOException {
+    ArrayList<Object> items =
+        new ArrayList<>(
+            List.of(
+                requestType,
+                className.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                objectName.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC) {
+      items.add("sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    items.add(state);
+    return encodeSignalProxyFrame(items);
   }
 
   private static byte[] encodeSignalProxyFrame(List<Object> payloadItems) throws IOException {
