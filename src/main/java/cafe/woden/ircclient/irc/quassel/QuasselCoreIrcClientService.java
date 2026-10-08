@@ -1546,102 +1546,17 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void observeNetworkLifecycleFromRpcSlot(
       QuasselSession session, String slotName, List<Object> params) {
     if (session == null) return;
-    String slot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
-    if (slot.isEmpty() || !slot.contains("network")) return;
-    if (params == null || params.isEmpty()) return;
-
-    boolean remove = slot.contains("remove") || slot.contains("deleted");
-    boolean createLike = !remove && (slot.contains("create") || slot.contains("added"));
-    log.debug(
-        "Observing Quassel network lifecycle RPC: serverId={}, slot={}, remove={}, params={}",
-        session.serverId,
-        slotName,
-        remove,
-        params);
-    for (Object param : params) {
-      observeNetworkLifecycleFromRpcParam(session, param, remove, createLike);
-    }
-  }
-
-  private void observeNetworkLifecycleFromRpcParam(
-      QuasselSession session, Object raw, boolean remove, boolean createLike) {
-    if (session == null || raw == null) return;
-
-    if (raw instanceof List<?> list) {
-      for (Object value : list) {
-        observeNetworkLifecycleFromRpcParam(session, value, remove, createLike);
-      }
-      return;
-    }
-
-    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
-      String type = Objects.toString(userType.typeName(), "").trim();
-      Object value = userType.value();
-      if ("NetworkInfo".equals(type) && value instanceof Map<?, ?> map) {
-        observeNetworkLifecycleFromRpcParam(session, map, remove, createLike);
-        return;
-      }
-      if ("NetworkId".equals(type)) {
-        int networkId = tryParseInt(value);
-        if (networkId < 0) return;
-        if (remove) {
-          log.debug(
-              "Quassel network lifecycle RPC removed network by id: serverId={}, networkId={}",
-              session.serverId,
-              networkId);
-          forgetKnownNetwork(session, networkId);
-        } else {
-          String observedName = createLike ? session.networks.claimCreatedName() : "";
-          log.debug(
-              "Quassel network lifecycle RPC observed network by id: serverId={}, networkId={}, nameHint={}",
-              session.serverId,
-              networkId,
-              observedName);
-          observeKnownNetwork(session, networkId, observedName);
-        }
-        return;
-      }
-      observeNetworkLifecycleFromRpcParam(session, value, remove, createLike);
-      return;
-    }
-
-    if (raw instanceof Map<?, ?> map) {
-      int networkId = networkIdFromStateMap(map, -1);
-      if (remove && networkId >= 0) {
-        log.debug(
-            "Quassel network lifecycle RPC removed network by map: serverId={}, networkId={}, map={}",
+    new QuasselCoreNetworkLifecycleTranslator(
             session.serverId,
-            networkId,
-            map);
-        forgetKnownNetwork(session, networkId);
-        return;
-      }
-      String networkName =
-          firstNonBlank(
-              mapValueIgnoreCase(map, "networkName"),
-              mapValueIgnoreCase(map, "networkname"),
-              mapValueIgnoreCase(map, "name"));
-      log.debug(
-          "Quassel network lifecycle RPC observed network map: serverId={}, networkId={}, networkName={}, map={}",
-          session.serverId,
-          networkId,
-          networkName,
-          map);
-      observeKnownNetwork(session, networkId, networkName);
-      observeNetworkStateSnapshot(session, networkId, map);
-      observeNetworkCapabilities(session, networkId, map);
-      observeNetworkMonitorSupport(session, networkId, map);
-      return;
-    }
-
-    int networkId = tryParseInt(raw);
-    if (networkId < 0) return;
-    if (remove) {
-      forgetKnownNetwork(session, networkId);
-    } else {
-      String observedName = createLike ? session.networks.claimCreatedName() : "";
-      observeKnownNetwork(session, networkId, observedName);
-    }
+            session.networks::claimCreatedName,
+            (networkId, name) -> observeKnownNetwork(session, networkId, name),
+            networkId -> forgetKnownNetwork(session, networkId),
+            (networkId, state) -> {
+              observeNetworkStateSnapshot(session, networkId, state);
+              observeNetworkCapabilities(session, networkId, state);
+              observeNetworkMonitorSupport(session, networkId, state);
+            })
+        .handleRpc(slotName, params);
   }
 
   private void handleDisplayStatusMessage(String serverId, String network, String text) {
