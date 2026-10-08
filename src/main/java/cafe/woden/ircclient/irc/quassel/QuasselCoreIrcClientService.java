@@ -54,10 +54,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
-import java.io.EOFException;
-import java.io.InputStream;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -123,7 +120,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreSocketConnector socketConnector;
   private final QuasselCoreProtocolProbe protocolProbe;
   private final QuasselCoreAuthHandshake authHandshake;
-  private final QuasselCoreDatastreamCodec datastreamCodec;
+  private final QuasselCoreReadLoop readLoop;
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
@@ -159,7 +156,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.socketConnector = Objects.requireNonNull(socketConnector, "socketConnector");
     this.protocolProbe = Objects.requireNonNull(protocolProbe, "protocolProbe");
     this.authHandshake = Objects.requireNonNull(authHandshake, "authHandshake");
-    this.datastreamCodec = Objects.requireNonNull(datastreamCodec, "datastreamCodec");
+    this.readLoop =
+        new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
     this.inboundTranslator = new QuasselCoreIrcv3InboundTranslator(ircv3RuntimeSupport);
@@ -1304,35 +1302,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     Socket socket = session.socketRef.get();
     if (socket == null) return;
 
-    try (InputStream in = socket.getInputStream()) {
-      while (!shuttingDown.get() && !session.closeRequested.get()) {
-        QuasselCoreDatastreamCodec.SignalProxyMessage message;
-        try {
-          message = datastreamCodec.readSignalProxyMessage(in);
-        } catch (SocketTimeoutException timeout) {
-          continue;
-        } catch (EOFException eof) {
-          log.debug("Quassel read loop EOF: serverId={}", sid);
-          if (session.closeRequested.get() || shuttingDown.get()) {
-            return;
-          }
-          availabilityReasonByServer.put(sid, "Quassel Core connection closed");
-          emitDisconnectedOnce(session, "Quassel Core connection closed");
-          scheduleReconnectIfEligible(session, "Quassel Core connection closed");
-          return;
-        }
-        handleSignalProxyMessage(session, message);
-      }
-    } catch (Exception e) {
-      if (!session.closeRequested.get() && !shuttingDown.get()) {
-        log.warn("Quassel read loop error: serverId={}", sid, e);
-        String detail = renderThrowableMessage(e);
-        String reason = detail.isEmpty() ? "Connection error" : ("Connection error: " + detail);
-        availabilityReasonByServer.put(sid, reason);
-        bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
-        emitDisconnectedOnce(session, reason);
-        scheduleReconnectIfEligible(session, reason);
-      }
+    try {
+      readLoop.read(
+          sid,
+          socket,
+          () -> shuttingDown.get() || session.closeRequested.get(),
+          message -> handleSignalProxyMessage(session, message),
+          failure -> handleReadFailure(session, failure));
     } finally {
       session.disposeReadinessTask();
       closeQuietly(session.socketRef.getAndSet(null));
@@ -1343,6 +1319,18 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         emitDisconnectedOnce(session, reason);
       }
     }
+  }
+
+  private void handleReadFailure(QuasselCoreSession session, QuasselCoreReadLoop.Failure failure) {
+    String sid = session.serverId;
+    String reason = failure.reason();
+    availabilityReasonByServer.put(sid, reason);
+    if (failure.cause() != null) {
+      bus.onNext(
+          new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, failure.cause())));
+    }
+    emitDisconnectedOnce(session, reason);
+    scheduleReconnectIfEligible(session, reason);
   }
 
   private void handleSignalProxyMessage(

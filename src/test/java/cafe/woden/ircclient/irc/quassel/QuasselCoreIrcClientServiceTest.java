@@ -394,6 +394,85 @@ class QuasselCoreIrcClientServiceTest {
     disconnect.awaitDone(2, TimeUnit.SECONDS).assertComplete();
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void inboundTransportFailurePreservesEventsAndDisposesSessionResources(boolean eof)
+      throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      Map<?, ?> sessions =
+          assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
+      QuasselCoreSession session =
+          assertInstanceOf(QuasselCoreSession.class, sessions.get("quassel"));
+      awaitCondition(() -> session.readinessFallbackTask.get() != null);
+      var readinessTask = session.readinessFallbackTask.get();
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "reader-barrier")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("reader-barrier"));
+      if (eof) {
+        socket.endInbound();
+      } else {
+        socket.writeInbound(new byte[] {0, 0, 0, 0});
+      }
+      awaitEvent(events, IrcEvent.Disconnected.class::isInstance);
+      assertTrue(socket.awaitCloseStarted());
+      awaitCondition(() -> !sessions.containsKey("quassel"));
+
+      String reason =
+          eof
+              ? "Quassel Core connection closed"
+              : "Connection error: invalid Quassel datastream frame size: 0";
+      List<IrcEvent> failures =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(
+                  event ->
+                      event instanceof IrcEvent.Error || event instanceof IrcEvent.Disconnected)
+              .toList();
+      assertEquals(eof ? 1 : 2, failures.size());
+      if (!eof) {
+        IrcEvent.Error error = assertInstanceOf(IrcEvent.Error.class, failures.getFirst());
+        assertEquals(reason, error.message());
+        assertInstanceOf(IOException.class, error.cause());
+      }
+      assertEquals(
+          reason, assertInstanceOf(IrcEvent.Disconnected.class, failures.getLast()).reason());
+      assertEquals(reason, service.backendAvailabilityReason("quassel"));
+      assertTrue(readinessTask.isDisposed());
+      assertNull(session.readinessFallbackTask.get());
+      assertNull(session.socketRef.get());
+      assertFalse(service.hasEstablishedQuasselCoreSession("quassel"));
+      assertTrue(service.currentNick("quassel").isEmpty());
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+      socket.close();
+    }
+  }
+
   @Test
   void sendRawUsesQuasselRpcSendInputAfterSessionHandshake() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -6540,6 +6619,10 @@ class QuasselCoreIrcClientServiceTest {
     private void writeInbound(byte[] frame) throws IOException {
       inputWriter.write(frame);
       inputWriter.flush();
+    }
+
+    private void endInbound() throws IOException {
+      inputWriter.close();
     }
 
     private void delayCloseReturnUntil(CountDownLatch release) {
