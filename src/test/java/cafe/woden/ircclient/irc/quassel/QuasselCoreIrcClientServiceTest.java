@@ -3842,6 +3842,15 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
     QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IOException failure = new IOException("heartbeat write failed");
+    var failHeartbeat = new java.util.concurrent.atomic.AtomicBoolean(false);
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              if (failHeartbeat.get()) throw failure;
+              return invocation.callRealMethod();
+            })
+        .when(codec)
+        .writeSignalProxyHeartBeat(any(OutputStream.class), any());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     when(serverCatalog.require("quassel")).thenReturn(server);
@@ -3877,10 +3886,7 @@ class QuasselCoreIrcClientServiceTest {
       var measured = service.lastMeasuredLagMs("quassel");
       assertTrue(measured.isPresent());
 
-      IOException failure = new IOException("heartbeat write failed");
-      org.mockito.Mockito.doThrow(failure)
-          .when(codec)
-          .writeSignalProxyHeartBeat(eq(socket.getOutputStream()), any());
+      failHeartbeat.set(true);
       service.requestLagProbe("quassel").test().awaitDone(2, TimeUnit.SECONDS).assertError(failure);
       verify(codec, times(2))
           .writeSignalProxyHeartBeat(eq(socket.getOutputStream()), tokens.capture());
