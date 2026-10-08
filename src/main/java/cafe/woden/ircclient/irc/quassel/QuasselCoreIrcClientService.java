@@ -19,9 +19,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkCreationCoordinator.RPC_CREATE_NETWORK_SLOT;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkCreationCoordinator.RPC_CREATE_NETWORK_SLOT_LEGACY;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.collectPotentialNetworkStateMaps;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.flattenNetworkStateFromKeyValueParams;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.networkIdFromStateMap;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkEnabled;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkId;
@@ -32,10 +29,8 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitize
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstNonBlank;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.mapValueIgnoreCase;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.parseBoolean;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.stripLeadingColon;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.tryParseInt;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -1551,11 +1546,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             session.networks::claimCreatedName,
             (networkId, name) -> observeKnownNetwork(session, networkId, name),
             networkId -> forgetKnownNetwork(session, networkId),
-            (networkId, state) -> {
-              observeNetworkStateSnapshot(session, networkId, state);
-              observeNetworkCapabilities(session, networkId, state);
-              observeNetworkMonitorSupport(session, networkId, state);
-            })
+            (networkId, state) -> observeFullNetworkState(session, networkId, state))
         .handleRpc(slotName, params);
   }
 
@@ -1638,10 +1629,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     if ("Network".equals(classToken)) {
-      handleNetworkPropertySync(session, objectName, slotToken, values);
+      QuasselCoreNetworkSyncTranslator translator = networkSyncTranslator(session);
+      translator.handleProperty(objectName, slotToken, values);
       observeChannelMembershipFromNetworkSync(session, objectName, slotToken, values);
-      maybeUpdateCurrentNickFromNetworkState(session, objectName, values);
-      observeMaybeNetworkStateFromUnknownSync(session, classToken, objectName, slotToken, values);
+      translator.observeNetworkState(objectName, values);
+      translator.observeUnknownState(classToken, objectName, slotToken, values);
       return;
     }
 
@@ -1667,7 +1659,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     if ("NetworkInfo".equals(classToken)) {
-      handleNetworkInfoStateSync(session, objectName, values);
+      networkSyncTranslator(session).observeNetworkInfo(objectName, values);
       return;
     }
 
@@ -1675,115 +1667,24 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.identities.observeUnknownState(
           values, parseNetworkId(objectName), classToken, objectName, slotToken);
     }
-    observeMaybeNetworkStateFromUnknownSync(session, classToken, objectName, slotToken, values);
-  }
-
-  private void handleNetworkPropertySync(
-      QuasselSession session, String objectName, String slotName, List<Object> values) {
-    if (session == null || values.isEmpty()) return;
-    int networkId = parseNetworkId(objectName);
-    if (networkId < 0) return;
-    Object value = values.getFirst();
-    switch (slotName) {
-      case "setNetworkName" -> {
-        String name = Objects.toString(value, "").trim();
-        if (!name.isEmpty()) {
-          observeKnownNetwork(session, networkId, name);
-          observeNetworkStateSnapshot(session, networkId, Map.of("networkName", name));
-        }
-      }
-      case "setConnected" -> {
-        Boolean connected = parseBoolean(value);
-        if (connected != null) {
-          observeNetworkStateSnapshot(session, networkId, Map.of("isConnected", connected));
-        }
-      }
-      case "setConnectionState" -> {
-        int state = tryParseInt(value);
-        if (state >= 0) {
-          observeNetworkStateSnapshot(session, networkId, Map.of("connectionState", state));
-        }
-      }
-      case "setMyNick" ->
-          observeCurrentNick(session, networkId, Objects.toString(value, ""), Instant.now());
-      default -> {}
+    if (classToken.toLowerCase(Locale.ROOT).contains("network")) {
+      networkSyncTranslator(session).observeUnknownState(classToken, objectName, slotToken, values);
     }
   }
 
-  private void observeMaybeNetworkStateFromUnknownSync(
-      QuasselSession session,
-      String classToken,
-      String objectName,
-      String slotToken,
-      List<Object> values) {
-    if (session == null) return;
-    String className = Objects.toString(classToken, "").trim();
-    if (!className.toLowerCase(Locale.ROOT).contains("network")) {
-      return;
-    }
-    if (values == null || values.isEmpty()) return;
+  private QuasselCoreNetworkSyncTranslator networkSyncTranslator(QuasselSession session) {
+    return new QuasselCoreNetworkSyncTranslator(
+        session.serverId,
+        (networkId, name) -> observeKnownNetwork(session, networkId, name),
+        (networkId, state) -> observeNetworkStateSnapshot(session, networkId, state),
+        (networkId, state) -> observeFullNetworkState(session, networkId, state),
+        (networkId, nick) -> observeCurrentNick(session, networkId, nick, Instant.now()));
+  }
 
-    int fallbackNetworkId = parseNetworkId(objectName);
-    ArrayList<Map<?, ?>> candidates = new ArrayList<>();
-    Map<String, Object> flattened = flattenNetworkStateFromKeyValueParams(values);
-    if (!flattened.isEmpty()) {
-      candidates.add(flattened);
-    }
-    for (Object value : values) {
-      collectPotentialNetworkStateMaps(value, candidates);
-    }
-    if (candidates.isEmpty()) {
-      log.debug(
-          "Network-related sync envelope had no map payloads to inspect: serverId={}, className={}, objectName={}, slotName={}, params={}",
-          session.serverId,
-          className,
-          objectName,
-          slotToken,
-          values);
-      return;
-    }
-
-    int applied = 0;
-    for (Map<?, ?> candidate : candidates) {
-      if (candidate == null || candidate.isEmpty()) continue;
-      int networkId = networkIdFromStateMap(candidate, fallbackNetworkId);
-      String networkName =
-          firstNonBlank(
-              mapValueIgnoreCase(candidate, "networkName"),
-              mapValueIgnoreCase(candidate, "networkname"),
-              mapValueIgnoreCase(candidate, "name"));
-      boolean looksLikeNetworkState =
-          networkId >= 0
-              || !networkName.isEmpty()
-              || mapValueIgnoreCase(candidate, "ServerList") != null
-              || mapValueIgnoreCase(candidate, "serverList") != null;
-      if (!looksLikeNetworkState) continue;
-
-      observeKnownNetwork(session, networkId, networkName);
-      observeNetworkStateSnapshot(session, networkId, candidate);
-      observeNetworkCapabilities(session, networkId, candidate);
-      observeNetworkMonitorSupport(session, networkId, candidate);
-      applied++;
-      log.debug(
-          "Applied network state from unknown sync class: serverId={}, className={}, objectName={}, slotName={}, networkId={}, networkName={}, state={}",
-          session.serverId,
-          className,
-          objectName,
-          slotToken,
-          networkId,
-          networkName,
-          candidate);
-    }
-
-    if (applied == 0) {
-      log.debug(
-          "Network-related sync envelope maps were inspected but no network states were derived: serverId={}, className={}, objectName={}, slotName={}, mapCount={}",
-          session.serverId,
-          className,
-          objectName,
-          slotToken,
-          candidates.size());
-    }
+  private void observeFullNetworkState(QuasselSession session, int networkId, Map<?, ?> state) {
+    observeNetworkStateSnapshot(session, networkId, state);
+    observeNetworkCapabilities(session, networkId, state);
+    observeNetworkMonitorSupport(session, networkId, state);
   }
 
   private void observeChannelMembershipFromNetworkSync(
@@ -1829,50 +1730,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       for (Object value : map.values()) {
         collectBufferInfos(value, out);
       }
-    }
-  }
-
-  private void maybeUpdateCurrentNickFromNetworkState(
-      QuasselSession session, String objectName, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-    int objectNetworkId = parseNetworkId(objectName);
-    for (Object value : values) {
-      if (!(value instanceof Map<?, ?> map)) continue;
-      int networkId = networkIdFromStateMap(map, objectNetworkId);
-      String networkName =
-          firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
-      observeKnownNetwork(session, networkId, networkName);
-      observeNetworkStateSnapshot(session, networkId, map);
-      observeNetworkCapabilities(session, networkId, map);
-      observeNetworkMonitorSupport(session, networkId, map);
-      Object maybeNick = map.get("myNick");
-      String next = Objects.toString(maybeNick, "").trim();
-      if (!next.isEmpty()) {
-        observeCurrentNick(session, networkId, next, Instant.now());
-      }
-    }
-  }
-
-  private void handleNetworkInfoStateSync(
-      QuasselSession session, String objectName, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-    int objectNetworkId = parseNetworkId(objectName);
-    for (Object value : values) {
-      if (!(value instanceof Map<?, ?> map)) continue;
-      int networkId = networkIdFromStateMap(map, objectNetworkId);
-      String networkName =
-          firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
-      log.debug(
-          "Quassel NetworkInfo sync observed: serverId={}, objectName={}, networkId={}, networkName={}, map={}",
-          session == null ? "" : session.serverId,
-          objectName,
-          networkId,
-          networkName,
-          map);
-      observeKnownNetwork(session, networkId, networkName);
-      observeNetworkStateSnapshot(session, networkId, map);
-      observeNetworkCapabilities(session, networkId, map);
-      observeNetworkMonitorSupport(session, networkId, map);
     }
   }
 

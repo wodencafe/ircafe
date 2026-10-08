@@ -968,6 +968,193 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void nativeNetworkStateObservesMembershipAndCapabilitiesBeforeNickExactlyOnce() throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var channel = new QuasselCoreDatastreamCodec.BufferInfoValue(10, 1, 2, -1, "#sync");
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of(10, channel)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    var snapshots = service.quasselCoreNetworkEvents().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      int snapshotBaseline = snapshots.values().size();
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
+                  "Network",
+                  "1",
+                  Map.of(
+                      "networkName",
+                      "Sync",
+                      "isConnected",
+                      true,
+                      "myNick",
+                      "synced-nick",
+                      "capsEnabled",
+                      List.of("message-tags")))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "network-sync-order-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("network-sync-order-complete"));
+
+      List<String> observationOrder =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(
+                  event ->
+                      event instanceof IrcEvent.JoinedChannel
+                          || event instanceof IrcEvent.Ircv3CapabilityChanged
+                          || event instanceof IrcEvent.NickChanged)
+              .map(
+                  event -> {
+                    if (event instanceof IrcEvent.JoinedChannel joined)
+                      return "join:" + joined.channel();
+                    if (event instanceof IrcEvent.Ircv3CapabilityChanged cap)
+                      return "cap:" + cap.capability();
+                    return "nick:" + ((IrcEvent.NickChanged) event).newNick();
+                  })
+              .toList();
+      assertEquals(List.of("join:#sync", "cap:message-tags", "nick:synced-nick"), observationOrder);
+      assertTrue(service.isMessageTagsAvailable("quassel"));
+      assertEquals("synced-nick", service.currentNick("quassel").orElseThrow());
+      assertEquals(
+          List.of(
+              "observe-known-network",
+              "observe-known-network",
+              "observe-network-state",
+              "observe-known-network",
+              "observe-known-network",
+              "observe-network-state"),
+          snapshots.values().subList(snapshotBaseline, snapshots.values().size()).stream()
+              .map(QuasselCoreControlPort.QuasselCoreNetworkSnapshotEvent::source)
+              .toList());
+    } finally {
+      service.shutdownNow();
+      snapshots.cancel();
+      events.cancel();
+    }
+  }
+
+  @Test
+  void nativeNetworkInfoAndUnknownSyncKeepDistinctNestedStateAndNickRules() throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      String initialNick = service.currentNick("quassel").orElseThrow();
+      var wrapped =
+          new QuasselCoreDatastreamCodec.UserTypeValue(
+              "NetworkInfo",
+              Map.of(
+                  "networkId",
+                  2,
+                  "networkName",
+                  "Wrapped",
+                  "myNick",
+                  "ignored-wrapped-nick",
+                  "capsEnabled",
+                  List.of("message-tags")));
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA,
+                  "NetworkInfo",
+                  "1",
+                  Map.of("networkName", "Direct", "myNick", "ignored-direct-nick"),
+                  List.of(wrapped))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "network-info-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("network-info-complete"));
+      assertEquals(
+          List.of(1),
+          service.quasselCoreNetworks("quassel").stream()
+              .map(QuasselCoreControlPort.QuasselCoreNetworkSummary::networkId)
+              .toList());
+      assertEquals("Direct", service.quasselCoreNetworks("quassel").getFirst().networkName());
+      assertFalse(service.isMessageTagsAvailable("quassel"));
+      assertEquals(initialNick, service.currentNick("quassel").orElseThrow());
+
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "CustomNetworkState",
+                  "global",
+                  "sync",
+                  List.of(wrapped))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "network-fallback-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("network-fallback-complete"));
+      assertEquals(
+          "Wrapped",
+          service.quasselCoreNetworks("quassel").stream()
+              .filter(network -> network.networkId() == 2)
+              .findFirst()
+              .orElseThrow()
+              .networkName());
+      assertTrue(service.isMessageTagsAvailable("quassel"));
+      assertEquals(initialNick, service.currentNick("quassel").orElseThrow());
+      assertFalse(
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .anyMatch(event -> event instanceof IrcEvent.NickChanged));
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @Test
   void scalarNetworkSyncUpdatesConnectionStateNickAndNetworkName() throws Exception {
     ServerCatalog catalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
