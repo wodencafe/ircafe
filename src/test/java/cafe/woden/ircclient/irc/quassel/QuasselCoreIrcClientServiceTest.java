@@ -1450,6 +1450,119 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void failedNetworkWritesDoNotPublishOrRememberOptimisticChanges() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(
+            serverCatalog, connector, protocolProbe, authHandshake, codec);
+    var events = service.events().test();
+    var snapshots = service.quasselCoreNetworkEvents().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "network-write-baseline")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("network-write-baseline"));
+      var before = service.quasselCoreNetworks("quassel");
+      int snapshotsBefore = snapshots.values().size();
+      IOException failure = new IOException("network write failed");
+      org.mockito.Mockito.doThrow(failure)
+          .when(codec)
+          .writeSignalProxyRpcCall(any(), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+      org.mockito.Mockito.doThrow(failure)
+          .when(codec)
+          .writeSignalProxyRpcCall(any(), eq("2removeNetwork(NetworkId)"), any());
+      org.mockito.Mockito.doThrow(failure)
+          .when(codec)
+          .writeSignalProxySync(any(), eq("Network"), eq("1"), eq("requestSetNetworkInfo"), any());
+      var create =
+          new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
+              "FailedCreate", "irc.create.test", 6667, false, "", true, 42, List.of("#ircafe"));
+      var update =
+          new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
+              "FailedRename", "irc.update.test", 6667, false, "", true, 42, true);
+      service
+          .quasselCoreCreateNetwork("quassel", create)
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertError(failure);
+      service
+          .quasselCoreUpdateNetwork("quassel", "1", update)
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertError(failure);
+      service
+          .quasselCoreRemoveNetwork("quassel", "1")
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertError(failure);
+      assertEquals(before, service.quasselCoreNetworks("quassel"));
+      assertEquals(snapshotsBefore, snapshots.values().size());
+      verify(codec, times(1))
+          .writeSignalProxyRpcCall(any(), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+      verify(codec, org.mockito.Mockito.never())
+          .writeSignalProxyRpcCall(any(), eq("2createNetwork(NetworkInfo)"), any());
+
+      socket.writeInbound(encodeRpcCall(codec, "2networkCreated(NetworkId)", List.of(2)));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "network-write-observed")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("network-write-observed"));
+      assertEquals(
+          "network-2",
+          service.quasselCoreNetworks("quassel").stream()
+              .filter(network -> network.networkId() == 2)
+              .findFirst()
+              .orElseThrow()
+              .networkName());
+      org.mockito.Mockito.doCallRealMethod()
+          .when(codec)
+          .writeSignalProxySync(any(), eq("Network"), eq("1"), eq("requestSetNetworkInfo"), any());
+      service.quasselCoreUpdateNetwork("quassel", "1", update).blockingAwait();
+      assertEquals(
+          "FailedRename",
+          service.quasselCoreNetworks("quassel").stream()
+              .filter(network -> network.networkId() == 1)
+              .findFirst()
+              .orElseThrow()
+              .networkName());
+      org.mockito.Mockito.doCallRealMethod()
+          .when(codec)
+          .writeSignalProxyRpcCall(any(), eq("2removeNetwork(NetworkId)"), any());
+      service.quasselCoreRemoveNetwork("quassel", "1").blockingAwait();
+      assertTrue(
+          service.quasselCoreNetworks("quassel").stream()
+              .noneMatch(network -> network.networkId() == 1));
+    } finally {
+      service.shutdownNow();
+      snapshots.cancel();
+      events.cancel();
+    }
+  }
+
+  @Test
   void quasselCreateAndRemoveNetworkUseRpcCalls() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);

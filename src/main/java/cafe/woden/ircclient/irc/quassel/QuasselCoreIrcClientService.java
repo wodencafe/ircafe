@@ -58,7 +58,6 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -96,14 +95,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int BUFFER_QUERY = 0x04;
   private static final int MESSAGE_FLAG_BACKLOG = 0x80;
   private static final String NETWORK_CLASS = "Network";
-  private static final String NETWORK_SET_INFO_SLOT = "requestSetNetworkInfo";
   private static final String BACKLOG_MANAGER_CLASS = "BacklogManager";
   private static final String BACKLOG_MANAGER_OBJECT = "";
   private static final String BACKLOG_REQUEST_SLOT = "requestBacklog";
-  private static final String RPC_CREATE_IDENTITY_SLOT = "2createIdentity(Identity,QVariantMap)";
   private static final String SYNC_CONNECT_NETWORK_SLOT = "requestConnect";
   private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
-  private static final String RPC_REMOVE_NETWORK_SLOT = "2removeNetwork(NetworkId)";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "";
   private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine";
@@ -2374,35 +2370,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return session;
   }
 
+  private static QuasselCoreNetworkCommandSender networkCommands(QuasselSession session) {
+    if (session == null) throw new IllegalStateException("Quassel session is missing");
+    return session.networkCommands;
+  }
+
   private void sendNetworkRequest(QuasselSession session, int networkId, String slotName)
       throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    if (networkId < 0) {
-      throw new IllegalArgumentException("network id is invalid");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
-    String slot = Objects.toString(slotName, "").trim();
-    if (slot.isEmpty()) {
-      throw new IllegalArgumentException("slot name is blank");
-    }
-
-    log.debug(
-        "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=0",
-        session.serverId,
-        NETWORK_CLASS,
-        Integer.toString(networkId),
-        slot);
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxySync(
-              out, NETWORK_CLASS, Integer.toString(networkId), slot, List.of());
-        });
+    networkCommands(session).syncNetwork(networkId, slotName);
   }
 
   private boolean maybeRepairNetworkIdentityBeforeConnect(QuasselSession session, int networkId)
@@ -2445,21 +2420,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void sendSignalProxyInitRequest(
       QuasselSession session, String className, String objectName) throws Exception {
     if (session == null) return;
-    String clazz = Objects.toString(className, "").trim();
-    String object = Objects.toString(objectName, "").trim();
-    if (clazz.isEmpty()) return;
-    Socket socket = session.socketRef.get();
-    if (socket == null) return;
-    log.debug(
-        "Sending Quassel init request: serverId={}, className={}, objectName={}",
-        session.serverId,
-        clazz,
-        object);
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxyInitRequest(out, clazz, object, List.of());
-        });
+    session.networkCommands.requestInit(className, objectName);
   }
 
   private static QuasselCoreNetworkSummary findNetworkSummaryById(
@@ -2474,27 +2435,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private void sendNetworkRpcRequest(QuasselSession session, int networkId, String slotName)
       throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    if (networkId < 0) {
-      throw new IllegalArgumentException("network id is invalid");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
-    String slot = Objects.toString(slotName, "").trim();
-    if (slot.isEmpty()) {
-      throw new IllegalArgumentException("rpc slot name is blank");
-    }
-
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          // Quassel's NetworkId is a type alias over Int on the wire.
-          codec.writeSignalProxyRpcCall(out, slot, List.of(networkId));
-        });
+    networkCommands(session).rpcNetwork(networkId, slotName);
   }
 
   private void coordinateNetworkCreation(
@@ -2530,26 +2471,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private void sendCreateIdentityRequest(
       QuasselSession session, Map<String, Object> identityPayload) throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
-    Map<String, Object> payload =
-        identityPayload == null || identityPayload.isEmpty()
-            ? QuasselCoreIdentityRequests.defaultPayload(session.initialNick, null)
-            : identityPayload;
-    List<Object> params =
-        List.of(
-            new QuasselCoreDatastreamCodec.UserTypeValue("Identity", payload),
-            Collections.emptyMap());
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxyRpcCall(out, RPC_CREATE_IDENTITY_SLOT, params);
-        });
+    networkCommands(session).createIdentity(identityPayload);
   }
 
   private void sendCreateNetworkRequest(
@@ -2559,35 +2481,20 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       String rpcSlot,
       boolean includeAutoJoinChannels)
       throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
-    String slot = Objects.toString(rpcSlot, "").trim();
-    if (slot.isEmpty()) {
-      throw new IllegalArgumentException("create-network rpc slot is blank");
-    }
-    Map<String, Object> networkInfo =
-        QuasselCoreNetworkRequests.networkInfoPayload(
-            -1, identityId, request, true, /* includeLegacyAliases= */ true);
-    ArrayList<Object> params = new ArrayList<>(2);
-    params.add(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkInfo", networkInfo));
+    networkCommands(session)
+        .createNetwork(
+            identityId,
+            request,
+            rpcSlot,
+            includeAutoJoinChannels,
+            (slot, payload) -> logCreateNetworkContext(session, slot, payload));
     if (includeAutoJoinChannels) {
-      params.add(request.autoJoinChannels());
+      session.networks.rememberCreatedName(request.networkName());
     }
+  }
 
-    log.debug(
-        "Sending Quassel create network RPC: slot={}, networkName={}, host={}, port={}, tls={}, verifyTls={}, autoJoinChannels={}",
-        slot,
-        request.networkName(),
-        request.serverHost(),
-        request.serverPort(),
-        request.useTls(),
-        request.verifyTls(),
-        request.autoJoinChannels());
+  private void logCreateNetworkContext(
+      QuasselSession session, String slot, Map<String, Object> networkInfo) {
     QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
     log.debug(
         "Create-network session context: serverId={}, slot={}, knownNetworkIds={}, knownIdentityIds={}, authPrimaryNetworkId={}, authNetworkIds={}, authInitialBufferCount={}, networkStateKeys={}, networkDisplayKeys={}, networkTokenKeys={}, identityStateKeys={}, identityNames={}, payload={}",
@@ -2604,31 +2511,20 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         session.identities.stateIds(),
         session.identities.names(),
         summarizeNetworkInfoForLog(networkInfo));
-
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxyRpcCall(out, slot, params);
-        });
-    if (includeAutoJoinChannels) {
-      session.networks.rememberCreatedName(request.networkName());
-    }
   }
 
   private void sendUpdateNetworkRequest(
       QuasselSession session, int networkId, QuasselCoreNetworkUpdateRequest request)
       throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    if (networkId < 0) {
-      throw new IllegalArgumentException("network id is invalid");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
+    String networkName =
+        networkCommands(session)
+            .updateNetwork(
+                networkId, request, () -> resolveNetworkUpdate(session, networkId, request));
+    observeKnownNetwork(session, networkId, networkName);
+  }
 
+  private QuasselCoreNetworkCommandSender.Update resolveNetworkUpdate(
+      QuasselSession session, int networkId, QuasselCoreNetworkUpdateRequest request) {
     Map<String, Object> existing = session.networks.state(networkId);
     String networkName =
         firstNonBlank(
@@ -2654,47 +2550,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             ? request.enabled().booleanValue()
             : parseNetworkEnabled(existing);
 
-    Map<String, Object> networkInfo =
-        QuasselCoreNetworkRequests.networkInfoUpdatePayload(
-            networkId, identityId, networkName, request, enabled);
-    List<Object> params =
-        List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkInfo", networkInfo));
-
-    int resolvedIdentityId = identityId;
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          log.debug(
-              "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=1, payload=NetworkInfo(identityId={}, summary={})",
-              session.serverId,
-              NETWORK_CLASS,
-              Integer.toString(networkId),
-              NETWORK_SET_INFO_SLOT,
-              resolvedIdentityId,
-              summarizeNetworkInfoForLog(networkInfo));
-          codec.writeSignalProxySync(
-              out, NETWORK_CLASS, Integer.toString(networkId), NETWORK_SET_INFO_SLOT, params);
-        });
-
-    observeKnownNetwork(session, networkId, networkName);
+    return new QuasselCoreNetworkCommandSender.Update(networkName, identityId, enabled);
   }
 
   private void sendRemoveNetworkRequest(QuasselSession session, int networkId) throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      throw new IllegalStateException("Quassel socket is closed");
-    }
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxyRpcCall(
-              out,
-              RPC_REMOVE_NETWORK_SLOT,
-              List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", networkId)));
-        });
+    networkCommands(session).removeNetwork(networkId);
   }
 
   private void sendInput(
@@ -2864,6 +2724,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     private final AtomicReference<String> closeReason =
         new AtomicReference<>(DEFAULT_DISCONNECT_REASON);
     private final QuasselCoreSignalProxySender outbound;
+    private final QuasselCoreNetworkCommandSender networkCommands;
     private final AtomicBoolean closeRequested = new AtomicBoolean(false);
     private final AtomicBoolean disconnectedEmitted = new AtomicBoolean(false);
 
@@ -2876,6 +2737,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         Consumer<String> identityObserved,
         Consumer<IrcEvent> eventObserved) {
       this.outbound = new QuasselCoreSerializedSignalProxySender(sender);
+      this.networkCommands =
+          new QuasselCoreNetworkCommandSender(serverId, nick, socketRef::get, outbound);
       this.membership = new QuasselCoreChannelMembership(eventObserved);
       this.features =
           new QuasselCoreFeatureState(MAX_NETWORK_IDENTITIES_PER_SESSION, eventObserved);
