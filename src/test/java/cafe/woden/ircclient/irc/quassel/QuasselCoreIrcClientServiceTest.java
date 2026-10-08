@@ -667,6 +667,135 @@ class QuasselCoreIrcClientServiceTest {
             List.of(net2Buffer, "/QUOTE @+typing=active TAGMSG #dupe"));
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"requestSetMarkerLine", "requestSetLastSeenMsg"})
+  void nativeReadMarkerFailureKeepsQualifiedBufferAndDoesNotFallBackOrRetry(String failingSlot)
+      throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var primary = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#ircafe");
+    var secondary = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 0x02, -1, "#ircafe");
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1, 2), Map.of(11, primary, 22, secondary)));
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    var events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "2",
+                  "sync()",
+                  Map.of("networkName", "Secondary", "capsEnabled", List.of("read-marker")))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayMsg(Message)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.MessageValue(
+                      100L, 1_700_000_000L, 0x0001, 0, primary, "alice!u@h", "primary message"))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayMsg(Message)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.MessageValue(
+                      200L,
+                      1_700_000_000L,
+                      0x0001,
+                      0,
+                      secondary,
+                      "bob!u@h",
+                      "secondary message"))));
+      socket.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "marker-write-baseline")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("marker-write-baseline"));
+      assertTrue(service.isReadMarkerAvailable("quassel"));
+
+      IOException failure = new IOException("partial native marker write");
+      org.mockito.Mockito.doThrow(failure)
+          .when(codec)
+          .writeSignalProxySync(any(), eq("BufferSyncer"), eq(""), eq(failingSlot), any());
+      service
+          .sendReadMarker(
+              "quassel", "#ircafe{net:secondary}", Instant.ofEpochSecond(1_700_000_001L))
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertError(failure);
+      var params =
+          List.<Object>of(
+              new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 22),
+              new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 200));
+      verify(codec, times(1))
+          .writeSignalProxySync(
+              socket.getOutputStream(), "BufferSyncer", "", "requestSetMarkerLine", params);
+      int lastSeenWrites = "requestSetLastSeenMsg".equals(failingSlot) ? 1 : 0;
+      verify(codec, times(lastSeenWrites))
+          .writeSignalProxySync(
+              socket.getOutputStream(), "BufferSyncer", "", "requestSetLastSeenMsg", params);
+      verify(codec, org.mockito.Mockito.never())
+          .writeSignalProxyRpcCall(any(), eq("2sendInput(BufferInfo,QString)"), any());
+
+      service
+          .requestChatHistoryLatest("quassel", "#ircafe{net:secondary}", "*", 25)
+          .blockingAwait();
+      verify(codec)
+          .writeSignalProxySync(
+              socket.getOutputStream(),
+              "BacklogManager",
+              "",
+              "requestBacklog",
+              List.of(
+                  new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 22),
+                  new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
+                  new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", -1),
+                  25,
+                  0));
+      service.sendToChannel("quassel", "#ircafe{net:secondary}", "next message").blockingAwait();
+      verify(codec)
+          .writeSignalProxyRpcCall(
+              socket.getOutputStream(),
+              "2sendInput(BufferInfo,QString)",
+              List.of(secondary, "next message"));
+      org.mockito.Mockito.doCallRealMethod()
+          .when(codec)
+          .writeSignalProxySync(any(), eq("BufferSyncer"), eq(""), eq(failingSlot), any());
+      service
+          .sendReadMarker(
+              "quassel", "#ircafe{net:secondary}", Instant.ofEpochSecond(1_700_000_001L))
+          .blockingAwait();
+      verify(codec, times(2))
+          .writeSignalProxySync(
+              socket.getOutputStream(), "BufferSyncer", "", "requestSetMarkerLine", params);
+      verify(codec, times(lastSeenWrites + 1))
+          .writeSignalProxySync(
+              socket.getOutputStream(), "BufferSyncer", "", "requestSetLastSeenMsg", params);
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
   @Test
   void sendReadMarkerPrefersBufferSyncerWhenMessageAnchorIsKnown() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
