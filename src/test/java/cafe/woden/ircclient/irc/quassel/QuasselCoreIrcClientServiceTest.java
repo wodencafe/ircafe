@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -148,6 +149,143 @@ class QuasselCoreIrcClientServiceTest {
     verify(connector).connect(server);
     verify(protocolProbe).negotiate(socket);
     verify(authHandshake).authenticate(socket, server);
+  }
+
+  @Test
+  void disconnectClearsSessionStateDespiteTaskDisposalFailureAndReconnectStartsFresh()
+      throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket first = new BlockingSocket();
+    BlockingSocket second = new BlockingSocket();
+    var oldBuffer = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#same");
+    var newBuffer = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 0x02, -1, "#same");
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(first, second);
+    when(probe.negotiate(any()))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(any(), eq(server)))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(11, oldBuffer)),
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 2, List.of(2), Map.of(22, newBuffer)));
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    var events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      first.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "1",
+                  "sync()",
+                  Map.of(
+                      "networkName",
+                      "Old",
+                      "isConnected",
+                      true,
+                      "capsEnabled",
+                      List.of("message-tags")))));
+      first.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayMsg(Message)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.MessageValue(
+                      100L, 1_700_000_000L, 0x0001, 0, oldBuffer, "alice!u@h", "old message"))));
+      first.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BufferSyncer",
+                  "",
+                  "setMarkerLine",
+                  11,
+                  200)));
+      first.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "old-session-ready")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("old-session-ready"));
+      Map<?, ?> sessions =
+          assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
+      var old = assertInstanceOf(QuasselCoreSession.class, sessions.get("quassel"));
+      assertTrue(service.isMessageTagsAvailable("quassel"));
+      assertTrue(old.history.timestampForMsgId("#same", 100) > 0);
+      var oldReadTask = old.readLoopTask.get();
+      var cancelled = new java.util.concurrent.atomic.AtomicInteger();
+      old.readinessFallbackTask.set(
+          io.reactivex.rxjava3.disposables.Disposable.fromRunnable(
+              () -> {
+                cancelled.incrementAndGet();
+                throw new IllegalStateException("readiness cancellation failed");
+              }));
+      service
+          .disconnect("quassel", "test close")
+          .test()
+          .awaitDone(2, TimeUnit.SECONDS)
+          .assertComplete()
+          .assertNoErrors();
+      assertEquals(1, cancelled.get());
+      assertTrue(first.isClosed());
+      assertTrue(oldReadTask.isDisposed());
+      assertTrue(old.buffers.values().isEmpty());
+      assertTrue(old.networks.displayNames().isEmpty());
+      assertFalse(old.features.hasObservedCapabilities());
+      assertEquals(-1, old.history.timestampForMsgId("#same", 100));
+      assertNull(old.pendingReadMarkers.takeBufferForMessage(200));
+      assertEquals(-1, old.targetNetworkHints.networkIdForTarget("#same"));
+      assertEquals("test close", old.closeReason.get());
+      assertEquals(
+          1,
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(IrcEvent.Disconnected.class::isInstance)
+              .count());
+
+      connectAndAwaitEstablishedSession(service, events);
+      var fresh = assertInstanceOf(QuasselCoreSession.class, sessions.get("quassel"));
+      assertTrue(old != fresh);
+      assertEquals(Map.of(2, "quassel"), fresh.networkCurrentNickByNetworkId);
+      assertEquals(2, fresh.targetNetworkHints.networkIdForTarget("#same"));
+      assertFalse(service.isMessageTagsAvailable("quassel"));
+      assertEquals(-1, fresh.history.timestampForMsgId("#same", 100));
+      second.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayMsg(Message)",
+              List.of(
+                  new QuasselCoreDatastreamCodec.MessageValue(
+                      200L, 1_700_000_010L, 0x0001, 0, newBuffer, "bob!u@h", "fresh message"))));
+      second.writeInbound(
+          encodeRpcCall(
+              codec, "2displayStatusMsg(QString,QString)", List.of("", "fresh-session-ready")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("fresh-session-ready"));
+      assertFalse(
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .anyMatch(IrcEvent.ReadMarkerObserved.class::isInstance));
+    } finally {
+      service.shutdownNow();
+      first.close();
+      second.close();
+      events.cancel();
+    }
   }
 
   @Test
