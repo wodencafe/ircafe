@@ -1,19 +1,10 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isActionMessage;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isHistoryTextMessage;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isNoticeMessage;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isPlainMessage;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNick;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNumericCode;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.firstChannelToken;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.normalizeReason;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseKickDetails;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseModeDetails;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseNickChange;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.parseTopic;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
@@ -48,11 +39,8 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
-import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreBufferSyncerParser.ReadMarkerUpdate;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.KickDetails;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelector;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.HistorySelectorKind;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.OutboundRawRoute;
@@ -106,17 +94,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
   private static final int BUFFER_QUERY = 0x04;
-  private static final int MESSAGE_TYPE_NICK = 0x0008;
-  private static final int MESSAGE_TYPE_MODE = 0x0010;
-  private static final int MESSAGE_TYPE_JOIN = 0x0020;
-  private static final int MESSAGE_TYPE_PART = 0x0040;
-  private static final int MESSAGE_TYPE_QUIT = 0x0080;
-  private static final int MESSAGE_TYPE_KICK = 0x0100;
-  private static final int MESSAGE_TYPE_SERVER = 0x0400;
-  private static final int MESSAGE_TYPE_INFO = 0x0800;
-  private static final int MESSAGE_TYPE_ERROR = 0x1000;
-  private static final int MESSAGE_TYPE_TOPIC = 0x4000;
-  private static final int MESSAGE_TYPE_INVITE = 0x20000;
   private static final int MESSAGE_FLAG_BACKLOG = 0x80;
   private static final String NETWORK_CLASS = "Network";
   private static final String NETWORK_SET_INFO_SLOT = "requestSetNetworkInfo";
@@ -1869,162 +1846,49 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return;
     }
 
-    if (isJoinMessage(typeBits)) {
-      handleJoinMessage(session, at, target, fromDisplay, senderHostmask, networkId);
-      return;
-    }
-
-    if (isPartMessage(typeBits)) {
-      handlePartMessage(session, at, target, fromDisplay, senderHostmask, payloadText, networkId);
-      return;
-    }
-
-    if (isQuitMessage(typeBits)) {
-      if (!target.isEmpty()) {
-        emitObservedHostmask(session, at, target, fromDisplay, senderHostmask);
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserQuitChannel(
-                    at, target, fromDisplay, normalizeReason(payloadText))));
-      }
-      return;
-    }
-
-    if (isNickMessage(typeBits)) {
-      String newNick = parseNickChange(payloadText, fromDisplay);
-      if (!target.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.UserNickChangedChannel(at, target, fromDisplay, newNick)));
-      }
-      if (isSelfNick(session, fromDisplay, networkId)) {
-        observeCurrentNick(session, networkId, newNick, at);
-      }
-      return;
-    }
-
-    if (isTopicMessage(typeBits)) {
-      String topic = parseTopic(payloadText);
-      if (!target.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId, new IrcEvent.ChannelTopicUpdated(at, target, topic)));
-        return;
-      }
-    }
-
-    if (isModeMessage(typeBits)) {
-      if (!target.isEmpty()) {
-        String details = parseModeDetails(payloadText);
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                ChannelModeObservationFactory.fromQuasselDisplayMessage(
-                    at, target, fromDisplay, details)));
-        return;
-      }
-    }
-
-    if (isKickMessage(typeBits)) {
-      if (!target.isEmpty()) {
-        KickDetails kick = parseKickDetails(payloadText);
-        String kickedNick = Objects.toString(kick.nick(), "").trim();
-        if (!kickedNick.isEmpty()) {
-          if (isSelfNick(session, kickedNick, networkId)) {
-            session.membership.leave(target, networkId);
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.KickedFromChannel(at, target, fromDisplay, kick.reason())));
-          } else {
-            bus.onNext(
-                new ServerIrcEvent(
-                    session.serverId,
-                    new IrcEvent.UserKickedFromChannel(
-                        at, target, kickedNick, fromDisplay, kick.reason())));
+    QuasselCoreDisplayMessageTranslator.translate(
+        new QuasselCoreDisplayMessageTranslator.Observation(
+            at,
+            bufferInfo,
+            target,
+            fromDisplay,
+            senderHostmask,
+            payloadText,
+            messageId,
+            ircv3Tags,
+            message),
+        new QuasselCoreDisplayMessageTranslator.SessionPort() {
+          @Override
+          public boolean isSelfNick(String nick) {
+            return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
           }
-          return;
-        }
-      }
-    }
 
-    if (isInviteMessage(typeBits)) {
-      String channel = firstChannelToken(payloadText);
-      if (channel.isEmpty()) channel = target;
-      if (!channel.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.InvitedToChannel(
-                    at,
-                    channel,
-                    fromDisplay,
-                    currentNickForNetwork(session, networkId),
-                    "",
-                    false)));
-        return;
-      }
-    }
+          @Override
+          public String currentNick() {
+            return currentNickForNetwork(session, networkId);
+          }
 
-    if (isNoticeMessage(typeBits)) {
-      if (target.isEmpty() && isQueryBuffer(bufferInfo)) {
-        target = targetForBuffer(session, bufferInfo, fromDisplay);
-      }
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.Notice(at, fromDisplay, target, payloadText, messageId, ircv3Tags)));
-      return;
-    }
+          @Override
+          public String queryTarget() {
+            return targetForBuffer(session, bufferInfo, fromDisplay);
+          }
 
-    if (isActionMessage(typeBits)) {
-      if (isChannelBuffer(bufferInfo) && !target.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.ChannelAction(
-                    at, target, fromDisplay, payloadText, messageId, ircv3Tags)));
-      } else {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.PrivateAction(at, fromDisplay, payloadText, messageId, ircv3Tags)));
-      }
-      return;
-    }
+          @Override
+          public void observeJoin(Instant joinedAt, String channel) {
+            session.membership.observeJoin(joinedAt, channel, networkId);
+          }
 
-    if (isPlainMessage(typeBits)) {
-      if (isChannelBuffer(bufferInfo) && !target.isEmpty()) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.ChannelMessage(
-                    at, target, fromDisplay, payloadText, messageId, ircv3Tags)));
-        return;
-      }
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.PrivateMessage(at, fromDisplay, payloadText, messageId, ircv3Tags)));
-      return;
-    }
+          @Override
+          public void leave(String channel) {
+            session.membership.leave(channel, networkId);
+          }
 
-    String statusLine =
-        payloadText.isBlank() ? renderUnknownMessageType(message, target) : payloadText;
-    if (isErrorMessage(typeBits)) {
-      bus.onNext(
-          new ServerIrcEvent(
-              session.serverId,
-              new IrcEvent.Error(
-                  at, statusLine.isBlank() ? "Quassel reported an error" : statusLine, null)));
-      return;
-    }
-
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId, serverResponse(at, statusLine, content, messageId, ircv3Tags)));
+          @Override
+          public void observeNick(Instant changedAt, String nick) {
+            observeCurrentNick(session, networkId, nick, changedAt);
+          }
+        },
+        emit);
   }
 
   private void emitCapabilityChangesFromCapLine(
@@ -2060,46 +1924,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       return parsed.rawTarget();
     }
     return qualifyTargetForNetwork(session, base, networkId);
-  }
-
-  private void handleJoinMessage(
-      QuasselSession session,
-      Instant at,
-      String channel,
-      String fromDisplay,
-      String senderHostmask,
-      int networkId) {
-    if (channel.isEmpty()) return;
-    if (isSelfNick(session, fromDisplay, networkId)) {
-      session.membership.observeJoin(at, channel, networkId);
-      return;
-    }
-    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId, new IrcEvent.UserJoinedChannel(at, channel, fromDisplay)));
-  }
-
-  private void handlePartMessage(
-      QuasselSession session,
-      Instant at,
-      String channel,
-      String fromDisplay,
-      String senderHostmask,
-      String content,
-      int networkId) {
-    if (channel.isEmpty()) return;
-    String reason = normalizeReason(content);
-    if (isSelfNick(session, fromDisplay, networkId)) {
-      session.membership.leave(channel, networkId);
-      bus.onNext(
-          new ServerIrcEvent(session.serverId, new IrcEvent.LeftChannel(at, channel, reason)));
-      return;
-    }
-    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId, new IrcEvent.UserPartedChannel(at, channel, fromDisplay, reason)));
   }
 
   private void emitBacklogHistoryBatch(
@@ -2153,46 +1977,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static boolean isStatusBuffer(QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
     if (bufferInfo == null) return false;
     return (bufferInfo.typeBits() & BUFFER_STATUS) != 0;
-  }
-
-  private static boolean isNickMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_NICK) != 0;
-  }
-
-  private static boolean isModeMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_MODE) != 0;
-  }
-
-  private static boolean isJoinMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_JOIN) != 0;
-  }
-
-  private static boolean isPartMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_PART) != 0;
-  }
-
-  private static boolean isQuitMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_QUIT) != 0;
-  }
-
-  private static boolean isKickMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_KICK) != 0;
-  }
-
-  private static boolean isTopicMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_TOPIC) != 0;
-  }
-
-  private static boolean isInviteMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_INVITE) != 0;
-  }
-
-  private static boolean isServerInfoMessage(int typeBits) {
-    return (typeBits & (MESSAGE_TYPE_SERVER | MESSAGE_TYPE_INFO)) != 0;
-  }
-
-  private static boolean isErrorMessage(int typeBits) {
-    return (typeBits & MESSAGE_TYPE_ERROR) != 0;
   }
 
   private static boolean isBacklogMessage(int flags) {
@@ -2447,34 +2231,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     bus.onNext(
         new ServerIrcEvent(
             serverId, serverResponse(at, displayLine, rawLine, messageId, ircv3Tags)));
-  }
-
-  private void emitObservedHostmask(
-      QuasselSession session, Instant at, String channel, String nick, String hostmask) {
-    if (session == null) return;
-    String normalizedNick = Objects.toString(nick, "").trim();
-    String normalizedHostmask = Objects.toString(hostmask, "").trim();
-    if (normalizedNick.isEmpty() || !PircbotxUtil.isUsefulHostmask(normalizedHostmask)) {
-      return;
-    }
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.UserHostmaskObserved(at, channel, normalizedNick, normalizedHostmask)));
-  }
-
-  private static String renderUnknownMessageType(
-      QuasselCoreDatastreamCodec.MessageValue message, String target) {
-    String prefix = target.isEmpty() ? "" : ("[" + target + "] ");
-    if (isServerInfoMessage(message.typeBits())) {
-      String content = Objects.toString(message.content(), "").trim();
-      return content.isEmpty() ? (prefix + "(server)") : (prefix + content);
-    }
-    String content = Objects.toString(message.content(), "").trim();
-    if (!content.isEmpty()) {
-      return prefix + content;
-    }
-    return prefix + "(quassel message type " + message.typeBits() + ")";
   }
 
   private record HistoryRequestContext(

@@ -4522,6 +4522,221 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void nativeDisplayLifecycleKeepsSecondaryNickAndMembershipIsolated() throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var primary = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 2, -1, "#shared");
+    var secondary = new QuasselCoreDatastreamCodec.BufferInfoValue(22, 2, 2, -1, "#shared");
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1, 2), Map.of(11, primary, 22, secondary)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "Network",
+                  "2",
+                  "setMyNick",
+                  "sidecar")));
+      long timestamp = 1_700_000_700L;
+      List<QuasselCoreDatastreamCodec.MessageValue> messages =
+          List.of(
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  1, timestamp, 0x20, 0, primary, "quassel!u@h", "joined"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  2, timestamp, 0x20, 0, secondary, "sidecar!u@h", "joined"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  3, timestamp, 0x40, 0, secondary, "sidecar!u@h", "(bye)"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  4, timestamp, 0x20, 0, secondary, "sidecar!u@h", "joined"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  5, timestamp, 0x20, 0, primary, "quassel!u@h", "joined"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  6, timestamp, 8, 0, secondary, "sidecar!u@h", "sidecar is now known as renamed"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  7, timestamp, 0x100, 0, secondary, "ops!u@h", "kicked renamed (gone)"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  8, timestamp, 0x20, 0, secondary, "renamed!u@h", "joined"),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  9, timestamp, 0x20, 0, primary, "quassel!u@h", "joined"));
+      for (var message : messages) {
+        socket.writeInbound(encodeRpcCall(codec, "2displayMsg(Message)", List.of(message)));
+      }
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "native-display-lifecycle-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("native-display-lifecycle-complete"));
+      Instant at = Instant.ofEpochSecond(timestamp);
+      String firstTarget = "#shared{net:network-1}";
+      String secondTarget = "#shared{net:network-2}";
+      List<IrcEvent> lifecycle =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(
+                  event ->
+                      event instanceof IrcEvent.JoinedChannel
+                          || event instanceof IrcEvent.LeftChannel
+                          || event instanceof IrcEvent.UserNickChangedChannel
+                          || event instanceof IrcEvent.KickedFromChannel
+                          || event instanceof IrcEvent.NickChanged
+                          || event instanceof IrcEvent.UserHostmaskObserved
+                          || event instanceof IrcEvent.UserJoinedChannel
+                          || event instanceof IrcEvent.UserPartedChannel)
+              .toList();
+      assertEquals(
+          List.of(
+              new IrcEvent.JoinedChannel(at, firstTarget),
+              new IrcEvent.JoinedChannel(at, secondTarget),
+              new IrcEvent.LeftChannel(at, secondTarget, "bye"),
+              new IrcEvent.JoinedChannel(at, secondTarget),
+              new IrcEvent.UserNickChangedChannel(at, secondTarget, "sidecar", "renamed"),
+              new IrcEvent.KickedFromChannel(at, secondTarget, "ops", "gone"),
+              new IrcEvent.JoinedChannel(at, secondTarget)),
+          lifecycle);
+      assertEquals("quassel", service.currentNick("quassel").orElseThrow());
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @Test
+  void nativeDisplayKeepsHistoryAndTagObservationsBeforeLiveOrBacklogTranslation()
+      throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    var channel = new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 2, -1, "#room");
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of(11, channel)));
+    QuasselCoreIrcClientService service =
+        QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      long timestamp = 1_700_000_700L;
+      socket.writeInbound(
+          encodeSignalProxyFrame(
+              List.of(
+                  QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                  "BufferSyncer",
+                  "global",
+                  "setMarkerLine",
+                  11,
+                  101)));
+      String liveRaw = "@+draft/reply=parent;label=native :alice!u@h PRIVMSG #room :live mixed";
+      String backlogRaw = "@+draft/reply=parent :alice!u@h PRIVMSG #room :stored mixed";
+      for (var message :
+          List.of(
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  101, timestamp, 7, 0, channel, "alice!u@h", liveRaw),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  102, timestamp + 1, 7, 0x80, channel, "alice!u@h", backlogRaw),
+              new QuasselCoreDatastreamCodec.MessageValue(
+                  103,
+                  timestamp + 2,
+                  7,
+                  0x80,
+                  channel,
+                  "alice!u@h",
+                  "@+typing=active :alice!u@h TAGMSG #room"))) {
+        socket.writeInbound(encodeRpcCall(codec, "2displayMsg(Message)", List.of(message)));
+      }
+      socket.writeInbound(
+          encodeRpcCall(
+              codec,
+              "2displayStatusMsg(QString,QString)",
+              List.of("", "native-display-observations-complete")));
+      awaitEvent(
+          events,
+          event ->
+              event instanceof IrcEvent.ServerResponseLine line
+                  && line.message().contains("native-display-observations-complete"));
+      List<IrcEvent> observed =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(
+                  event ->
+                      event instanceof IrcEvent.ReadMarkerObserved
+                          || event instanceof IrcEvent.MessageReplyObserved
+                          || event instanceof IrcEvent.Notice
+                          || event instanceof IrcEvent.ChannelMessage
+                          || event instanceof IrcEvent.ChannelAction
+                          || event instanceof IrcEvent.ChatHistoryBatchReceived
+                          || event instanceof IrcEvent.UserTypingObserved)
+              .toList();
+      assertEquals(
+          List.of(
+              "ReadMarkerObserved",
+              "MessageReplyObserved",
+              "Notice",
+              "MessageReplyObserved",
+              "ChatHistoryBatchReceived",
+              "UserTypingObserved"),
+          observed.stream().map(event -> event.getClass().getSimpleName()).toList());
+      var marker = assertInstanceOf(IrcEvent.ReadMarkerObserved.class, observed.getFirst());
+      assertEquals("#room", marker.target());
+      assertEquals(
+          Instant.ofEpochSecond(timestamp),
+          Instant.parse(marker.marker().substring("timestamp=".length())));
+      var notice = assertInstanceOf(IrcEvent.Notice.class, observed.get(2));
+      assertEquals(Instant.ofEpochSecond(timestamp), notice.at());
+      assertEquals("101", notice.messageId());
+      assertEquals("live mixed", notice.text());
+      assertEquals("native", notice.ircv3Tags().get("label"));
+      assertEquals("parent", notice.ircv3Tags().get("draft/reply"));
+      var batch = assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, observed.get(4));
+      assertEquals(1, batch.entries().size());
+      var entry = batch.entries().getFirst();
+      assertEquals(ChatHistoryEntry.Kind.ACTION, entry.kind());
+      assertEquals("102", entry.messageId());
+      assertEquals("#room", entry.target());
+      assertEquals(backlogRaw, entry.text());
+      assertEquals(Instant.ofEpochSecond(timestamp + 1), entry.at());
+      var typing = assertInstanceOf(IrcEvent.UserTypingObserved.class, observed.getLast());
+      assertEquals("#room", typing.target());
+      assertEquals("active", typing.state());
+    } finally {
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
+  @Test
   void typedDisplayMessagesMapToStructuredIrcEvents() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
