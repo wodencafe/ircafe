@@ -8,10 +8,7 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeC
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkCreationCoordinator.RPC_CREATE_NETWORK_SLOT;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkCreationCoordinator.RPC_CREATE_NETWORK_SLOT_LEGACY;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkEnabled;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSession.MAX_NETWORK_NICKS_PER_SESSION;
@@ -19,8 +16,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.parseQua
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.routeOutboundRawLine;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.firstNonBlank;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.mapValueIgnoreCase;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.stripLeadingColon;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
@@ -91,7 +86,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int BUFFER_CHANNEL = 0x02;
   private static final int BUFFER_QUERY = 0x04;
   private static final int MESSAGE_FLAG_BACKLOG = 0x80;
-  private static final String NETWORK_CLASS = "Network";
   private static final String SYNC_CONNECT_NETWORK_SLOT = "requestConnect";
   private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
@@ -2274,31 +2268,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             observations,
             () -> resolveQuasselIdentityId(session, null),
             () -> collectKnownNetworkIds(session),
-            new QuasselCoreNetworkConnectPreflight.Commands() {
-              @Override
-              public void requestNetworkInitState(int id) throws Exception {
-                QuasselCoreIrcClientService.this.requestNetworkInitState(session, id);
-              }
-
-              @Override
-              public void updateNetwork(int id, QuasselCoreNetworkUpdateRequest request)
-                  throws Exception {
-                sendUpdateNetworkRequest(session, id, request);
-              }
-
-              @Override
-              public void createNetwork(int identityId, QuasselCoreNetworkCreateRequest request)
-                  throws Exception {
-                sendCreateNetworkRequest(
-                    session, identityId, request, RPC_CREATE_NETWORK_SLOT, true);
-              }
-            })
+            networkCommandMediator(session))
         .prepare(networkId);
   }
 
   private void requestNetworkInitState(QuasselCoreSession session, int networkId) throws Exception {
     if (session == null || networkId < 0) return;
-    sendSignalProxyInitRequest(session, NETWORK_CLASS, Integer.toString(networkId));
+    networkCommandMediator(session).requestNetworkInitState(networkId);
   }
 
   private void sendSignalProxyInitRequest(
@@ -2317,11 +2293,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return null;
   }
 
-  private void sendNetworkRpcRequest(QuasselCoreSession session, int networkId, String slotName)
-      throws Exception {
-    networkCommands(session).rpcNetwork(networkId, slotName);
-  }
-
   private void coordinateNetworkCreation(
       QuasselCoreSession session, QuasselCoreNetworkCreateRequest request) throws Exception {
     new QuasselCoreNetworkCreationCoordinator(
@@ -2332,109 +2303,22 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             observations,
             requested -> resolveQuasselIdentityId(session, requested),
             () -> collectKnownNetworkIds(session),
-            new QuasselCoreNetworkCreationCoordinator.Commands() {
-              @Override
-              public void createIdentity(Map<String, Object> payload) throws Exception {
-                sendCreateIdentityRequest(session, payload);
-              }
-
-              @Override
-              public void createNetwork(
-                  int identityId, QuasselCoreNetworkCreateRequest req, boolean legacy)
-                  throws Exception {
-                sendCreateNetworkRequest(
-                    session,
-                    identityId,
-                    req,
-                    legacy ? RPC_CREATE_NETWORK_SLOT_LEGACY : RPC_CREATE_NETWORK_SLOT,
-                    !legacy);
-              }
-            })
+            networkCommandMediator(session))
         .create(request);
-  }
-
-  private void sendCreateIdentityRequest(
-      QuasselCoreSession session, Map<String, Object> identityPayload) throws Exception {
-    networkCommands(session).createIdentity(identityPayload);
-  }
-
-  private void sendCreateNetworkRequest(
-      QuasselCoreSession session,
-      int identityId,
-      QuasselCoreNetworkCreateRequest request,
-      String rpcSlot,
-      boolean includeAutoJoinChannels)
-      throws Exception {
-    networkCommands(session)
-        .createNetwork(
-            identityId,
-            request,
-            rpcSlot,
-            includeAutoJoinChannels,
-            (slot, payload) -> logCreateNetworkContext(session, slot, payload));
-    if (includeAutoJoinChannels) {
-      session.networks.rememberCreatedName(request.networkName());
-    }
-  }
-
-  private void logCreateNetworkContext(
-      QuasselCoreSession session, String slot, Map<String, Object> networkInfo) {
-    QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
-    log.debug(
-        "Create-network session context: serverId={}, slot={}, knownNetworkIds={}, knownIdentityIds={}, authPrimaryNetworkId={}, authNetworkIds={}, authInitialBufferCount={}, networkStateKeys={}, networkDisplayKeys={}, networkTokenKeys={}, identityStateKeys={}, identityNames={}, payload={}",
-        session.serverId,
-        slot,
-        collectKnownNetworkIds(session),
-        session.identities.knownIds(),
-        auth == null ? -1 : auth.primaryNetworkId(),
-        auth == null ? List.of() : auth.networkIds(),
-        auth == null || auth.initialBuffers() == null ? 0 : auth.initialBuffers().size(),
-        session.networks.stateIds(),
-        session.networks.displayNames().keySet(),
-        session.networks.tokenIds(),
-        session.identities.stateIds(),
-        session.identities.names(),
-        summarizeNetworkInfoForLog(networkInfo));
   }
 
   private void sendUpdateNetworkRequest(
       QuasselCoreSession session, int networkId, QuasselCoreNetworkUpdateRequest request)
       throws Exception {
-    String networkName =
-        networkCommands(session)
-            .updateNetwork(
-                networkId, request, () -> resolveNetworkUpdate(session, networkId, request));
-    observeKnownNetwork(session, networkId, networkName);
+    networkCommandMediator(session).updateNetwork(networkId, request);
   }
 
-  private QuasselCoreNetworkCommandSender.Update resolveNetworkUpdate(
-      QuasselCoreSession session, int networkId, QuasselCoreNetworkUpdateRequest request) {
-    Map<String, Object> existing = session.networks.state(networkId);
-    String networkName =
-        firstNonBlank(
-            request.networkName(),
-            mapValueIgnoreCase(existing, "networkName"),
-            mapValueIgnoreCase(existing, "networkname"),
-            mapValueIgnoreCase(existing, "name"),
-            session.networks.displayNames().get(networkId));
-    if (networkName.isBlank()) {
-      networkName = "network-" + networkId;
-    }
-
-    int identityId =
-        request.identityId() != null
-            ? request.identityId().intValue()
-            : parseNetworkIdentityId(existing);
-    if (identityId < 0) {
-      identityId = resolveQuasselIdentityId(session, null);
-    }
-
-    boolean enabled =
-        request.enabled() != null
-            ? request.enabled().booleanValue()
-            : parseNetworkEnabled(existing);
-
-    return new QuasselCoreNetworkCommandSender.Update(networkName, identityId, enabled);
+  private QuasselCoreNetworkCommandMediator networkCommandMediator(QuasselCoreSession session) {
+    if (session == null) throw new IllegalStateException("Quassel session is missing");
+    return new QuasselCoreNetworkCommandMediator(
+        session,
+        () -> resolveQuasselIdentityId(session, null),
+        (networkId, name) -> observeKnownNetwork(session, networkId, name));
   }
 
   private void sendRemoveNetworkRequest(QuasselCoreSession session, int networkId)
