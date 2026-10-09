@@ -1812,6 +1812,16 @@ class QuasselCoreIrcClientServiceTest {
                 0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
     when(authHandshake.authenticate(socket, server))
         .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    IOException failure = new IOException("network write failed");
+    org.mockito.Mockito.doThrow(failure)
+        .when(codec)
+        .writeSignalProxyRpcCall(any(), eq("2createNetwork(NetworkInfo,QStringList)"), any());
+    org.mockito.Mockito.doThrow(failure)
+        .when(codec)
+        .writeSignalProxyRpcCall(any(), eq("2removeNetwork(NetworkId)"), any());
+    org.mockito.Mockito.doThrow(failure)
+        .when(codec)
+        .writeSignalProxySync(any(), eq("Network"), eq("1"), eq("requestSetNetworkInfo"), any());
     QuasselCoreIrcClientService service =
         QuasselRuntimeTestFixtures.service(
             serverCatalog, connector, protocolProbe, authHandshake, codec);
@@ -1829,16 +1839,6 @@ class QuasselCoreIrcClientServiceTest {
                   && line.message().contains("network-write-baseline"));
       var before = service.quasselCoreNetworks("quassel");
       int snapshotsBefore = snapshots.values().size();
-      IOException failure = new IOException("network write failed");
-      org.mockito.Mockito.doThrow(failure)
-          .when(codec)
-          .writeSignalProxyRpcCall(any(), eq("2createNetwork(NetworkInfo,QStringList)"), any());
-      org.mockito.Mockito.doThrow(failure)
-          .when(codec)
-          .writeSignalProxyRpcCall(any(), eq("2removeNetwork(NetworkId)"), any());
-      org.mockito.Mockito.doThrow(failure)
-          .when(codec)
-          .writeSignalProxySync(any(), eq("Network"), eq("1"), eq("requestSetNetworkInfo"), any());
       var create =
           new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
               "FailedCreate", "irc.create.test", 6667, false, "", true, 42, List.of("#ircafe"));
