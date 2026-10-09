@@ -3,9 +3,7 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isHistoryTextMessage;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNick;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNumericCode;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResponse;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
@@ -1289,11 +1287,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
     try {
       QuasselCoreSyncDispatcher sync = syncDispatcher(session);
+      QuasselCoreRpcDispatcher rpc = rpcDispatcher(session);
       QuasselCoreSignalProxyDispatcher dispatcher =
-          new QuasselCoreSignalProxyDispatcher(
-              session,
-              message -> handleRpcCall(session, message.slotName(), message.params()),
-              sync::dispatch);
+          new QuasselCoreSignalProxyDispatcher(session, rpc::dispatch, sync::dispatch);
       readLoop.read(
           sid,
           socket,
@@ -1325,89 +1321,35 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     scheduleReconnectIfEligible(session, reason);
   }
 
-  private void handleRpcCall(QuasselCoreSession session, String slotName, List<Object> params) {
-    String slot = Objects.toString(slotName, "").trim();
-    if (slot.isEmpty()) return;
-    log.debug(
-        "Received Quassel RPC slot: serverId={}, slot={}, paramCount={}",
-        session == null ? "" : session.serverId,
-        slot,
-        params == null ? 0 : params.size());
-    if (slot.toLowerCase(Locale.ROOT).contains("network")) {
-      log.debug(
-          "Received Quassel network-related RPC slot: serverId={}, slot={}, params={}",
-          session == null ? "" : session.serverId,
-          slot,
-          params);
-    }
-
-    if ("2displayMsg(Message)".equals(slot)) {
-      Object first = (params == null || params.isEmpty()) ? null : params.get(0);
-      if (first instanceof QuasselCoreDatastreamCodec.MessageValue msg) {
-        handleDisplayMessage(session, msg);
-      }
-      return;
-    }
-
-    if ("2displayStatusMsg(QString,QString)".equals(slot)) {
-      String network =
-          (params == null || params.isEmpty()) ? "" : Objects.toString(params.get(0), "");
-      String text =
-          (params == null || params.size() < 2) ? "" : Objects.toString(params.get(1), "");
-      handleDisplayStatusMessage(session.serverId, network, text);
-      return;
-    }
-
-    if ("2bufferInfoUpdated(BufferInfo)".equals(slot)) {
-      Object first = (params == null || params.isEmpty()) ? null : params.get(0);
-      if (first instanceof QuasselCoreDatastreamCodec.BufferInfoValue info
-          && info.bufferId() >= 0) {
-        QuasselCoreDatastreamCodec.BufferInfoValue merged = session.buffers.merge(info);
-        observeKnownNetwork(session, merged.networkId(), "");
-        noteTargetNetworkHint(session, merged.bufferName(), merged.networkId(), false);
-        emitJoinedChannelFromBufferInfoIfNetworkConnected(session, merged);
-      }
-      return;
-    }
-
-    if ("2bufferInfoRemoved(BufferInfo)".equals(slot)) {
-      Object first = (params == null || params.isEmpty()) ? null : params.get(0);
-      if (first instanceof QuasselCoreDatastreamCodec.BufferInfoValue info
-          && info.bufferId() >= 0) {
-        session.buffers.remove(info.bufferId());
-        session.pendingReadMarkers.forgetBuffer(info.bufferId());
-      }
-    }
-
-    observeNetworkLifecycleFromRpcSlot(session, slot, params);
-    session.identities.handleRpc(slot, params);
-  }
-
-  private void observeNetworkLifecycleFromRpcSlot(
-      QuasselCoreSession session, String slotName, List<Object> params) {
-    if (session == null) return;
-    new QuasselCoreNetworkLifecycleTranslator(
+  private QuasselCoreRpcDispatcher rpcDispatcher(QuasselCoreSession session) {
+    QuasselCoreNetworkLifecycleTranslator networks =
+        new QuasselCoreNetworkLifecycleTranslator(
             session.serverId,
             session.networks::claimCreatedName,
             (networkId, name) -> observeKnownNetwork(session, networkId, name),
             networkId -> forgetKnownNetwork(session, networkId),
-            (networkId, state) -> observeFullNetworkState(session, networkId, state))
-        .handleRpc(slotName, params);
-  }
+            (networkId, state) -> observeFullNetworkState(session, networkId, state));
+    return new QuasselCoreRpcDispatcher(
+        session,
+        networks,
+        new QuasselCoreRpcDispatcher.SessionPort() {
+          @Override
+          public void displayMessage(QuasselCoreDatastreamCodec.MessageValue message) {
+            handleDisplayMessage(session, message);
+          }
 
-  private void handleDisplayStatusMessage(String serverId, String network, String text) {
-    String net = Objects.toString(network, "").trim();
-    String rawLine = Objects.toString(text, "").trim();
-    log.debug(
-        "Quassel display status message: serverId={}, network={}, text={}", serverId, net, rawLine);
-    String messageLine = rawLine;
-    if (messageLine.isEmpty()) {
-      messageLine = net;
-    } else if (!net.isEmpty() && extractNumericCode(rawLine) == 0) {
-      messageLine = net + ": " + messageLine;
-    }
-    if (messageLine.isEmpty()) return;
-    emitServerResponseLine(serverId, Instant.now(), messageLine, rawLine, "", Map.of());
+          @Override
+          public void observeBuffer(QuasselCoreDatastreamCodec.BufferInfoValue merged) {
+            observeKnownNetwork(session, merged.networkId(), "");
+            noteTargetNetworkHint(session, merged.bufferName(), merged.networkId(), false);
+            emitJoinedChannelFromBufferInfoIfNetworkConnected(session, merged);
+          }
+
+          @Override
+          public void emit(IrcEvent event) {
+            bus.onNext(new ServerIrcEvent(session.serverId, event));
+          }
+        });
   }
 
   private QuasselCoreSyncDispatcher syncDispatcher(QuasselCoreSession session) {
@@ -2000,18 +1942,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     String known = currentNickForPrimaryNetwork(session);
     return !known.isEmpty() && known.equalsIgnoreCase(candidate);
-  }
-
-  private void emitServerResponseLine(
-      String serverId,
-      Instant at,
-      String displayLine,
-      String rawLine,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    bus.onNext(
-        new ServerIrcEvent(
-            serverId, serverResponse(at, displayLine, rawLine, messageId, ircv3Tags)));
   }
 
   private record HistoryRequestContext(
