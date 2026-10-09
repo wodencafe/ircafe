@@ -416,12 +416,26 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreIrcClientService service =
         QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
+    var failingSession = new java.util.concurrent.atomic.AtomicReference<QuasselCoreSession>();
+    var errorObserver =
+        service
+            .events()
+            .filter(event -> event.event() instanceof IrcEvent.Error)
+            .doOnNext(
+                event -> {
+                  // Simulate a sync callback reaching readiness while the failure event is
+                  // delivered.
+                  failingSession.get().readiness.observeSync();
+                  failingSession.get().readiness.emitIfReady();
+                })
+            .test();
     try {
       connectAndAwaitEstablishedSession(service, events);
       Map<?, ?> sessions =
           assertInstanceOf(Map.class, ReflectionTestUtils.getField(service, "sessions"));
       QuasselCoreSession session =
           assertInstanceOf(QuasselCoreSession.class, sessions.get("quassel"));
+      failingSession.set(session);
       awaitCondition(() -> session.readiness.fallbackTask.get() != null);
       var readinessTask = session.readiness.fallbackTask.get();
       socket.writeInbound(
@@ -453,6 +467,7 @@ class QuasselCoreIrcClientServiceTest {
                       event instanceof IrcEvent.Error || event instanceof IrcEvent.Disconnected)
               .toList();
       assertEquals(eof ? 1 : 2, failures.size());
+      errorObserver.assertNoErrors().assertValueCount(eof ? 0 : 1);
       if (!eof) {
         IrcEvent.Error error = assertInstanceOf(IrcEvent.Error.class, failures.getFirst());
         assertEquals(reason, error.message());
@@ -466,7 +481,16 @@ class QuasselCoreIrcClientServiceTest {
       assertNull(session.socketRef.get());
       assertFalse(service.hasEstablishedQuasselCoreSession("quassel"));
       assertTrue(service.currentNick("quassel").isEmpty());
+      session.readiness.scheduleFallback();
+      session.readiness.observeSync();
+      session.readiness.emitIfReady();
+      assertNull(session.readiness.fallbackTask.get());
+      assertFalse(
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .anyMatch(IrcEvent.ConnectionReady.class::isInstance));
     } finally {
+      errorObserver.cancel();
       events.cancel();
       service.shutdownNow();
       socket.close();
@@ -5071,6 +5095,86 @@ class QuasselCoreIrcClientServiceTest {
       assertNull(session.readiness.fallbackTask.get());
     } finally {
       ready.dispose();
+      events.cancel();
+      service.shutdownNow();
+      socket.close();
+    }
+  }
+
+  @Test
+  void disconnectFromReadyObserverCompletesWithoutPublishingLateReadinessFeatures()
+      throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake handshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(probe.negotiate(socket))
+        .thenReturn(
+            new QuasselCoreProtocolProbe.ProbeSelection(
+                0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0));
+    when(handshake.authenticate(socket, server))
+        .thenReturn(new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of()));
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    var events = service.events().test();
+    var completed = new java.util.concurrent.atomic.AtomicBoolean();
+    var error = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+    var callbackEnded = new CountDownLatch(1);
+    var readyObserver =
+        service
+            .events()
+            .filter(event -> event.event() instanceof IrcEvent.ConnectionReady)
+            .subscribe(
+                event -> {
+                  completed.set(
+                      service
+                          .disconnect("quassel", "ready observer closed")
+                          .blockingAwait(2, TimeUnit.SECONDS));
+                  callbackEnded.countDown();
+                },
+                failure -> {
+                  error.set(failure);
+                  callbackEnded.countDown();
+                });
+    try {
+      connectAndAwaitEstablishedSession(service, events);
+      socket.writeInbound(
+          encodeStateSnapshot(
+              QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, "BufferSyncer", "global", Map.of()));
+      assertTrue(callbackEnded.await(3, TimeUnit.SECONDS));
+      assertNull(error.get());
+      assertTrue(completed.get(), "disconnect must not block on the readiness observer");
+      awaitEvent(events, IrcEvent.Disconnected.class::isInstance);
+      List<IrcEvent> lifecycle =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .filter(
+                  event ->
+                      event instanceof IrcEvent.ConnectionReady
+                          || event instanceof IrcEvent.Disconnected)
+              .toList();
+      assertEquals(2, lifecycle.size());
+      assertInstanceOf(IrcEvent.ConnectionReady.class, lifecycle.getFirst());
+      assertEquals(
+          "ready observer closed",
+          assertInstanceOf(IrcEvent.Disconnected.class, lifecycle.getLast()).reason());
+      assertFalse(
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .anyMatch(
+                  event ->
+                      event instanceof IrcEvent.ConnectionFeaturesUpdated features
+                          && features
+                              .source()
+                              .equals("quassel-phase=sync-ready;detail=quassel-sync")));
+      assertFalse(service.hasEstablishedQuasselCoreSession("quassel"));
+      assertTrue(socket.isClosed());
+    } finally {
+      readyObserver.dispose();
       events.cancel();
       service.shutdownNow();
       socket.close();

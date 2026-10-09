@@ -67,7 +67,10 @@ final class QuasselCoreSession {
     this.membership = new QuasselCoreChannelMembership(eventObserved);
     this.readiness =
         new QuasselCoreReadinessCoordinator(
-            () -> phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED,
+            () ->
+                phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED
+                    && !closeRequested.get()
+                    && socketRef.get() != null,
             eventObserved,
             RxVirtualSchedulers::io);
     this.features = new QuasselCoreFeatureState(MAX_NETWORK_IDENTITIES_PER_SESSION, eventObserved);

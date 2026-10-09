@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.quassel;
 import static org.junit.jupiter.api.Assertions.*;
 
 import cafe.woden.ircclient.irc.IrcEvent;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.TestScheduler;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -223,12 +225,259 @@ class QuasselCoreReadinessCoordinatorTest {
             });
     coordinator.resetObservations();
     coordinator.observeSync();
-    coordinator.emitIfReady();
     coordinator.cancelFallback();
     assertEquals(0, resolutions.get());
     coordinator.scheduleFallback();
     assertEquals(1, resolutions.get());
     coordinator.cancelFallback();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void cancellationOrSyncBeforeTimerRegistrationDisposesTheLateTask(boolean sync) {
+    var owner = new AtomicReference<QuasselCoreReadinessCoordinator>();
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            established::get,
+            events::add,
+            () -> {
+              if (sync) {
+                owner.get().observeSync();
+                owner.get().emitIfReady();
+              } else {
+                owner.get().cancelFallback();
+              }
+              return scheduler;
+            });
+    owner.set(coordinator);
+    coordinator.scheduleFallback();
+    assertNull(coordinator.fallbackTask.get(), "late scheduling must not retain a task");
+    scheduler.advanceTimeBy(30, TimeUnit.SECONDS);
+    if (sync) assertReadyPair();
+    else assertTrue(events.isEmpty(), "cancelled registration must not publish readiness");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void closeOrPriorReadinessSkipsSchedulingWithoutResolvingScheduler(boolean close) {
+    var resolutions = new AtomicInteger();
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            established::get,
+            events::add,
+            () -> {
+              resolutions.incrementAndGet();
+              return scheduler;
+            });
+    if (close) coordinator.close();
+    else {
+      coordinator.observeSync();
+      coordinator.emitIfReady();
+    }
+    coordinator.scheduleFallback();
+    assertEquals(0, resolutions.get());
+    assertNull(coordinator.fallbackTask.get());
+    if (close) assertTrue(events.isEmpty());
+    else assertReadyPair();
+  }
+
+  @Test
+  void closeCancelsTimerAndObservationResetCannotReopenTheCoordinator() {
+    readiness.scheduleFallback();
+    Disposable task = readiness.fallbackTask.get();
+    readiness.close();
+    readiness.close();
+    readiness.resetObservations();
+    readiness.observeSync();
+    readiness.emitIfReady();
+    readiness.scheduleFallback();
+    scheduler.advanceTimeBy(30, TimeUnit.SECONDS);
+    assertTrue(task.isDisposed());
+    assertNull(readiness.fallbackTask.get());
+    assertFalse(readiness.syncObserved.get());
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void closeDuringSchedulingDoesNotWaitForTheLateHandleAndSuppressesItsCallback() throws Exception {
+    var created = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var timer = new AtomicReference<Disposable>();
+    Scheduler delayed =
+        duringRegistration(
+            () -> {
+              created.countDown();
+              try {
+                assertTrue(release.await(2, TimeUnit.SECONDS));
+              } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(error);
+              }
+            },
+            timer);
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(established::get, events::add, () -> delayed);
+    try (var worker = Executors.newSingleThreadExecutor()) {
+      var scheduling = worker.submit(coordinator::scheduleFallback);
+      try {
+        assertTrue(created.await(2, TimeUnit.SECONDS));
+        coordinator.close();
+        assertNull(coordinator.fallbackTask.get());
+        scheduler.advanceTimeBy(30, TimeUnit.SECONDS);
+        assertFalse(coordinator.syncObserved.get());
+        assertTrue(events.isEmpty());
+      } finally {
+        release.countDown();
+      }
+      scheduling.get(2, TimeUnit.SECONDS);
+    }
+    assertTrue(timer.get().isDisposed());
+    assertNull(coordinator.fallbackTask.get());
+  }
+
+  @Test
+  void fallbackCompletingBeforeSchedulingReturnsDetachesAndDisposesTheLateHandle() {
+    var timer = new AtomicReference<Disposable>();
+    Scheduler immediate =
+        duringRegistration(() -> scheduler.advanceTimeBy(3, TimeUnit.SECONDS), timer);
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(established::get, events::add, () -> immediate);
+    coordinator.scheduleFallback();
+    assertReadyPair();
+    assertTrue(timer.get().isDisposed());
+    assertNull(coordinator.fallbackTask.get());
+  }
+
+  @Test
+  void schedulerFailureDetachesOwnerAndPreservesTheOriginalErrorForRetry() {
+    var failed = new AtomicBoolean(true);
+    var error = new IllegalStateException("scheduler unavailable");
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            established::get,
+            events::add,
+            () -> {
+              if (failed.get()) throw error;
+              return scheduler;
+            });
+    assertSame(error, assertThrows(IllegalStateException.class, coordinator::scheduleFallback));
+    assertNull(coordinator.fallbackTask.get());
+    assertTrue(events.isEmpty());
+    failed.set(false);
+    coordinator.scheduleFallback();
+    scheduler.advanceTimeBy(3, TimeUnit.SECONDS);
+    assertReadyPair();
+  }
+
+  @Test
+  void reentrantSchedulingDoesNotCreateASecondTimer() {
+    var owner = new AtomicReference<QuasselCoreReadinessCoordinator>();
+    var resolutions = new AtomicInteger();
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            established::get,
+            events::add,
+            () -> {
+              if (resolutions.incrementAndGet() == 1) owner.get().scheduleFallback();
+              return scheduler;
+            });
+    owner.set(coordinator);
+    coordinator.scheduleFallback();
+    assertEquals(1, resolutions.get());
+    coordinator.close();
+    scheduler.advanceTimeBy(30, TimeUnit.SECONDS);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void closeDuringPhaseCheckPreventsReadinessPublication() {
+    var owner = new AtomicReference<QuasselCoreReadinessCoordinator>();
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            () -> {
+              owner.get().close();
+              return true;
+            },
+            events::add,
+            () -> scheduler);
+    owner.set(coordinator);
+    coordinator.observeSync();
+    coordinator.emitIfReady();
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void closeDuringTimerDisposalPreventsReadinessPublication() {
+    readiness.fallbackTask.set(Disposable.fromRunnable(readiness::close));
+    readiness.observeSync();
+    readiness.emitIfReady();
+    assertTrue(events.isEmpty());
+    assertNull(readiness.fallbackTask.get());
+  }
+
+  @Test
+  void closeFromReadyObserverSuppressesTheFollowingFeatureEvent() {
+    var owner = new AtomicReference<QuasselCoreReadinessCoordinator>();
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(
+            established::get,
+            event -> {
+              events.add(event);
+              owner.get().close();
+            },
+            () -> scheduler);
+    owner.set(coordinator);
+    coordinator.observeSync();
+    coordinator.emitIfReady();
+    assertEquals(1, events.size());
+    assertInstanceOf(IrcEvent.ConnectionReady.class, events.getFirst());
+  }
+
+  @Test
+  void lateHandleDisposalFailureDoesNotRestoreTheTimerOrFailScheduling() {
+    var owner = new AtomicReference<QuasselCoreReadinessCoordinator>();
+    var cancellations = new AtomicInteger();
+    Scheduler delayed =
+        new Scheduler() {
+          @Override
+          public Worker createWorker() {
+            return scheduler.createWorker();
+          }
+
+          @Override
+          public Disposable scheduleDirect(Runnable runnable, long delay, TimeUnit unit) {
+            owner.get().close();
+            return Disposable.fromRunnable(
+                () -> {
+                  cancellations.incrementAndGet();
+                  throw new IllegalStateException("late disposal failed");
+                });
+          }
+        };
+    var coordinator =
+        new QuasselCoreReadinessCoordinator(established::get, events::add, () -> delayed);
+    owner.set(coordinator);
+    assertDoesNotThrow(coordinator::scheduleFallback);
+    assertNull(coordinator.fallbackTask.get());
+    assertEquals(1, cancellations.get());
+    assertTrue(events.isEmpty());
+  }
+
+  private Scheduler duringRegistration(Runnable beforeReturn, AtomicReference<Disposable> timer) {
+    return new Scheduler() {
+      @Override
+      public Worker createWorker() {
+        return scheduler.createWorker();
+      }
+
+      @Override
+      public Disposable scheduleDirect(Runnable runnable, long delay, TimeUnit unit) {
+        Disposable task = scheduler.scheduleDirect(runnable, delay, unit);
+        timer.set(task);
+        beforeReturn.run();
+        return task;
+      }
+    };
   }
 
   private void assertReadyPair() {

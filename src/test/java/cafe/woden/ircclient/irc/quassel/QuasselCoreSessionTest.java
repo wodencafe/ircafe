@@ -253,6 +253,34 @@ class QuasselCoreSessionTest {
     else session.disposeReadLoopTask();
   }
 
+  @ParameterizedTest
+  @CsvSource({"false,false", "true,true", "true,false"})
+  void readinessRequiresSocketAndNoCloseRequest(boolean socketPresent, boolean closeRequested) {
+    session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+    if (socketPresent) session.socketRef.set(org.mockito.Mockito.mock(java.net.Socket.class));
+    session.closeRequested.set(closeRequested);
+    session.readiness.observeSync();
+    session.readiness.emitIfReady();
+    assertEquals(socketPresent && !closeRequested ? 2 : 0, events.size());
+  }
+
+  @Test
+  void lateAuthenticationInitializationDoesNotReopenClosedReadiness() {
+    session.readiness.close();
+    session.phase.set(QuasselSessionPhase.AUTHENTICATING);
+    session.initialize(
+        new QuasselCoreAuthHandshake.AuthResult("core", -1, List.of(), Map.of()),
+        id -> fail("no networks"),
+        info -> fail("no buffers"));
+    session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+    session.socketRef.set(org.mockito.Mockito.mock(java.net.Socket.class));
+    session.readiness.observeSync();
+    session.readiness.emitIfReady();
+    session.readiness.scheduleFallback();
+    assertTrue(events.isEmpty());
+    assertNull(session.readiness.fallbackTask.get());
+  }
+
   private static QuasselCoreDatastreamCodec.BufferInfoValue buffer(
       int id, int network, String name) {
     return new QuasselCoreDatastreamCodec.BufferInfoValue(id, network, 0x02, -1, name);

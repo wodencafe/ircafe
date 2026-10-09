@@ -1289,7 +1289,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void runReadLoop(QuasselCoreSession session) {
     String sid = session.serverId;
     Socket socket = session.socketRef.get();
-    if (socket == null) return;
+    if (socket == null) {
+      session.readiness.close();
+      return;
+    }
 
     try {
       readLoop.read(
@@ -1299,7 +1302,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           message -> handleSignalProxyMessage(session, message),
           failure -> handleReadFailure(session, failure));
     } finally {
-      session.readiness.cancelFallback();
+      session.readiness.close();
       closeQuietly(session.socketRef.getAndSet(null));
       sessions.remove(sid, session);
       if (session.closeRequested.get()) {
@@ -1311,6 +1314,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void handleReadFailure(QuasselCoreSession session, QuasselCoreReadLoop.Failure failure) {
+    session.readiness.close();
     String sid = session.serverId;
     String reason = failure.reason();
     availabilityReasonByServer.put(sid, reason);
@@ -2159,7 +2163,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.closeRequested.set(true);
     session.closeReason.set(normalizeDisconnectReason(reason));
 
-    session.readiness.cancelFallback();
+    session.readiness.close();
 
     session.disposeReadLoopTask();
 
@@ -2173,6 +2177,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private void emitDisconnectedOnce(QuasselCoreSession session, String reason) {
     if (session == null) return;
+    session.readiness.close();
     if (!session.disconnectedEmitted.compareAndSet(false, true)) return;
     bus.onNext(
         new ServerIrcEvent(
