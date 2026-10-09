@@ -1289,11 +1289,23 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     try {
+      QuasselCoreSignalProxyDispatcher dispatcher =
+          new QuasselCoreSignalProxyDispatcher(
+              session,
+              message -> handleRpcCall(session, message.slotName(), message.params()),
+              message ->
+                  handleSyncOrInitData(
+                      session,
+                      message.requestType(),
+                      message.className(),
+                      message.objectName(),
+                      message.slotName(),
+                      message.params()));
       readLoop.read(
           sid,
           socket,
           () -> shuttingDown.get() || session.closeRequested.get(),
-          message -> handleSignalProxyMessage(session, message),
+          dispatcher::dispatch,
           failure -> handleReadFailure(session, failure));
     } finally {
       session.readiness.close();
@@ -1318,63 +1330,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
-  }
-
-  private void handleSignalProxyMessage(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.SignalProxyMessage message)
-      throws Exception {
-    if (message == null) return;
-    int requestType = message.requestType();
-    log.debug(
-        "Quassel inbound signal: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
-        session == null ? "" : session.serverId,
-        requestType,
-        message.className(),
-        message.objectName(),
-        message.slotName(),
-        message.params() == null ? 0 : message.params().size());
-    if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT) {
-      handleHeartbeat(session, message.params());
-      return;
-    }
-    if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY) {
-      handleHeartbeatReply(session, message.params());
-      return;
-    }
-    if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL) {
-      handleRpcCall(session, message.slotName(), message.params());
-      return;
-    }
-    if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC
-        || requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA) {
-      session.readiness.observeSync();
-      handleSyncOrInitData(
-          session,
-          requestType,
-          message.className(),
-          message.objectName(),
-          message.slotName(),
-          message.params());
-      session.readiness.emitIfReady();
-    }
-  }
-
-  private void handleHeartbeat(QuasselCoreSession session, List<Object> params) throws Exception {
-    if (params == null || params.isEmpty()) return;
-    Object value = params.get(0);
-    if (!(value instanceof QuasselCoreDatastreamCodec.QtDateTimeValue timestamp)) return;
-
-    Socket socket = session.socketRef.get();
-    if (socket == null) return;
-    session.outbound.send(
-        socket,
-        (codec, out) -> {
-          codec.writeSignalProxyHeartBeatReply(out, timestamp);
-        });
-  }
-
-  private void handleHeartbeatReply(QuasselCoreSession session, List<Object> params) {
-    if (session != null) session.lag.observeReply(params);
   }
 
   private void handleRpcCall(QuasselCoreSession session, String slotName, List<Object> params) {
