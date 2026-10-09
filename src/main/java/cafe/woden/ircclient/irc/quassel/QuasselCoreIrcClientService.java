@@ -65,7 +65,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -104,7 +103,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final String FEATURE_PHASE_PREFIX = "quassel-phase=";
   private static final String FEATURE_DETAIL_PREFIX = ";detail=";
   private static final String PHASE_PROTOCOL_NEGOTIATED = "protocol-negotiated";
-  private static final String PHASE_SYNC_READY = "sync-ready";
   private static final String PHASE_SETUP_REQUIRED = "setup-required";
 
   private final FlowableProcessor<ServerIrcEvent> bus =
@@ -1260,16 +1258,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       }
       Disposable readTask = RxVirtualSchedulers.io().scheduleDirect(() -> runReadLoop(session));
       session.readLoopTask.set(readTask);
-      Disposable fallbackReadyTask =
-          RxVirtualSchedulers.io()
-              .scheduleDirect(
-                  () -> {
-                    session.syncObserved.compareAndSet(false, true);
-                    emitConnectionReadyIfNeeded(session);
-                  },
-                  3,
-                  TimeUnit.SECONDS);
-      session.readinessFallbackTask.set(fallbackReadyTask);
+      session.readiness.scheduleFallback();
     } catch (QuasselCoreAuthHandshake.CoreSetupRequiredException e) {
       closeQuietly(openedSocket);
       sessions.remove(sid, session);
@@ -1310,7 +1299,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           message -> handleSignalProxyMessage(session, message),
           failure -> handleReadFailure(session, failure));
     } finally {
-      session.disposeReadinessTask();
+      session.readiness.cancelFallback();
       closeQuietly(session.socketRef.getAndSet(null));
       sessions.remove(sid, session);
       if (session.closeRequested.get()) {
@@ -1360,7 +1349,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC
         || requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_DATA) {
-      session.syncObserved.set(true);
+      session.readiness.observeSync();
       handleSyncOrInitData(
           session,
           requestType,
@@ -1368,7 +1357,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           message.objectName(),
           message.slotName(),
           message.params());
-      emitConnectionReadyIfNeeded(session);
+      session.readiness.emitIfReady();
     }
   }
 
@@ -2165,24 +2154,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo,
       int limit) {}
 
-  private void emitConnectionReadyIfNeeded(QuasselCoreSession session) {
-    if (session == null) return;
-    if (session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) return;
-    if (!session.syncObserved.get()) return;
-    if (!session.connectionReadyEmitted.compareAndSet(false, true)) return;
-
-    session.disposeReadinessTask();
-
-    bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.ConnectionReady(Instant.now())));
-    emitConnectionPhase(session, PHASE_SYNC_READY, "quassel-sync");
-  }
-
   private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
     if (session == null) return;
     session.closeRequested.set(true);
     session.closeReason.set(normalizeDisconnectReason(reason));
 
-    session.disposeReadinessTask();
+    session.readiness.cancelFallback();
 
     session.disposeReadLoopTask();
 

@@ -55,8 +55,8 @@ class QuasselCoreSessionTest {
     session.networkCurrentNickByNetworkId.put(9, "old nick");
     session.features.observeCapabilities(9, Map.of("capsEnabled", List.of("message-tags")));
     session.nativeReadMarkerSupportObserved.set(true);
-    session.syncObserved.set(true);
-    session.connectionReadyEmitted.set(true);
+    session.readiness.syncObserved.set(true);
+    session.readiness.connectionReadyEmitted.set(true);
     session.reconnectScheduled.set(true);
     session.lag.observeReply(List.of(session.lag.beginProbe()));
     observations.clear();
@@ -94,8 +94,8 @@ class QuasselCoreSessionTest {
     assertNull(session.pendingReadMarkers.takeBufferForMessage(123));
     assertEquals("", session.networks.claimCreatedName());
     assertFalse(session.nativeReadMarkerSupportObserved.get());
-    assertFalse(session.syncObserved.get());
-    assertFalse(session.connectionReadyEmitted.get());
+    assertFalse(session.readiness.syncObserved.get());
+    assertFalse(session.readiness.connectionReadyEmitted.get());
     assertFalse(session.reconnectScheduled.get());
     assertTrue(session.lag.lastMeasuredLagMs().isEmpty());
     assertTrue(events.isEmpty());
@@ -219,37 +219,37 @@ class QuasselCoreSessionTest {
   @Test
   void concurrentTaskDisposalInvokesOnlyOneCancellation() throws Exception {
     var calls = new AtomicInteger();
-    session.readinessFallbackTask.set(Disposable.fromRunnable(calls::incrementAndGet));
+    session.readiness.fallbackTask.set(Disposable.fromRunnable(calls::incrementAndGet));
     var start = new CountDownLatch(1);
     try (var workers = Executors.newFixedThreadPool(2)) {
       var first =
           workers.submit(
               () -> {
                 start.await();
-                session.disposeReadinessTask();
+                session.readiness.cancelFallback();
                 return null;
               });
       var second =
           workers.submit(
               () -> {
                 start.await();
-                session.disposeReadinessTask();
+                session.readiness.cancelFallback();
                 return null;
               });
       start.countDown();
       first.get(2, TimeUnit.SECONDS);
       second.get(2, TimeUnit.SECONDS);
     }
-    assertNull(session.readinessFallbackTask.get());
+    assertNull(session.readiness.fallbackTask.get());
     assertEquals(1, calls.get());
   }
 
   private AtomicReference<Disposable> taskRef(String kind) {
-    return "readiness".equals(kind) ? session.readinessFallbackTask : session.readLoopTask;
+    return "readiness".equals(kind) ? session.readiness.fallbackTask : session.readLoopTask;
   }
 
   private void dispose(String kind) {
-    if ("readiness".equals(kind)) session.disposeReadinessTask();
+    if ("readiness".equals(kind)) session.readiness.cancelFallback();
     else session.disposeReadLoopTask();
   }
 

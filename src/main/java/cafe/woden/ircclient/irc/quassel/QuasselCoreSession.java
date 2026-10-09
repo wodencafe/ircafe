@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
 
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.net.Socket;
 import java.util.Map;
@@ -24,7 +25,6 @@ final class QuasselCoreSession {
 
   final AtomicReference<Socket> socketRef = new AtomicReference<>();
   final AtomicReference<Disposable> readLoopTask = new AtomicReference<>();
-  final AtomicReference<Disposable> readinessFallbackTask = new AtomicReference<>();
   final AtomicReference<QuasselCoreProtocolProbe.ProbeSelection> probeSelection =
       new AtomicReference<>();
   final AtomicReference<QuasselCoreAuthHandshake.AuthResult> authResult = new AtomicReference<>();
@@ -40,8 +40,7 @@ final class QuasselCoreSession {
   final QuasselCoreChannelMembership membership;
   final QuasselCoreLagTracker lag = new QuasselCoreLagTracker();
   final AtomicBoolean nativeReadMarkerSupportObserved = new AtomicBoolean(false);
-  final AtomicBoolean syncObserved = new AtomicBoolean(false);
-  final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);
+  final QuasselCoreReadinessCoordinator readiness;
   final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
   final QuasselCoreBacklogTranslator backlog = new QuasselCoreBacklogTranslator();
   final AtomicReference<QuasselSessionPhase> phase =
@@ -66,6 +65,11 @@ final class QuasselCoreSession {
     this.networkCommands =
         new QuasselCoreNetworkCommandSender(serverId, nick, socketRef::get, outbound);
     this.membership = new QuasselCoreChannelMembership(eventObserved);
+    this.readiness =
+        new QuasselCoreReadinessCoordinator(
+            () -> phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED,
+            eventObserved,
+            RxVirtualSchedulers::io);
     this.features = new QuasselCoreFeatureState(MAX_NETWORK_IDENTITIES_PER_SESSION, eventObserved);
     this.identities =
         new QuasselCoreIdentityState(
@@ -112,8 +116,7 @@ final class QuasselCoreSession {
     }
     trimMapToMaxSize(networkCurrentNickByNetworkId, MAX_NETWORK_NICKS_PER_SESSION);
     lag.clear();
-    syncObserved.set(false);
-    connectionReadyEmitted.set(false);
+    readiness.resetObservations();
     reconnectScheduled.set(false);
   }
 
@@ -129,10 +132,6 @@ final class QuasselCoreSession {
     identities.clear();
     networkCurrentNickByNetworkId.clear();
     features.clear();
-  }
-
-  void disposeReadinessTask() {
-    disposeTask(readinessFallbackTask);
   }
 
   void disposeReadLoopTask() {
