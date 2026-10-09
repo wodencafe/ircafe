@@ -9,7 +9,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.serverResp
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSession.MAX_NETWORK_NICKS_PER_SESSION;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.parseQualifiedTarget;
@@ -1289,18 +1288,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     try {
+      QuasselCoreSyncDispatcher sync = syncDispatcher(session);
       QuasselCoreSignalProxyDispatcher dispatcher =
           new QuasselCoreSignalProxyDispatcher(
               session,
               message -> handleRpcCall(session, message.slotName(), message.params()),
-              message ->
-                  handleSyncOrInitData(
-                      session,
-                      message.requestType(),
-                      message.className(),
-                      message.objectName(),
-                      message.slotName(),
-                      message.params()));
+              sync::dispatch);
       readLoop.read(
           sid,
           socket,
@@ -1417,111 +1410,41 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     emitServerResponseLine(serverId, Instant.now(), messageLine, rawLine, "", Map.of());
   }
 
-  private void handleSyncOrInitData(
-      QuasselCoreSession session,
-      int requestType,
-      String className,
-      String objectName,
-      String slotName,
-      List<Object> params) {
-    String classToken = Objects.toString(className, "").trim();
-    String slotToken = Objects.toString(slotName, "").trim();
-    List<Object> values = params == null ? List.of() : params;
-    log.debug(
-        "Received Quassel sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
-        session == null ? "" : session.serverId,
-        requestType,
-        classToken,
-        objectName,
-        slotToken,
-        values.size());
-    if (classToken.toLowerCase(Locale.ROOT).contains("network")) {
-      log.debug(
-          "Received network-related sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, params={}",
-          session == null ? "" : session.serverId,
-          requestType,
-          classToken,
-          objectName,
-          slotToken,
-          values);
-    }
+  private QuasselCoreSyncDispatcher syncDispatcher(QuasselCoreSession session) {
+    return new QuasselCoreSyncDispatcher(
+        session,
+        networkSyncTranslator(session),
+        new QuasselCoreSyncDispatcher.SessionPort() {
+          @Override
+          public void applyBufferInfoSnapshot(List<Object> values) {
+            QuasselCoreIrcClientService.this.applyBufferInfoSnapshot(session, values);
+          }
 
-    if ("BufferSyncer".equals(classToken)) {
-      if (session.nativeReadMarkerSupportObserved.compareAndSet(false, true)) {
-        bus.onNext(
-            new ServerIrcEvent(
-                session.serverId,
-                new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "quassel-buffer-syncer")));
-      }
-      applyBufferInfoSnapshot(session, values);
-      handleBufferSyncerSync(session, slotToken, values);
-      return;
-    }
+          @Override
+          public void observeReadMarkers(String slotName, List<Object> values) {
+            handleBufferSyncerSync(session, slotName, values);
+          }
 
-    if ("BufferViewConfig".equals(classToken)) {
-      applyBufferInfoSnapshot(session, values);
-      return;
-    }
+          @Override
+          public void receiveBacklog(List<Object> values) {
+            handleBacklogSync(session, values);
+          }
 
-    if ("BacklogManager".equals(classToken)
-        && requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC
-        && slotToken.contains("receiveBacklog")) {
-      handleBacklogSync(session, values);
-      return;
-    }
+          @Override
+          public void observeNetwork(int networkId, String name) {
+            observeKnownNetwork(session, networkId, name);
+          }
 
-    if ("CoreInfo".equals(classToken)) {
-      session.identities.handleCoreInfoSync(objectName, slotToken, values);
-      return;
-    }
+          @Override
+          public String qualifyTarget(String target, int networkId) {
+            return qualifyTargetForNetwork(session, target, networkId);
+          }
 
-    if ("Identity".equals(classToken)) {
-      session.identities.handleSync(objectName, values);
-      return;
-    }
-
-    if ("Network".equals(classToken)) {
-      QuasselCoreNetworkSyncTranslator translator = networkSyncTranslator(session);
-      translator.handleProperty(objectName, slotToken, values);
-      observeChannelMembershipFromNetworkSync(session, objectName, slotToken, values);
-      translator.observeNetworkState(objectName, values);
-      translator.observeUnknownState(classToken, objectName, slotToken, values);
-      return;
-    }
-
-    if ("IrcUser".equals(classToken)) {
-      QuasselCoreStateSyncTranslator.userState(
-          Instant.now(),
-          objectName,
-          values,
-          (networkId, networkName) -> observeKnownNetwork(session, networkId, networkName),
-          event -> bus.onNext(new ServerIrcEvent(session.serverId, event)));
-      return;
-    }
-
-    if ("IrcChannel".equals(classToken)) {
-      QuasselCoreStateSyncTranslator.channelState(
-          Instant.now(),
-          objectName,
-          values,
-          (networkId, networkName) -> observeKnownNetwork(session, networkId, networkName),
-          (target, networkId) -> qualifyTargetForNetwork(session, target, networkId),
-          event -> bus.onNext(new ServerIrcEvent(session.serverId, event)));
-      return;
-    }
-
-    if ("NetworkInfo".equals(classToken)) {
-      networkSyncTranslator(session).observeNetworkInfo(objectName, values);
-      return;
-    }
-
-    if (classToken.toLowerCase(Locale.ROOT).contains("identity")) {
-      session.identities.observeUnknownState(
-          values, parseNetworkId(objectName), classToken, objectName, slotToken);
-    }
-    if (classToken.toLowerCase(Locale.ROOT).contains("network")) {
-      networkSyncTranslator(session).observeUnknownState(classToken, objectName, slotToken, values);
-    }
+          @Override
+          public void emit(IrcEvent event) {
+            bus.onNext(new ServerIrcEvent(session.serverId, event));
+          }
+        });
   }
 
   private QuasselCoreNetworkSyncTranslator networkSyncTranslator(QuasselCoreSession session) {
@@ -1537,16 +1460,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     observeNetworkStateSnapshot(session, networkId, state);
     observeNetworkCapabilities(session, networkId, state);
     observeNetworkMonitorSupport(session, networkId, state);
-  }
-
-  private void observeChannelMembershipFromNetworkSync(
-      QuasselCoreSession session, String objectName, String slotName, List<Object> values) {
-    if (session == null) return;
-    session.membership.observeNetworkLifecycle(
-        objectName,
-        slotName,
-        values,
-        (channel, networkId) -> qualifyTargetForNetwork(session, channel, networkId));
   }
 
   private void applyBufferInfoSnapshot(QuasselCoreSession session, List<Object> values) {
