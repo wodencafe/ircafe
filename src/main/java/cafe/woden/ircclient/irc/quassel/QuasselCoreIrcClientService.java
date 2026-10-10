@@ -1,8 +1,6 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreBacklogTranslator.isHistoryTextMessage;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.extractNick;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreHistorySupport.UNKNOWN_MSG_ID;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
@@ -55,8 +53,6 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
@@ -80,7 +76,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
   private static final int BUFFER_QUERY = 0x04;
-  private static final int MESSAGE_FLAG_BACKLOG = 0x80;
   private static final String SYNC_CONNECT_NETWORK_SLOT = "requestConnect";
   private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
@@ -111,7 +106,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
-  private final QuasselCoreIrcv3InboundTranslator inboundTranslator;
   private final QuasselCoreTargetResolver targets;
 
   @Autowired
@@ -148,7 +142,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
-    this.inboundTranslator = new QuasselCoreIrcv3InboundTranslator(ircv3RuntimeSupport);
     this.targets =
         new QuasselCoreTargetResolver(
             new QuasselCoreTargetResolver.SessionPort() {
@@ -1162,7 +1155,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     try {
       QuasselCoreReadMarkerCoordinator markers = readMarkerCoordinator(session);
       QuasselCoreSyncDispatcher sync = syncDispatcher(session, markers);
-      QuasselCoreRpcDispatcher rpc = rpcDispatcher(session, markers);
+      QuasselCoreRpcDispatcher rpc = rpcDispatcher(session, inboundCoordinator(session, markers));
       QuasselCoreSignalProxyDispatcher dispatcher =
           new QuasselCoreSignalProxyDispatcher(session, rpc::dispatch, sync::dispatch);
       readLoop.read(
@@ -1196,8 +1189,49 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     scheduleReconnectIfEligible(session, reason);
   }
 
-  private QuasselCoreRpcDispatcher rpcDispatcher(
+  private QuasselCoreInboundMessageCoordinator inboundCoordinator(
       QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers) {
+    return new QuasselCoreInboundMessageCoordinator(
+        session,
+        markers,
+        targets,
+        ircv3RuntimeSupport,
+        new QuasselCoreInboundMessageCoordinator.SessionPort() {
+          @Override
+          public QuasselCoreDatastreamCodec.BufferInfoValue resolveBuffer(
+              QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
+            return resolveBufferInfo(session, incoming);
+          }
+
+          @Override
+          public String currentNick(int networkId) {
+            return currentNickForNetwork(session, networkId);
+          }
+
+          @Override
+          public boolean isSelfNick(String nick, int networkId) {
+            return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
+          }
+
+          @Override
+          public void observeTargetNetwork(String target, int networkId) {
+            noteTargetNetworkHint(session, target, networkId, true);
+          }
+
+          @Override
+          public void observeNick(int networkId, Instant at, String nick) {
+            observeCurrentNick(session, networkId, nick, at);
+          }
+
+          @Override
+          public void emit(IrcEvent event) {
+            bus.onNext(new ServerIrcEvent(session.serverId, event));
+          }
+        });
+  }
+
+  private QuasselCoreRpcDispatcher rpcDispatcher(
+      QuasselCoreSession session, QuasselCoreInboundMessageCoordinator inbound) {
     QuasselCoreNetworkLifecycleTranslator networks =
         new QuasselCoreNetworkLifecycleTranslator(
             session.serverId,
@@ -1211,7 +1245,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         new QuasselCoreRpcDispatcher.SessionPort() {
           @Override
           public void displayMessage(QuasselCoreDatastreamCodec.MessageValue message) {
-            handleDisplayMessage(session, markers, message);
+            inbound.handle(message);
           }
 
           @Override
@@ -1380,137 +1414,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
   }
 
-  private void handleDisplayMessage(
-      QuasselCoreSession session,
-      QuasselCoreReadMarkerCoordinator markers,
-      QuasselCoreDatastreamCodec.MessageValue message) {
-    if (message == null) return;
-
-    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-        resolveBufferInfo(session, message.bufferInfo());
-    Instant at =
-        message.timestampEpochSeconds() > 0
-            ? Instant.ofEpochSecond(message.timestampEpochSeconds())
-            : Instant.now();
-    String messageId = message.messageId() > 0 ? Long.toString(message.messageId()) : "";
-    String senderHostmask = Objects.toString(message.sender(), "").trim();
-    String from = extractNick(senderHostmask);
-    int networkId = bufferInfo == null ? -1 : bufferInfo.networkId();
-    String fromDisplay = from.isEmpty() ? currentNickForNetwork(session, networkId) : from;
-    String content = Objects.toString(message.content(), "");
-    QuasselCoreIrcEnvelope ircEnvelope = QuasselCoreIrcEnvelope.parse(content, ircv3RuntimeSupport);
-    Map<String, String> ircv3Tags = ircEnvelope.ircv3Tags();
-    String payloadText = ircEnvelope.payloadText(content);
-    String target = targets.targetForBuffer(session, bufferInfo, fromDisplay);
-    String historyTarget = targets.targetForBuffer(session, bufferInfo, fromDisplay);
-    int historyNetworkId = networkId;
-    noteTargetNetworkHint(session, historyTarget, historyNetworkId, true);
-    markers.observeHistory(historyTarget, message.messageId(), at);
-    int typeBits = message.typeBits();
-    String fallbackSignalTarget = target;
-    Function<String, String> resolveSignalTarget =
-        rawTarget ->
-            targets.signalTarget(session, fromDisplay, fallbackSignalTarget, networkId, rawTarget);
-    Consumer<IrcEvent> emit = event -> bus.onNext(new ServerIrcEvent(session.serverId, event));
-    QuasselCoreIrcv3InboundTranslator.Observation observation =
-        new QuasselCoreIrcv3InboundTranslator.Observation(at, fromDisplay, ircEnvelope, messageId);
-    inboundTranslator.observeTags(observation, resolveSignalTarget, emit);
-
-    String envelopeCommand = ircEnvelope.command();
-    if ("CAP".equals(envelopeCommand)) {
-      emitCapabilityChangesFromCapLine(session, at, networkId, ircEnvelope);
-    }
-    if (inboundTranslator.handleCommand(observation, resolveSignalTarget, emit)) {
-      return;
-    }
-    if ("TAGMSG".equals(envelopeCommand) && payloadText.isBlank()) {
-      return;
-    }
-
-    if (inboundTranslator.handleMonitor(
-        at,
-        content,
-        support -> {
-          int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-          session.features.observeMonitor(resolvedNetworkId, support.supported(), support.limit());
-        },
-        emit)) {
-      return;
-    }
-
-    if (isBacklogMessage(message.flags()) && isHistoryTextMessage(typeBits)) {
-      emitBacklogHistoryBatch(session, at, target, message, messageId);
-      return;
-    }
-
-    QuasselCoreDisplayMessageTranslator.translate(
-        new QuasselCoreDisplayMessageTranslator.Observation(
-            at,
-            bufferInfo,
-            target,
-            fromDisplay,
-            senderHostmask,
-            payloadText,
-            messageId,
-            ircv3Tags,
-            message),
-        new QuasselCoreDisplayMessageTranslator.SessionPort() {
-          @Override
-          public boolean isSelfNick(String nick) {
-            return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
-          }
-
-          @Override
-          public String currentNick() {
-            return currentNickForNetwork(session, networkId);
-          }
-
-          @Override
-          public String queryTarget() {
-            return targets.targetForBuffer(session, bufferInfo, fromDisplay);
-          }
-
-          @Override
-          public void observeJoin(Instant joinedAt, String channel) {
-            session.membership.observeJoin(joinedAt, channel, networkId);
-          }
-
-          @Override
-          public void leave(String channel) {
-            session.membership.leave(channel, networkId);
-          }
-
-          @Override
-          public void observeNick(Instant changedAt, String nick) {
-            observeCurrentNick(session, networkId, nick, changedAt);
-          }
-        },
-        emit);
-  }
-
-  private void emitCapabilityChangesFromCapLine(
-      QuasselCoreSession session, Instant at, int networkId, QuasselCoreIrcEnvelope envelope) {
-    if (session == null) return;
-    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    session.features.observeCapLine(at, resolvedNetworkId, envelope);
-  }
-
-  private void emitBacklogHistoryBatch(
-      QuasselCoreSession session,
-      Instant at,
-      String targetFromBuffer,
-      QuasselCoreDatastreamCodec.MessageValue message,
-      String messageId) {
-    IrcEvent.ChatHistoryBatchReceived batch =
-        session.backlog.display(
-            at,
-            targetFromBuffer,
-            message,
-            messageId,
-            (info, from) -> targets.targetForBuffer(session, info, from));
-    if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
-  }
-
   private QuasselCoreDatastreamCodec.BufferInfoValue resolveBufferInfo(
       QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
     if (incoming == null) {
@@ -1536,10 +1439,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static boolean isChannelBuffer(QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
     if (bufferInfo == null) return false;
     return (bufferInfo.typeBits() & BUFFER_CHANNEL) != 0;
-  }
-
-  private static boolean isBacklogMessage(int flags) {
-    return (flags & MESSAGE_FLAG_BACKLOG) != 0;
   }
 
   private static String currentNickForPrimaryNetwork(QuasselCoreSession session) {

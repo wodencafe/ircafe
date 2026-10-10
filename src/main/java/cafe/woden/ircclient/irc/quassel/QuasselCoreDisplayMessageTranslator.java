@@ -38,7 +38,10 @@ final class QuasselCoreDisplayMessageTranslator {
 
   private QuasselCoreDisplayMessageTranslator() {}
 
-  /** Values prepared by the service after routing, IRCv3 interception, and backlog handling. */
+  /**
+   * Values prepared by the inbound coordinator after routing, IRCv3 interception, and backlog
+   * handling.
+   */
   record Observation(
       Instant at,
       BufferInfoValue bufferInfo,
