@@ -52,7 +52,7 @@ class QuasselCoreSessionTest {
     session.buffers.merge(buffer(99, 9, "#old"));
     session.pendingReadMarkers.defer(99, 123);
     session.targetNetworkHints.observe("#same", 9);
-    session.networkCurrentNickByNetworkId.put(9, "old nick");
+    session.nicks.observe(9, "old nick", Instant.now());
     session.features.observeCapabilities(9, Map.of("capsEnabled", List.of("message-tags")));
     session.nativeReadMarkerSupportObserved.set(true);
     session.readiness.syncObserved.set(true);
@@ -72,7 +72,7 @@ class QuasselCoreSessionTest {
           observations.add("network:" + id);
         },
         info -> {
-          assertEquals("alice", session.networkCurrentNickByNetworkId.get(2));
+          assertEquals("alice", session.nicks.forNetwork(2));
           assertEquals(
               "network-" + info.networkId(), session.networks.displayNames().get(info.networkId()));
           session.targetNetworkHints.seed(
@@ -89,7 +89,9 @@ class QuasselCoreSessionTest {
     }
     assertEquals(Set.of(1, 2), session.networks.knownIds(auth, session.buffers.values()));
     assertEquals(Set.of(42), session.identities.knownIds());
-    assertEquals(Map.of(2, "alice"), session.networkCurrentNickByNetworkId);
+    assertEquals("alice", session.nicks.current());
+    assertEquals("old nick", session.nicks.lastObservedNick());
+    assertEquals("alice", session.nicks.forNetwork(9));
     assertEquals(2, session.targetNetworkHints.networkIdForTarget("#same"));
     assertNull(session.pendingReadMarkers.takeBufferForMessage(123));
     assertEquals("", session.networks.claimCreatedName());
@@ -106,14 +108,20 @@ class QuasselCoreSessionTest {
   @CsvSource({"2,2", "-1,1", "99,1"})
   void initializationSeedsNickForTheResolvedPrimaryNetwork(int primary, int resolved) {
     var auth = new QuasselCoreAuthHandshake.AuthResult("core", primary, List.of(1, 2), Map.of());
+    session.nicks.observe(-1, "fallback", Instant.now());
+    events.clear();
     session.initialize(auth, id -> session.networks.observe(id, ""), info -> fail("no buffers"));
-    assertEquals(Map.of(resolved, "alice"), session.networkCurrentNickByNetworkId);
+    assertEquals("alice", session.nicks.forNetwork(resolved));
+    assertEquals("alice", session.nicks.current());
+    assertEquals("fallback", session.nicks.lastObservedNick());
+    assertTrue(events.isEmpty());
   }
 
   @Test
   void initializationCanDiscoverNetworkFromBufferWhenAuthNetworkListIsEmpty() {
     var info = buffer(11, 3, "#buffer-only");
     var auth = new QuasselCoreAuthHandshake.AuthResult("core", -1, List.of(), Map.of(11, info));
+    session.nicks.observe(-1, "fallback", Instant.now());
     session.initialize(
         auth,
         id -> session.networks.observe(id, ""),
@@ -124,7 +132,8 @@ class QuasselCoreSessionTest {
               seed.networkId(),
               () -> session.networks.firstKnownNetworkId(auth, session.buffers.values()));
         });
-    assertEquals(Map.of(3, "alice"), session.networkCurrentNickByNetworkId);
+    assertEquals("alice", session.nicks.current());
+    assertEquals("fallback", session.nicks.lastObservedNick());
     assertEquals("network-3", session.networks.displayNames().get(3));
     assertEquals(3, session.targetNetworkHints.networkIdForTarget("#buffer-only"));
   }
@@ -143,7 +152,9 @@ class QuasselCoreSessionTest {
     session.history.observe("#same", 100, Instant.ofEpochSecond(1_700_000_000L));
     session.targetNetworkHints.observe("#same", 2);
     session.membership.observeJoin(Instant.now(), "#same", 2);
-    session.networkCurrentNickByNetworkId.put(2, "alice");
+    session.nicks.observe(2, "workNick", Instant.now());
+    session.nicks.observe(-1, "fallback", Instant.now());
+    assertEquals("workNick", session.nicks.forNetwork(2));
     session.features.observeCapabilities(2, Map.of("capsEnabled", List.of("message-tags")));
     session.features.observeMonitor(2, true, 10);
     session.lag.observeReply(List.of(session.lag.beginProbe()));
@@ -163,7 +174,8 @@ class QuasselCoreSessionTest {
     assertEquals("", session.networks.claimCreatedName());
     assertEquals(Set.of(2), session.networks.knownIds(auth, session.buffers.values()));
     assertTrue(session.identities.knownIds().isEmpty());
-    assertTrue(session.networkCurrentNickByNetworkId.isEmpty());
+    assertEquals("fallback", session.nicks.forNetwork(2));
+    assertEquals("fallback", session.nicks.lastObservedNick());
     assertFalse(session.features.hasObservedCapabilities());
     assertFalse(session.features.hasMonitorState());
     assertFalse(session.nativeReadMarkerSupportObserved.get());

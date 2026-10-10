@@ -6,6 +6,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.BufferInfoValue;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -25,6 +26,7 @@ class QuasselCoreReadMarkerCoordinatorTest {
   private String targetFrom;
   private RuntimeException hintFailure;
   private RuntimeException emitFailure;
+  private final Map<Integer, String> networkNicks = new HashMap<>();
   private final QuasselCoreSession session =
       new QuasselCoreSession(
           "core",
@@ -40,8 +42,7 @@ class QuasselCoreReadMarkerCoordinatorTest {
           new QuasselCoreReadMarkerCoordinator.SessionPort() {
             @Override
             public String currentNick(int networkId) {
-              return session.networkCurrentNickByNetworkId.getOrDefault(
-                  networkId, session.currentNick.get());
+              return networkNicks.getOrDefault(networkId, "alice");
             }
 
             @Override
@@ -145,12 +146,12 @@ class QuasselCoreReadMarkerCoordinatorTest {
   @Test
   void markerUsesNetworkNickAndFallsBackToServerWhenBlank() {
     session.buffers.merge(buffer(11, 7, "#room"));
-    session.networkCurrentNickByNetworkId.put(7, "workNick");
+    networkNicks.put(7, "workNick");
     session.history.observe(TARGET, 42, MESSAGE_AT);
     coordinator.observeSync("setMarkerLine", List.of(11, 42));
     assertMarker(events.getFirst(), TARGET, "workNick", MESSAGE_AT);
     assertEquals("workNick", targetFrom);
-    session.networkCurrentNickByNetworkId.put(7, " ");
+    networkNicks.put(7, " ");
     coordinator.observeSync("setMarkerLine", List.of(11, 42));
     assertMarker(events.getLast(), TARGET, "server", MESSAGE_AT);
     assertEquals("server", targetFrom);

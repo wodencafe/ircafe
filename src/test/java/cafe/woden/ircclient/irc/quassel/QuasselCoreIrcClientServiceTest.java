@@ -257,7 +257,8 @@ class QuasselCoreIrcClientServiceTest {
       connectAndAwaitEstablishedSession(service, events);
       var fresh = assertInstanceOf(QuasselCoreSession.class, sessions.get("quassel"));
       assertTrue(old != fresh);
-      assertEquals(Map.of(2, "quassel"), fresh.networkCurrentNickByNetworkId);
+      assertEquals("quassel", fresh.nicks.current());
+      assertEquals("quassel", fresh.nicks.forNetwork(2));
       assertEquals(2, fresh.targetNetworkHints.networkIdForTarget("#same"));
       assertFalse(service.isMessageTagsAvailable("quassel"));
       assertEquals(-1, fresh.history.timestampForMsgId("#same", 100));

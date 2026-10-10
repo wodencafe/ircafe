@@ -5,10 +5,8 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeC
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreSession.MAX_NETWORK_NICKS_PER_SESSION;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -147,7 +145,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
               @Override
               public boolean isSelfNick(QuasselCoreSession session, String nick, int networkId) {
-                return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
+                return session.nicks.isSelf(nick, networkId);
               }
             });
     this.inputs =
@@ -196,7 +194,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   public Optional<String> currentNick(String serverId) {
     QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
     if (session == null || session.socketRef.get() == null) return Optional.empty();
-    String nick = currentNickForPrimaryNetwork(session);
+    String nick = session.nicks.current();
     return nick.isEmpty() ? Optional.empty() : Optional.of(nick);
   }
 
@@ -986,7 +984,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                   Instant.now(),
                   session.connectedHost,
                   session.connectedPort,
-                  Objects.toString(session.currentNick.get(), ""))));
+                  session.nicks.lastObservedNick())));
 
       session.probeSelection.set(probe);
       session.phase.set(QuasselSessionPhase.PROTOCOL_NEGOTIATED);
@@ -1099,12 +1097,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
           @Override
           public String currentNick(int networkId) {
-            return currentNickForNetwork(session, networkId);
+            return session.nicks.forNetwork(networkId);
           }
 
           @Override
           public boolean isSelfNick(String nick, int networkId) {
-            return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
+            return session.nicks.isSelf(nick, networkId);
           }
 
           @Override
@@ -1114,7 +1112,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
           @Override
           public void observeNick(int networkId, Instant at, String nick) {
-            observeCurrentNick(session, networkId, nick, at);
+            session.nicks.observe(networkId, nick, at);
           }
 
           @Override
@@ -1198,7 +1196,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         (networkId, name) -> observeKnownNetwork(session, networkId, name),
         (networkId, state) -> observeNetworkStateSnapshot(session, networkId, state),
         (networkId, state) -> observeFullNetworkState(session, networkId, state),
-        (networkId, nick) -> observeCurrentNick(session, networkId, nick, Instant.now()));
+        (networkId, nick) -> session.nicks.observe(networkId, nick, Instant.now()));
   }
 
   private void observeFullNetworkState(QuasselCoreSession session, int networkId, Map<?, ?> state) {
@@ -1254,7 +1252,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         new QuasselCoreReadMarkerCoordinator.SessionPort() {
           @Override
           public String currentNick(int networkId) {
-            return currentNickForNetwork(session, networkId);
+            return session.nicks.forNetwork(networkId);
           }
 
           @Override
@@ -1335,49 +1333,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return (bufferInfo.typeBits() & BUFFER_CHANNEL) != 0;
   }
 
-  private static String currentNickForPrimaryNetwork(QuasselCoreSession session) {
-    if (session == null) return "";
-    int primary = primaryNetworkId(session);
-    if (primary >= 0) {
-      String byNetwork =
-          Objects.toString(session.networkCurrentNickByNetworkId.get(primary), "").trim();
-      if (!byNetwork.isEmpty()) return byNetwork;
-    }
-    return Objects.toString(session.currentNick.get(), "").trim();
-  }
-
-  private static String currentNickForNetwork(QuasselCoreSession session, int networkId) {
-    if (session == null) return "";
-    if (networkId >= 0) {
-      String byNetwork =
-          Objects.toString(session.networkCurrentNickByNetworkId.get(networkId), "").trim();
-      if (!byNetwork.isEmpty()) return byNetwork;
-    }
-    return currentNickForPrimaryNetwork(session);
-  }
-
-  private void observeCurrentNick(
-      QuasselCoreSession session, int networkId, String nextNick, Instant at) {
-    if (session == null) return;
-    String next = Objects.toString(nextNick, "").trim();
-    if (next.isEmpty()) return;
-
-    if (networkId >= 0) {
-      session.networkCurrentNickByNetworkId.put(networkId, next);
-      trimMapToMaxSize(session.networkCurrentNickByNetworkId, MAX_NETWORK_NICKS_PER_SESSION);
-    }
-
-    int primaryNetworkId = primaryNetworkId(session);
-    if (networkId >= 0 && primaryNetworkId >= 0 && networkId != primaryNetworkId) {
-      return;
-    }
-
-    String oldNick = Objects.toString(session.currentNick.getAndSet(next), "").trim();
-    if (!oldNick.isEmpty() && !oldNick.equalsIgnoreCase(next)) {
-      bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.NickChanged(at, oldNick, next)));
-    }
-  }
-
   private static int primaryNetworkId(QuasselCoreSession session) {
     return session == null
         ? -1
@@ -1393,7 +1348,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private void forgetKnownNetwork(QuasselCoreSession session, int networkId) {
     if (session == null || networkId < 0) return;
     session.networks.forget(networkId);
-    session.networkCurrentNickByNetworkId.remove(networkId);
+    session.nicks.forgetNetwork(networkId);
     session.features.removeNetwork(networkId);
     session.buffers.forgetNetwork(networkId, session.pendingReadMarkers::forgetBuffer);
     session.targetNetworkHints.forgetNetwork(networkId);
@@ -1493,20 +1448,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           session.networks.stateIds());
     }
     return 1;
-  }
-
-  private static boolean isSelfNick(QuasselCoreSession session, String nick, int networkId) {
-    String candidate = Objects.toString(nick, "").trim();
-    if (candidate.isEmpty()) return false;
-    if (networkId >= 0) {
-      String perNetwork =
-          Objects.toString(session.networkCurrentNickByNetworkId.get(networkId), "").trim();
-      if (!perNetwork.isEmpty() && perNetwork.equalsIgnoreCase(candidate)) {
-        return true;
-      }
-    }
-    String known = currentNickForPrimaryNetwork(session);
-    return !known.isEmpty() && known.equalsIgnoreCase(candidate);
   }
 
   private record HistoryRequestContext(

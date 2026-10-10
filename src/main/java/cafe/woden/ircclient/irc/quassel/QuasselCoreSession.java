@@ -1,14 +1,10 @@
 package cafe.woden.ircclient.irc.quassel;
 
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
-
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.net.Socket;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -16,7 +12,6 @@ import java.util.function.IntConsumer;
 
 /** Owns one Core session's bounded observations and background task handles. */
 final class QuasselCoreSession {
-  static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
   final String serverId;
   final String initialNick;
@@ -28,8 +23,7 @@ final class QuasselCoreSession {
   final AtomicReference<QuasselCoreProtocolProbe.ProbeSelection> probeSelection =
       new AtomicReference<>();
   final AtomicReference<QuasselCoreAuthHandshake.AuthResult> authResult = new AtomicReference<>();
-  final AtomicReference<String> currentNick = new AtomicReference<>("");
-  final Map<Integer, String> networkCurrentNickByNetworkId = new ConcurrentHashMap<>();
+  final QuasselCoreNickState nicks;
   final QuasselCoreNetworkCatalog networks;
   final QuasselCoreIdentityState identities;
   final QuasselCoreFeatureState features;
@@ -82,7 +76,11 @@ final class QuasselCoreSession {
             MAX_NETWORK_IDENTITIES_PER_SESSION, identityId -> identities.observe(identityId, ""));
     this.serverId = serverId;
     this.initialNick = nick;
-    this.currentNick.set(nick);
+    this.nicks =
+        new QuasselCoreNickState(
+            nick,
+            () -> networks.primaryNetworkId(authResult.get(), buffers.values()),
+            eventObserved);
     this.connectedHost = Objects.toString(connectedHost, "").trim();
     this.connectedPort = connectedPort;
   }
@@ -100,7 +98,7 @@ final class QuasselCoreSession {
     targetNetworkHints.clear();
     networks.reset();
     identities.clear();
-    networkCurrentNickByNetworkId.clear();
+    nicks.clear();
     features.clear();
     if (auth.networkIds() != null) {
       for (Integer id : auth.networkIds()) {
@@ -109,15 +107,12 @@ final class QuasselCoreSession {
     }
     identities.initialize(auth.initialIdentities());
     int primaryNetworkId = networks.primaryNetworkId(auth, buffers.values());
-    if (primaryNetworkId >= 0) {
-      networkCurrentNickByNetworkId.put(primaryNetworkId, initialNick);
-    }
+    nicks.seedPrimaryNetwork(primaryNetworkId);
     for (QuasselCoreDatastreamCodec.BufferInfoValue initial : buffers.values()) {
       if (initial == null) continue;
       observeNetwork.accept(initial.networkId());
       seedBufferHint.accept(initial);
     }
-    trimMapToMaxSize(networkCurrentNickByNetworkId, MAX_NETWORK_NICKS_PER_SESSION);
     lag.clear();
     readiness.resetObservations();
     reconnectScheduled.set(false);
@@ -133,7 +128,7 @@ final class QuasselCoreSession {
     membership.clear();
     networks.clearMetadata();
     identities.clear();
-    networkCurrentNickByNetworkId.clear();
+    nicks.clear();
     features.clear();
   }
 

@@ -15,6 +15,7 @@ import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.BufferInfoVal
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.MessageValue;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,6 +33,7 @@ class QuasselCoreInboundMessageCoordinatorTest {
   private final List<String> calls = new ArrayList<>();
   private Consumer<IrcEvent> onEmit = event -> {};
   private RuntimeException hintFailure;
+  private final Map<Integer, String> networkNicks = new HashMap<>();
   private final QuasselCoreSession session =
       new QuasselCoreSession(
           "core",
@@ -126,7 +128,7 @@ class QuasselCoreInboundMessageCoordinatorTest {
           public void observeNick(int networkId, Instant at, String nick) {
             assertEquals(AT, at);
             calls.add("nick:" + networkId + ":" + nick);
-            session.networkCurrentNickByNetworkId.put(networkId, nick);
+            networkNicks.put(networkId, nick);
           }
 
           @Override
@@ -141,12 +143,12 @@ class QuasselCoreInboundMessageCoordinatorTest {
         new QuasselCoreAuthHandshake.AuthResult("core", 7, List.of(7, 8), Map.of()));
     session.networks.observe(7, "Home");
     session.networks.observe(8, "Work");
-    session.networkCurrentNickByNetworkId.put(8, "me-work");
+    networkNicks.put(8, "me-work");
     session.buffers.merge(BUFFER);
   }
 
   private String currentNick(int networkId) {
-    return session.networkCurrentNickByNetworkId.getOrDefault(networkId, session.currentNick.get());
+    return networkNicks.getOrDefault(networkId, "me");
   }
 
   private void observeHint(String target, int networkId) {
@@ -392,8 +394,8 @@ class QuasselCoreInboundMessageCoordinatorTest {
         new MessageValue(43, AT.getEpochSecond(), 8, 0, BUFFER, "me-work!u@h", "next"));
     assertEquals(List.of("LeftChannel", "UserNickChangedChannel"), eventTypes());
     assertTrue(calls.indexOf("UserNickChangedChannel") < calls.indexOf("nick:8:next"));
-    assertEquals("next", session.networkCurrentNickByNetworkId.get(8));
-    assertEquals("me", session.currentNick.get());
+    assertEquals("next", networkNicks.get(8));
+    assertEquals("me", session.nicks.lastObservedNick());
     coordinator.handle(
         new MessageValue(44, AT.getEpochSecond(), 0x20, 0, BUFFER, "next!u@h", "joined"));
     assertInstanceOf(IrcEvent.JoinedChannel.class, events.getLast());
@@ -413,7 +415,7 @@ class QuasselCoreInboundMessageCoordinatorTest {
   @Test
   void senderlessDirectTagSignalUsesRecipientsConversationOnMessageNetwork() {
     prepare();
-    session.networkCurrentNickByNetworkId.put(8, "");
+    networkNicks.put(8, "");
     coordinator.handle(
         new MessageValue(
             42,
