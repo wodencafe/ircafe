@@ -99,6 +99,13 @@ final class QuasselCoreDisplayText {
     String text = Objects.toString(content, "").trim();
     if (text.isEmpty()) return "";
     String lower = text.toLowerCase(Locale.ROOT);
+    int nativePrefix = lower.indexOf(" has changed topic for ");
+    if (nativePrefix >= 0) {
+      int topicStart = lower.indexOf(" to: ", nativePrefix + " has changed topic for ".length());
+      if (topicStart >= 0) {
+        return stripWrappingQuotes(text.substring(topicStart + " to: ".length()).trim());
+      }
+    }
     int idx = lower.indexOf(" topic to ");
     if (idx >= 0) {
       String topic = text.substring(idx + " topic to ".length()).trim();
@@ -115,6 +122,11 @@ final class QuasselCoreDisplayText {
   static String parseModeDetails(String content) {
     String text = Objects.toString(content, "").trim();
     if (text.isEmpty()) return "";
+    int channelEnd = text.indexOf(' ');
+    if (channelEnd > 0 && looksLikeChannel(text.substring(0, channelEnd))) {
+      String modes = text.substring(channelEnd + 1).trim();
+      if (modes.startsWith("+") || modes.startsWith("-")) return modes;
+    }
     String lower = text.toLowerCase(Locale.ROOT);
     int idx = lower.indexOf(" mode ");
     if (idx >= 0) {
@@ -198,7 +210,7 @@ final class QuasselCoreDisplayText {
       String reason = text.substring(open + 1, close).trim();
       if (!reason.isEmpty()) return reason;
     }
-    return text;
+    return stripWrappingQuotes(text);
   }
 
   static String extractNick(String sender) {

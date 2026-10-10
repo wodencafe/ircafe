@@ -124,6 +124,24 @@ class QuasselCoreDisplayMessageTranslatorTest {
   }
 
   @Test
+  void nativeSelfNickAcknowledgementDoesNotPublishANoopChannelRename() {
+    // Core sends the new nick in both fields after its Network sync already updated myNick.
+    translate(observation(8, 2, TARGET, "self", "self", "self"));
+    assertEquals(List.of("self:self", "nick:self"), trace);
+  }
+
+  @Test
+  void caseOnlyNickChangeStillPublishesTheChannelRename() {
+    translate(observation(8, 2, TARGET, "SELF", "SELF!u@h", "self"));
+    assertEquals(
+        List.of(
+            new IrcEvent.UserNickChangedChannel(AT, TARGET, "SELF", "self"),
+            "self:SELF",
+            "nick:self"),
+        trace);
+  }
+
+  @Test
   void selfNickWithoutTargetStillUpdatesSessionWhileOtherNickDoesNot() {
     translate(observation(8, 1, "", "self", "self!u@h", "next"));
     translate(observation(8, 1, "", "alice", "alice!u@h", "other"));

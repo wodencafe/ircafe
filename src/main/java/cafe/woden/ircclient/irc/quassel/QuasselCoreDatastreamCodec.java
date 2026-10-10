@@ -49,6 +49,7 @@ public class QuasselCoreDatastreamCodec {
   private static final int QT_BOOL = 1;
   private static final int QT_INT = 2;
   private static final int QT_UINT = 3;
+  private static final int QT_QCHAR = 7;
   private static final int QT_VARIANT_MAP = 8;
   private static final int QT_VARIANT_LIST = 9;
   private static final int QT_QSTRING = 10;
@@ -560,6 +561,10 @@ public class QuasselCoreDatastreamCodec {
       case QT_CHAR -> {
         ensureRemaining(in, 1, "char");
         yield (int) in.get();
+      }
+      case QT_QCHAR -> {
+        ensureRemaining(in, 2, "QChar");
+        yield in.getChar();
       }
       case QT_USHORT -> {
         ensureRemaining(in, 2, "ushort");

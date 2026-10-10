@@ -101,7 +101,7 @@ final class QuasselCoreDisplayMessageTranslator {
 
     if (isNickMessage(typeBits)) {
       String newNick = parseNickChange(payloadText, fromDisplay);
-      if (!target.isEmpty()) {
+      if (!target.isEmpty() && !fromDisplay.equals(newNick)) {
         emit.accept(new IrcEvent.UserNickChangedChannel(at, target, fromDisplay, newNick));
       }
       if (session.isSelfNick(fromDisplay)) {
