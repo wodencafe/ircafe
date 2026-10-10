@@ -59,6 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -529,140 +530,53 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable changeNick(String serverId, String newNick) {
-    String nick = Objects.toString(newNick, "").trim();
-    if (nick.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("new nick is blank"));
-    }
-    if (containsCrlf(nick)) {
-      return Completable.error(new IllegalArgumentException("new nick contains CR/LF"));
-    }
-    return sendStatusInput(serverId, "change nick", "/NICK " + nick);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.changeNick(newNick));
   }
 
   @Override
   public Completable setAway(String serverId, String awayMessage) {
-    String message = Objects.toString(awayMessage, "").trim();
-    if (containsCrlf(message)) {
-      return Completable.error(new IllegalArgumentException("away message contains CR/LF"));
-    }
-    return sendStatusInput(
-        serverId, "set away", message.isEmpty() ? "/AWAY" : ("/AWAY " + message));
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.setAway(awayMessage));
   }
 
   @Override
   public Completable requestNames(String serverId, String channel) {
-    String chan = Objects.toString(channel, "").trim();
-    if (chan.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("channel is blank"));
-    }
-    if (containsCrlf(chan)) {
-      return Completable.error(new IllegalArgumentException("channel contains CR/LF"));
-    }
-    return sendTargetInput(serverId, "request names", chan, BUFFER_CHANNEL, "/NAMES " + chan);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.requestNames(channel));
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
-    String chan = Objects.toString(channel, "").trim();
-    if (chan.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("channel is blank"));
-    }
-    if (containsCrlf(chan)) {
-      return Completable.error(new IllegalArgumentException("channel contains CR/LF"));
-    }
-    return sendStatusInput(serverId, "join channel", "/JOIN " + chan);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.joinChannel(channel));
   }
 
   @Override
   public Completable whois(String serverId, String nick) {
-    String n = Objects.toString(nick, "").trim();
-    if (n.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("nick is blank"));
-    }
-    if (containsCrlf(n)) {
-      return Completable.error(new IllegalArgumentException("nick contains CR/LF"));
-    }
-    return sendTargetInput(serverId, "whois", n, BUFFER_QUERY, "/WHOIS " + n);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.whois(nick));
   }
 
   @Override
   public Completable partChannel(String serverId, String channel, String reason) {
-    String chan = Objects.toString(channel, "").trim();
-    if (chan.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("channel is blank"));
-    }
-    String text = Objects.toString(reason, "").trim();
-    if (containsCrlf(chan) || containsCrlf(text)) {
-      return Completable.error(new IllegalArgumentException("part parameters contain CR/LF"));
-    }
-    String command = text.isEmpty() ? ("/PART " + chan) : ("/PART " + chan + " " + text);
-    return sendTargetInput(serverId, "part channel", chan, BUFFER_CHANNEL, command);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.partChannel(channel, reason));
   }
 
   @Override
   public Completable sendToChannel(String serverId, String channel, String message) {
-    String chan = Objects.toString(channel, "").trim();
-    String text = Objects.toString(message, "").trim();
-    if (chan.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("channel is blank"));
-    }
-    if (text.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("message is blank"));
-    }
-    if (containsCrlf(chan) || containsCrlf(text)) {
-      return Completable.error(new IllegalArgumentException("message parameters contain CR/LF"));
-    }
-    return sendTargetInput(serverId, "send message to channel", chan, BUFFER_CHANNEL, text);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.sendToChannel(channel, message));
   }
 
   @Override
   public Completable sendPrivateMessage(String serverId, String nick, String message) {
-    String target = Objects.toString(nick, "").trim();
-    String text = Objects.toString(message, "").trim();
-    if (target.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("nick is blank"));
-    }
-    if (text.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("message is blank"));
-    }
-    if (containsCrlf(target) || containsCrlf(text)) {
-      return Completable.error(new IllegalArgumentException("message parameters contain CR/LF"));
-    }
-    return sendTargetInput(serverId, "send private message", target, BUFFER_QUERY, text);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.sendPrivateMessage(nick, message));
   }
 
   @Override
   public Completable sendNoticeToChannel(String serverId, String channel, String message) {
-    String chan = Objects.toString(channel, "").trim();
-    String text = Objects.toString(message, "").trim();
-    if (chan.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("channel is blank"));
-    }
-    if (text.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("message is blank"));
-    }
-    if (containsCrlf(chan) || containsCrlf(text)) {
-      return Completable.error(new IllegalArgumentException("notice parameters contain CR/LF"));
-    }
-    return sendTargetInput(
-        serverId, "send notice to channel", chan, BUFFER_CHANNEL, "/NOTICE " + chan + " " + text);
+    return sendPlannedInput(
+        serverId, () -> QuasselCoreUserInput.sendNoticeToChannel(channel, message));
   }
 
   @Override
   public Completable sendNoticePrivate(String serverId, String nick, String message) {
-    String target = Objects.toString(nick, "").trim();
-    String text = Objects.toString(message, "").trim();
-    if (target.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("nick is blank"));
-    }
-    if (text.isEmpty()) {
-      return Completable.error(new IllegalArgumentException("message is blank"));
-    }
-    if (containsCrlf(target) || containsCrlf(text)) {
-      return Completable.error(new IllegalArgumentException("notice parameters contain CR/LF"));
-    }
-    return sendTargetInput(
-        serverId, "send notice", target, BUFFER_QUERY, "/NOTICE " + target + " " + text);
+    return sendPlannedInput(serverId, () -> QuasselCoreUserInput.sendNoticePrivate(nick, message));
   }
 
   @Override
@@ -2110,13 +2024,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.bufferCommands.sendInput(bufferInfo, userInput);
   }
 
-  private Completable sendStatusInput(String serverId, String operation, String command) {
-    return sendInputWithBuffer(serverId, operation, BUFFER_STATUS, "", command);
-  }
-
-  private Completable sendTargetInput(
-      String serverId, String operation, String target, int typeBits, String input) {
-    return sendInputWithBuffer(serverId, operation, typeBits, target, input);
+  private Completable sendPlannedInput(
+      String serverId, Supplier<QuasselCoreUserInput.Plan> planner) {
+    QuasselCoreUserInput.Plan plan;
+    try {
+      plan = planner.get();
+    } catch (IllegalArgumentException error) {
+      return Completable.error(error);
+    }
+    return sendInputWithBuffer(
+        serverId, plan.operation(), plan.typeBits(), plan.target(), plan.input());
   }
 
   private Completable sendInputWithBuffer(
