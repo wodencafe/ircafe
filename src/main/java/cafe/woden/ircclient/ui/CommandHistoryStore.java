@@ -100,6 +100,12 @@ public class CommandHistoryStore {
         return startsWithAny(cmd.restLower, "pass ", "authenticate ", "oper ");
       case "msg":
         return isNickServIdentify(cmd.restLower);
+      case "ns":
+      case "nickserv":
+        if (isIdentifyCommand(cmd.restLower)) return true;
+        // Preserve the generic token checks for non-identification service commands.
+        return containsAny(
+            cmd.restLower, "token=", "apikey=", "api_key=", "access_token=", "refresh_token=");
       default:
         return containsAny(
             cmd.restLower, "token=", "apikey=", "api_key=", "access_token=", "refresh_token=");
@@ -107,9 +113,22 @@ public class CommandHistoryStore {
   }
 
   private static boolean isNickServIdentify(String restLower) {
-    if (!restLower.startsWith("nickserv ")) return false;
-    String after = restLower.substring("nickserv ".length()).trim();
-    return after.startsWith("identify ") || after.equals("identify") || after.startsWith("id ");
+    int sp = firstWhitespaceIndex(restLower);
+    if (sp < 0 || !restLower.substring(0, sp).equals("nickserv")) return false;
+    return isIdentifyCommand(restLower.substring(sp + 1).trim());
+  }
+
+  private static boolean isIdentifyCommand(String restLower) {
+    int sp = firstWhitespaceIndex(restLower);
+    String command = sp < 0 ? restLower : restLower.substring(0, sp);
+    return command.equals("identify") || command.equals("id");
+  }
+
+  private static int firstWhitespaceIndex(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      if (Character.isWhitespace(value.charAt(i))) return i;
+    }
+    return -1;
   }
 
   private static boolean containsAny(String haystack, String... needles) {
@@ -144,13 +163,13 @@ public class CommandHistoryStore {
       if (s.startsWith("/")) {
         String noSlash = s.substring(1).trim();
         if (noSlash.isEmpty()) return null;
-        int sp = noSlash.indexOf(' ');
+        int sp = firstWhitespaceIndex(noSlash);
         String cmd = (sp < 0 ? noSlash : noSlash.substring(0, sp)).toLowerCase(Locale.ROOT);
         String rest = (sp < 0 ? "" : noSlash.substring(sp + 1).trim());
         return new ParsedCommand(cmd, rest);
       }
 
-      int sp = s.indexOf(' ');
+      int sp = firstWhitespaceIndex(s);
       String head = (sp < 0 ? s : s.substring(0, sp));
       if (!head.chars().allMatch(c -> c >= 'A' && c <= 'Z')) return null;
       String cmd = head.toLowerCase(Locale.ROOT);

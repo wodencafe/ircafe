@@ -3,11 +3,23 @@ package cafe.woden.ircclient.app.commands.builtins;
 import cafe.woden.ircclient.app.commands.spi.SlashCommandParseResult;
 import cafe.woden.ircclient.app.commands.spi.SlashCommandParseStrategy;
 import com.google.auto.service.AutoService;
+import java.util.Map;
 
 /** Built-in parser for identity and direct messaging slash commands. */
 @AutoService(SlashCommandParseStrategy.class)
 public final class BuiltInIdentityMessagingSlashCommandParseStrategy
     implements SlashCommandParseStrategy {
+
+  private static final Map<String, String> SERVICE_COMMANDS =
+      Map.of(
+          "/cs", "ChanServ",
+          "/chanserv", "ChanServ",
+          "/ns", "NickServ",
+          "/nickserv", "NickServ",
+          "/ms", "MemoServ",
+          "/memoserv", "MemoServ",
+          "/os", "OperServ",
+          "/operserv", "OperServ");
 
   @Override
   public SlashCommandParseResult tryParse(String line) {
@@ -39,6 +51,15 @@ public final class BuiltInIdentityMessagingSlashCommandParseStrategy
     if (BuiltInSlashCommandParsingSupport.matchesCommand(line, "/wi")) {
       return SlashCommandParseResult.command(
           "whois", BuiltInSlashCommandParsingSupport.argAfter(line, "/wi"));
+    }
+
+    for (var serviceCommand : SERVICE_COMMANDS.entrySet()) {
+      String command = serviceCommand.getKey();
+      if (BuiltInSlashCommandParsingSupport.matchesCommand(line, command)) {
+        String body = BuiltInSlashCommandParsingSupport.argAfter(line, command);
+        return SlashCommandParseResult.command(
+            "msg", serviceCommand.getValue(), body.isEmpty() ? "HELP" : body);
+      }
     }
 
     if (BuiltInSlashCommandParsingSupport.matchesCommand(line, "/msg")) {

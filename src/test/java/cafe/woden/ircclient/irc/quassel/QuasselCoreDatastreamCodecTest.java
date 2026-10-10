@@ -3,12 +3,15 @@ package cafe.woden.ircclient.irc.quassel;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -16,8 +19,56 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class QuasselCoreDatastreamCodecTest {
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 'i', 0x03bb, 0xffff})
+  void decodesNativeQCharWithoutMisaligningTheFollowingVariant(int codeUnit) throws Exception {
+    for (boolean nullFlag : List.of(false, true)) {
+      byte[] payload = nativeQCharPayload((char) codeUnit, nullFlag);
+      var frame = QuasselCoreDatastreamCodec.decodeHandshakePayload(payload);
+      assertEquals((char) codeUnit, frame.fields().get("mode"));
+      assertEquals(42, frame.fields().get("next"));
+    }
+  }
+
+  @Test
+  void rejectsTruncatedQCharPayload() throws Exception {
+    byte[] complete = nativeQCharPayload('i', false);
+    // The first field ends at byte 28; retain only one of the QChar's two payload bytes.
+    var failure =
+        assertThrows(
+            IOException.class,
+            () ->
+                QuasselCoreDatastreamCodec.decodeHandshakePayload(
+                    java.util.Arrays.copyOf(complete, 27)));
+    assertTrue(failure.getMessage().contains("QChar"));
+  }
+
+  private static byte[] nativeQCharPayload(char value, boolean nullFlag) throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    try (DataOutputStream wire = new DataOutputStream(bytes)) {
+      wire.writeInt(4); // Two key/value pairs in the Quassel handshake envelope.
+      wire.writeInt(10); // QString key.
+      wire.writeBoolean(false);
+      wire.writeInt(8);
+      wire.write("mode".getBytes(StandardCharsets.UTF_16BE));
+      wire.writeInt(7); // Qt QChar, distinct from its 8-bit char aliases.
+      wire.writeBoolean(nullFlag);
+      wire.writeChar(value);
+      wire.writeInt(10);
+      wire.writeBoolean(false);
+      wire.writeInt(8);
+      wire.write("next".getBytes(StandardCharsets.UTF_16BE));
+      wire.writeInt(2);
+      wire.writeBoolean(false);
+      wire.writeInt(42);
+    }
+    return bytes.toByteArray();
+  }
 
   @Test
   void writeAndReadHandshakeFrameRoundTripsClientInitFields() throws Exception {

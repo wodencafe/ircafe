@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.messaging;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,6 +12,11 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.Ircv3MultilineFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandParser;
+import cafe.woden.ircclient.app.commands.CommandParser;
+import cafe.woden.ircclient.app.commands.FilterCommandParser;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
@@ -29,6 +35,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class OutboundMessagingCommandServiceTest {
@@ -103,6 +110,44 @@ class OutboundMessagingCommandServiceTest {
     verify(ui).selectTarget(pm);
     verify(irc).sendMessage("libera", "alice", "hello");
     verify(ui).appendChat(pm, "(me)", "hello", true);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "/cs OP #ircafe,ChanServ,OP #ircafe",
+    "/chanserv INFO #ircafe,ChanServ,INFO #ircafe",
+    "/cs,ChanServ,HELP",
+    "/ns IDENTIFY secret,NickServ,IDENTIFY secret",
+    "/nickserv INFO Alice,NickServ,INFO Alice",
+    "/ns,NickServ,HELP",
+    "/ms SEND Alice hello there,MemoServ,SEND Alice hello there",
+    "/memoserv READ 1,MemoServ,READ 1",
+    "/ms,MemoServ,HELP",
+    "/os HELP STATS,OperServ,HELP STATS",
+    "/operserv HELP,OperServ,HELP",
+    "/os,OperServ,HELP"
+  })
+  void serviceCommandSendsThroughPrivateMessagingFlow(
+      String line, String serviceNick, String expectedBody) {
+    CommandParser parser =
+        new CommandParser(
+            new FilterCommandParser(),
+            new BackendNamedCommandParser(BackendNamedCommandCatalog.empty()));
+    TargetRef at = new TargetRef("libera", "#ircafe");
+    TargetRef pm = new TargetRef("libera", serviceNick);
+    when(targetCoordinator.getActiveTarget()).thenReturn(at);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.sendMessage("libera", serviceNick, expectedBody)).thenReturn(Completable.complete());
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+
+    ParsedInput.Msg msg = assertInstanceOf(ParsedInput.Msg.class, parser.parse(line));
+    service.handleMsg(disposables, msg.nick(), msg.body());
+
+    verify(irc).sendMessage("libera", serviceNick, expectedBody);
+    verify(ui).ensureTargetExists(pm);
+    verify(ui).selectTarget(pm);
+    verify(ui).appendChat(pm, "(me)", expectedBody, true);
   }
 
   @Test

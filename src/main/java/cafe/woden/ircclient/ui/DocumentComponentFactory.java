@@ -10,13 +10,14 @@ import java.util.function.Supplier;
  * the created component rather than this descriptor. Factories must return a new component on each
  * call.
  */
-public final class DocumentComponentFactory extends Component {
+public final class DocumentComponentFactory extends Component implements DocumentComponentProvider {
   private final Supplier<? extends Component> factory;
 
   public DocumentComponentFactory(Supplier<? extends Component> factory) {
     this.factory = Objects.requireNonNull(factory);
   }
 
+  @Override
   public Component createComponent() {
     return Objects.requireNonNull(factory.get());
   }

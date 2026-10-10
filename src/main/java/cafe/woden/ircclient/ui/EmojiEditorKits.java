@@ -49,7 +49,7 @@ final class EmojiEditorKits {
     @Override
     public View create(Element elem) {
       if (StyleConstants.getComponent(elem.getAttributes())
-          instanceof DocumentComponentFactory factory) {
+          instanceof DocumentComponentProvider factory) {
         return new ComponentView(elem) {
           @Override
           protected Component createComponent() {

@@ -37,6 +37,8 @@ jobs:
             before="${{ github.event.before }}"
             after="${{ github.sha }}"
             if [[ -n "$before" && ! "$before" =~ ^0+$ ]]; then
+              # After a force push, the previous tip may be outside the checkout's history.
+              git fetch --no-tags origin "$before" "$after"
               commit_list="$(git rev-list --no-merges "$before..$after")"
             else
               commit_list="$after"

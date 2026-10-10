@@ -88,6 +88,33 @@ class QuasselCoreDisplayTextTest {
   @CsvSource(
       delimiter = '|',
       value = {
+        "#quassel-e2e +i|+i",
+        "#cafe -i|-i",
+        "&local +ov alice bob|+ov alice bob",
+        "#cafe   +nt|+nt",
+        "#cafe unrelated text|#cafe unrelated text"
+      })
+  void extractsModesFromNativeChannelPrefixedPayloads(String content, String expected) {
+    assertEquals(expected, QuasselCoreDisplayText.parseModeDetails(content));
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "e2ebot has changed topic for #quassel-e2e to: \"container lifecycle topic\"|container lifecycle topic",
+        "e2ebot has changed topic for #cafe to: \"\"|",
+        "alice has changed topic for #cafe to: \"welcome to: cafe\"|welcome to: cafe",
+        "ALICE HAS CHANGED TOPIC FOR #cafe TO: \"Mixed case\"|Mixed case"
+      })
+  void decodesNativeCoreTopicChanges(String content, String expected) {
+    assertEquals(expected == null ? "" : expected, QuasselCoreDisplayText.parseTopic(content));
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
         "alice kicked bob (cleanup)|bob|cleanup",
         "kicked bob (cleanup)|bob|cleanup",
         "bob cleanup|bob|cleanup",
@@ -103,6 +130,9 @@ class QuasselCoreDisplayTextTest {
   void normalizesPartAndQuitReasonsWithoutDiscardingPlainText() {
     assertEquals("Leaving", QuasselCoreDisplayText.normalizeReason("alice has left (Leaving)"));
     assertEquals("Leaving", QuasselCoreDisplayText.normalizeReason(" Leaving "));
+    assertEquals(
+        "guest quit reason", QuasselCoreDisplayText.normalizeReason("\"guest quit reason\""));
+    assertEquals("Leaving", QuasselCoreDisplayText.normalizeReason("'Leaving'"));
     assertEquals("", QuasselCoreDisplayText.normalizeReason(null));
   }
 

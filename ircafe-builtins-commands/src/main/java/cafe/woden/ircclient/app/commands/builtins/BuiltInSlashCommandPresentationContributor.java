@@ -30,6 +30,14 @@ public final class BuiltInSlashCommandPresentationContributor
           new SlashCommandDescriptor("/wi", "Alias: /whois"),
           new SlashCommandDescriptor("/whowas", "WHOWAS lookup"),
           new SlashCommandDescriptor("/msg", "Send private message"),
+          new SlashCommandDescriptor("/cs", "Send command to ChanServ"),
+          new SlashCommandDescriptor("/chanserv", "Alias: /cs"),
+          new SlashCommandDescriptor("/ns", "Send command to NickServ"),
+          new SlashCommandDescriptor("/nickserv", "Alias: /ns"),
+          new SlashCommandDescriptor("/ms", "Send command to MemoServ"),
+          new SlashCommandDescriptor("/memoserv", "Alias: /ms"),
+          new SlashCommandDescriptor("/os", "Send command to OperServ"),
+          new SlashCommandDescriptor("/operserv", "Alias: /os"),
           new SlashCommandDescriptor("/notice", "Send notice"),
           new SlashCommandDescriptor("/me", "Send action"),
           new SlashCommandDescriptor("/topic", "View/change topic"),
@@ -99,7 +107,7 @@ public final class BuiltInSlashCommandPresentationContributor
       return;
     }
     help.appendLine(
-        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
+        "Common: /join /part /msg /cs /ns /ms /os /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
     help.appendLine(
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
     help.appendLine("Tip: /help dcc for direct-chat/file-transfer commands.");
@@ -125,6 +133,14 @@ public final class BuiltInSlashCommandPresentationContributor
         Map.entry("away", BuiltInSlashCommandPresentationContributor::appendAwayHelp),
         Map.entry("query", BuiltInSlashCommandPresentationContributor::appendQueryHelp),
         Map.entry("msg", BuiltInSlashCommandPresentationContributor::appendMsgHelp),
+        Map.entry("cs", BuiltInSlashCommandPresentationContributor::appendChanServHelp),
+        Map.entry("chanserv", BuiltInSlashCommandPresentationContributor::appendChanServHelp),
+        Map.entry("ns", BuiltInSlashCommandPresentationContributor::appendNickServHelp),
+        Map.entry("nickserv", BuiltInSlashCommandPresentationContributor::appendNickServHelp),
+        Map.entry("ms", BuiltInSlashCommandPresentationContributor::appendMemoServHelp),
+        Map.entry("memoserv", BuiltInSlashCommandPresentationContributor::appendMemoServHelp),
+        Map.entry("os", BuiltInSlashCommandPresentationContributor::appendOperServHelp),
+        Map.entry("operserv", BuiltInSlashCommandPresentationContributor::appendOperServHelp),
         Map.entry("notice", BuiltInSlashCommandPresentationContributor::appendNoticeHelp),
         Map.entry("me", BuiltInSlashCommandPresentationContributor::appendMeHelp),
         Map.entry("whois", BuiltInSlashCommandPresentationContributor::appendWhoisHelp),
@@ -271,6 +287,55 @@ public final class BuiltInSlashCommandPresentationContributor
     }
     help.appendLine("Usage: /msg <nick> <message>");
     help.appendLine("Sends a private message without changing the active target.");
+  }
+
+  private static void appendChanServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /cs [command [args...]]");
+    help.appendLine("Alias: /chanserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to ChanServ on the active server, like /msg ChanServ.");
+    help.appendLine("With no command, requests ChanServ HELP.");
+    help.appendLine("Examples: /cs HELP, /cs OP #channel, /cs INFO #channel");
+  }
+
+  private static void appendNickServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /ns [command [args...]]");
+    help.appendLine("Alias: /nickserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to NickServ on the active server, like /msg NickServ.");
+    help.appendLine("With no command, requests NickServ HELP.");
+    help.appendLine("Examples: /ns HELP, /ns INFO nickname, /ns IDENTIFY password");
+  }
+
+  private static void appendMemoServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /ms [command [args...]]");
+    help.appendLine("Alias: /memoserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to MemoServ on the active server, like /msg MemoServ.");
+    help.appendLine("With no command, requests MemoServ HELP.");
+    help.appendLine("Examples: /ms HELP, /ms LIST, /ms READ 1, /ms SEND nickname message");
+  }
+
+  private static void appendOperServHelp(SlashCommandHelpSink help) {
+    if (help == null) {
+      return;
+    }
+    help.appendLine("Usage: /os [command [args...]]");
+    help.appendLine("Alias: /operserv [command [args...]]");
+    help.appendLine(
+        "Sends a private message to OperServ on the active server, like /msg OperServ.");
+    help.appendLine("With no command, requests OperServ HELP.");
+    help.appendLine("Available commands and required privileges depend on the network's services.");
+    help.appendLine("Examples: /os HELP, /os HELP command");
   }
 
   private static void appendNoticeHelp(SlashCommandHelpSink help) {

@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CommandParserTest {
 
@@ -118,6 +120,108 @@ class CommandParserTest {
     ParsedInput.Join join = (ParsedInput.Join) in;
     assertEquals("#secret", join.channel());
     assertEquals("hunter2", join.key());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cs", "/chanserv", "/CS", "/ChanServ"})
+  void parsesChanServCommandsAsPrivateMessages(String command) {
+    ParsedInput.Msg msg =
+        assertInstanceOf(
+            ParsedInput.Msg.class, parser.parse(command + "  OP #ircafe Alice  Bob  "));
+
+    assertEquals(new ParsedInput.Msg("ChanServ", "OP #ircafe Alice  Bob"), msg);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cs", "/chanserv", "/CS  ", "/chanserv\t"})
+  void bareChanServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("ChanServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/cstuff HELP", "/chanservfoo HELP"})
+  void chanServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
+  void chanServCommandAcceptsTabSeparator() {
+    assertEquals(
+        new ParsedInput.Msg("ChanServ", "INFO #ircafe"), parser.parse("/cs\tINFO #ircafe"));
+  }
+
+  @Test
+  void nickServCommandAcceptsTabSeparator() {
+    assertEquals(new ParsedInput.Msg("NickServ", "INFO Alice"), parser.parse("/ns\tINFO Alice"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ns", "/nickserv", "/NS", "/NickServ"})
+  void parsesNickServCommandsAsPrivateMessages(String command) {
+    assertEquals(
+        new ParsedInput.Msg("NickServ", "IDENTIFY Alice  secret"),
+        parser.parse(command + "  IDENTIFY Alice  secret  "));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ns", "/nickserv", "/NS  ", "/nickserv\t"})
+  void bareNickServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("NickServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/nstuff HELP", "/nickservfoo HELP"})
+  void nickServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
+  void memoServCommandAcceptsTabSeparator() {
+    assertEquals(new ParsedInput.Msg("MemoServ", "READ 1"), parser.parse("/ms\tREAD 1"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ms", "/memoserv", "/MS", "/MemoServ"})
+  void parsesMemoServCommandsAsPrivateMessages(String command) {
+    assertEquals(
+        new ParsedInput.Msg("MemoServ", "SEND Alice hello  there"),
+        parser.parse(command + "  SEND Alice hello  there  "));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ms", "/memoserv", "/MS  ", "/memoserv\t"})
+  void bareMemoServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("MemoServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/mstuff HELP", "/memoservfoo HELP"})
+  void memoServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
+  }
+
+  @Test
+  void operServCommandAcceptsTabSeparator() {
+    assertEquals(new ParsedInput.Msg("OperServ", "HELP STATS"), parser.parse("/os\tHELP STATS"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/os", "/operserv", "/OS", "/OperServ"})
+  void parsesOperServCommandsAsPrivateMessages(String command) {
+    assertEquals(
+        new ParsedInput.Msg("OperServ", "HELP  STATS"), parser.parse(command + "  HELP  STATS  "));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/os", "/operserv", "/OS  ", "/operserv\t"})
+  void bareOperServCommandRequestsServiceHelp(String command) {
+    assertEquals(new ParsedInput.Msg("OperServ", "HELP"), parser.parse(command));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/ostuff HELP", "/operservfoo HELP"})
+  void operServCommandRequiresExactCommandName(String line) {
+    assertInstanceOf(ParsedInput.Unknown.class, parser.parse(line));
   }
 
   @Test
