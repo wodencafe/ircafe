@@ -27,8 +27,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
 import java.net.Socket;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -37,12 +35,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -6771,18 +6772,54 @@ class QuasselCoreIrcClientServiceTest {
     assertTrue(condition.getAsBoolean());
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  @Timeout(10)
+  void testSocketStaysReadableAfterInboundWriterTerminates(boolean virtual) throws Exception {
+    try (var readers = Executors.newSingleThreadExecutor()) {
+      try (BlockingSocket socket = new BlockingSocket()) {
+        writeFromTerminatingThread(socket, new byte[] {42}, virtual);
+        assertEquals(42, socket.getInputStream().read());
+        assertFalse(socket.isClosed());
+
+        var readStarted = new CountDownLatch(1);
+        var nextByte =
+            readers.submit(
+                () -> {
+                  readStarted.countDown();
+                  return socket.getInputStream().read();
+                });
+        assertTrue(readStarted.await(2, TimeUnit.SECONDS));
+        assertThrows(TimeoutException.class, () -> nextByte.get(100, TimeUnit.MILLISECONDS));
+
+        writeFromTerminatingThread(socket, new byte[] {43}, virtual);
+        assertEquals(43, nextByte.get(2, TimeUnit.SECONDS));
+        socket.endInbound();
+        assertEquals(-1, socket.getInputStream().read());
+      }
+    }
+  }
+
+  private static void writeFromTerminatingThread(
+      BlockingSocket socket, byte[] frame, boolean virtual) throws Exception {
+    var write =
+        new FutureTask<Void>(
+            () -> {
+              socket.writeInbound(frame);
+              return null;
+            });
+    Thread writer = virtual ? Thread.ofVirtual().start(write) : Thread.ofPlatform().start(write);
+    writer.join(2_000L);
+    assertFalse(writer.isAlive());
+    write.get(2, TimeUnit.SECONDS);
+  }
+
   private static final class BlockingSocket extends Socket {
-    private final PipedInputStream input;
-    private final PipedOutputStream inputWriter;
+    private final QuasselCoreTestInputStream input = new QuasselCoreTestInputStream(1_024);
     private final ByteArrayOutputStream output = new ByteArrayOutputStream();
     private final CountDownLatch closeStarted = new CountDownLatch(1);
     private volatile boolean closed;
     private volatile CountDownLatch closeRelease;
-
-    private BlockingSocket() throws IOException {
-      this.input = new PipedInputStream();
-      this.inputWriter = new PipedOutputStream(input);
-    }
 
     @Override
     public InputStream getInputStream() {
@@ -6798,7 +6835,6 @@ class QuasselCoreIrcClientServiceTest {
     public synchronized void close() throws IOException {
       if (closed) return;
       closed = true;
-      inputWriter.close();
       input.close();
       closeStarted.countDown();
       CountDownLatch release = closeRelease;
@@ -6820,12 +6856,11 @@ class QuasselCoreIrcClientServiceTest {
     }
 
     private void writeInbound(byte[] frame) throws IOException {
-      inputWriter.write(frame);
-      inputWriter.flush();
+      input.writeFrame(frame);
     }
 
     private void endInbound() throws IOException {
-      inputWriter.close();
+      input.endInbound();
     }
 
     private void delayCloseReturnUntil(CountDownLatch release) {
