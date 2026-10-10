@@ -6,8 +6,6 @@ import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNe
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSession.MAX_NETWORK_NICKS_PER_SESSION;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.parseQualifiedTarget;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.routeOutboundRawLine;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.trimMapToMaxSize;
@@ -30,7 +28,6 @@ import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.OutboundRawRoute;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.QualifiedTarget;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
@@ -104,6 +101,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
+  private final QuasselCoreInputCoordinator inputs;
 
   @Autowired
   public QuasselCoreIrcClientService(
@@ -152,6 +150,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 return QuasselCoreIrcClientService.isSelfNick(session, nick, networkId);
               }
             });
+    this.inputs =
+        new QuasselCoreInputCoordinator(
+            targets,
+            (session, target, networkId) ->
+                noteTargetNetworkHint(session, target, networkId, true));
     IrcProperties.Client client = props == null ? null : props.client();
     this.reconnects =
         new QuasselCoreReconnectCoordinator(
@@ -592,7 +595,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               if (containsCrlf(raw)) throw new IllegalArgumentException("raw line contains CR/LF");
 
               QuasselCoreSession session = requireEstablishedSession(sid, "send raw");
-              sendRawInternal(session, sid, "send raw", raw);
+              inputs.sendRaw(session, "send raw", raw);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -619,7 +622,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               QualifiedTarget dest = sanitizeHistoryTarget(target);
               List<String> rawLines = ircv3RuntimeSupport.typingRawLines(dest.rawTarget(), state);
               for (String rawLine : rawLines) {
-                sendRawInternal(session, sid, "send typing", rawLine);
+                inputs.sendRaw(session, "send typing", rawLine);
               }
             })
         .subscribeOn(RxVirtualSchedulers.io());
@@ -673,7 +676,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                         + requested.rawTarget());
               }
               for (String rawLine : rawLines) {
-                sendRawInternal(session, sid, "send read marker", rawLine);
+                inputs.sendRaw(session, "send read marker", rawLine);
               }
             })
         .subscribeOn(RxVirtualSchedulers.io());
@@ -1683,14 +1686,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     networkCommands(session).removeNetwork(networkId);
   }
 
-  private void sendInput(
-      QuasselCoreSession session,
-      QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo,
-      String userInput)
-      throws Exception {
-    session.bufferCommands.sendInput(bufferInfo, userInput);
-  }
-
   private Completable sendPlannedInput(
       String serverId, Supplier<QuasselCoreUserInput.Plan> planner) {
     QuasselCoreUserInput.Plan plan;
@@ -1711,49 +1706,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               if (sid.isEmpty()) throw new IllegalArgumentException(SERVER_ID_BLANK);
 
               QuasselCoreSession session = requireEstablishedSession(sid, operation);
-              if (firstKnownNetworkId(session) < 0) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.QUASSEL_CORE,
-                    operation,
-                    sid,
-                    "no active Quassel network is available yet");
-              }
-
-              QualifiedTarget requestedTarget = parseQualifiedTarget(bufferName);
-              QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-                  targets.outboundBuffer(session, typeBits, requestedTarget);
-              noteTargetNetworkHint(
-                  session, requestedTarget.baseTarget(), bufferInfo.networkId(), true);
-              sendInput(session, bufferInfo, input);
+              inputs.sendInput(session, operation, typeBits, bufferName, input);
             })
         .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private void sendRawInternal(
-      QuasselCoreSession session, String serverId, String operation, String rawLine)
-      throws Exception {
-    if (session == null) {
-      throw new IllegalStateException("Quassel session is missing");
-    }
-    if (firstKnownNetworkId(session) < 0) {
-      throw new BackendNotAvailableException(
-          IrcProperties.Server.Backend.QUASSEL_CORE,
-          operation,
-          serverId,
-          "no active Quassel network is available yet");
-    }
-
-    OutboundRawRoute route = routeOutboundRawLine(rawLine);
-    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo;
-    if (route.requestedTarget() == null) {
-      bufferInfo = targets.outboundBuffer(session, BUFFER_STATUS, parseQualifiedTarget(""));
-    } else {
-      bufferInfo =
-          targets.outboundBuffer(session, route.targetTypeBitsHint(), route.requestedTarget());
-      noteTargetNetworkHint(
-          session, route.requestedTarget().baseTarget(), bufferInfo.networkId(), true);
-    }
-    sendInput(session, bufferInfo, "/QUOTE " + route.rewrittenRawLine());
   }
 
   private void sendBufferSyncerReadMarkerUpdate(
