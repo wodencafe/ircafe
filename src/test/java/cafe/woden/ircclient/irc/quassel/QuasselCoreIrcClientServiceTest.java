@@ -4392,11 +4392,15 @@ class QuasselCoreIrcClientServiceTest {
             serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
+    // Capture the request before a session exists; session lookup must happen on subscription.
+    var request = service.requestChatHistoryLatest("quassel", "#ircafe", "*", 999);
+    org.mockito.Mockito.verifyNoInteractions(datastreamCodec);
     connectAndAwaitEstablishedSession(service, events);
 
-    service.requestChatHistoryLatest("quassel", "#ircafe", "*", 999).blockingAwait();
+    request.blockingAwait();
+    request.blockingAwait();
 
-    verify(datastreamCodec)
+    verify(datastreamCodec, times(2))
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
@@ -4458,8 +4462,11 @@ class QuasselCoreIrcClientServiceTest {
 
     String selector = "timestamp=" + java.time.Instant.ofEpochSecond(1_700_000_050L);
     service.requestChatHistoryBefore("quassel", "#ircafe", selector, 25).blockingAwait();
+    service
+        .requestChatHistoryBefore("quassel", "#ircafe", Instant.ofEpochSecond(1_700_000_050L), 25)
+        .blockingAwait();
 
-    verify(datastreamCodec)
+    verify(datastreamCodec, times(2))
         .writeSignalProxySync(
             socket.getOutputStream(),
             "BacklogManager",
