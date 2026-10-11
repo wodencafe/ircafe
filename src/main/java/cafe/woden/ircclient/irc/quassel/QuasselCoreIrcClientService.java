@@ -89,6 +89,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
   private final QuasselCoreInputCoordinator inputs;
+  private final QuasselCoreHistoryRequestCoordinator historyRequests;
   private final QuasselCoreStateObservationCoordinator stateObservations;
   private final QuasselCoreNetworkManagementCoordinator networkManagement;
 
@@ -148,6 +149,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             targets,
             (session, target, networkId) ->
                 stateObservations.observeTargetNetwork(session, target, networkId, true));
+    this.historyRequests =
+        new QuasselCoreHistoryRequestCoordinator(
+            ircv3RuntimeSupport, targets, this::requireEstablishedSession);
     IrcProperties.Client client = props == null ? null : props.client();
     this.reconnects =
         new QuasselCoreReconnectCoordinator(
@@ -609,48 +613,31 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, Instant beforeExclusive, int limit) {
-    return requestHistory(
-        serverId,
-        "request chat history",
-        () ->
-            ircv3RuntimeSupport.chatHistoryBefore(
-                target, "", limit, beforeExclusive == null ? Instant.now() : beforeExclusive));
+    return historyRequests.requestBefore(serverId, target, beforeExclusive, limit);
   }
 
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request chat history",
-        () -> ircv3RuntimeSupport.chatHistoryBefore(target, selector, limit, Instant.now()));
+    return historyRequests.requestBefore(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request latest chat history",
-        () -> ircv3RuntimeSupport.chatHistoryLatest(target, selector, limit));
+    return historyRequests.requestLatest(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBetween(
       String serverId, String target, String startSelector, String endSelector, int limit) {
-    return requestHistory(
-        serverId,
-        "request bounded chat history",
-        () -> ircv3RuntimeSupport.chatHistoryBetween(target, startSelector, endSelector, limit));
+    return historyRequests.requestBetween(serverId, target, startSelector, endSelector, limit);
   }
 
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request surrounding chat history",
-        () -> ircv3RuntimeSupport.chatHistoryAround(target, selector, limit));
+    return historyRequests.requestAround(serverId, target, selector, limit);
   }
 
   @Override
@@ -832,35 +819,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return session != null && session.features.hasAnyCapability(capabilities);
   }
 
-  private Completable requestHistory(
-      String serverId, String operation, Supplier<Ircv3ChatHistoryRuntimeSupport.Plan> planner) {
-    return Completable.fromAction(
-            () -> {
-              Ircv3ChatHistoryRuntimeSupport.Plan plan = planner.get();
-              HistoryRequestContext ctx = prepareHistoryRequest(serverId, plan.target(), operation);
-              QuasselCoreHistoryRequestPlanner.BacklogRequest request =
-                  QuasselCoreHistoryRequestPlanner.plan(ctx.session().history, plan);
-              ctx.session()
-                  .bufferCommands
-                  .requestBacklog(
-                      ctx.bufferInfo(), request.firstMsgId(), request.lastMsgId(), request.limit());
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private HistoryRequestContext prepareHistoryRequest(
-      String serverId, String target, String operation) throws BackendNotAvailableException {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) {
-      throw new IllegalArgumentException(SERVER_ID_BLANK);
-    }
-    QualifiedTarget tgt = sanitizeHistoryTarget(target);
-    QuasselCoreSession session = requireEstablishedSession(sid, operation);
-    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-        targets.historyBuffer(session, sid, operation, tgt);
-    return new HistoryRequestContext(session, bufferInfo);
-  }
-
   private void scheduleReconnectIfEligible(QuasselCoreSession session, String reason) {
     if (session == null || shuttingDown.get() || session.closeRequested.get()) return;
     if (!session.reconnectScheduled.compareAndSet(false, true)) return;
@@ -1002,9 +960,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         ? -1
         : session.networks.primaryNetworkId(session.authResult.get(), session.buffers.values());
   }
-
-  private record HistoryRequestContext(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {}
 
   private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
     if (session == null) return;
