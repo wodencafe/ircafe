@@ -31,10 +31,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       - name: Verify release
         if: github.ref_type == 'tag'
@@ -70,10 +71,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       - name: Compute release version
         shell: bash
@@ -152,10 +154,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       - name: Compute release version
         shell: bash
@@ -344,10 +347,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       - name: Compute release version
         shell: bash
