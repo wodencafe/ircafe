@@ -84,6 +84,7 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixRawModeCommandHandler rawModeCommandHandler;
   private final MatrixRawLookupCommandHandler rawLookupCommandHandler;
+  private final MatrixRawChatHistoryCommandHandler rawChatHistoryCommandHandler;
   private final MatrixSyncTimelineEventProjector syncTimelineEventProjector;
   private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncMutationEventProjector syncMutationEventProjector;
@@ -153,6 +154,12 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
             bus::onNext);
     this.rawLookupCommandHandler =
         new MatrixRawLookupCommandHandler(this::whois, this::requestNames, this::whowas);
+    this.rawChatHistoryCommandHandler =
+        new MatrixRawChatHistoryCommandHandler(
+            this::requestChatHistoryBefore,
+            this::requestChatHistoryLatest,
+            this::requestChatHistoryBetween,
+            this::requestChatHistoryAround);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
     this.syncTimelineEventProjector = new MatrixSyncTimelineEventProjector(bus::onNext);
@@ -802,7 +809,7 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
       case "MARKREAD" -> sendRawMarkRead(sid, raw);
       case "TAGMSG" -> sendRawTagmsg(sid, line, raw);
       case "REDACT" -> sendRawRedact(sid, raw);
-      case "CHATHISTORY" -> sendRawChatHistory(sid, raw);
+      case "CHATHISTORY" -> rawChatHistoryCommandHandler.handle(sid, raw.arguments());
       default -> rawCommandUnsupported(sid, raw.command());
     };
   }
@@ -2162,97 +2169,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
-  private Completable sendRawChatHistory(String serverId, RawCommand raw) {
-    List<String> args = raw == null ? List.of() : raw.arguments();
-    if (args.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY requires a mode (BEFORE|LATEST|BETWEEN|AROUND)");
-    }
-    String mode = normalize(args.get(0)).toUpperCase(Locale.ROOT);
-    return switch (mode) {
-      case "BEFORE" -> sendRawChatHistoryBefore(serverId, args);
-      case "LATEST" -> sendRawChatHistoryLatest(serverId, args);
-      case "BETWEEN" -> sendRawChatHistoryBetween(serverId, args);
-      case "AROUND" -> sendRawChatHistoryAround(serverId, args);
-      default ->
-          throw new IllegalArgumentException(
-              "CHATHISTORY mode must be BEFORE, LATEST, BETWEEN, or AROUND");
-    };
-  }
-
-  private Completable sendRawChatHistoryBefore(String serverId, List<String> args) {
-    if (args.size() < 3 || args.size() > 4) {
-      throw new IllegalArgumentException("CHATHISTORY BEFORE requires <target> <selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String selector = normalize(args.get(2));
-    if (target.isEmpty() || selector.isEmpty()) {
-      throw new IllegalArgumentException("CHATHISTORY BEFORE requires <target> <selector> [limit]");
-    }
-    int limit = args.size() > 3 ? parseRawChatHistoryLimit(args.get(3)) : 50;
-    return requestChatHistoryBefore(serverId, target, selector, limit);
-  }
-
-  private Completable sendRawChatHistoryLatest(String serverId, List<String> args) {
-    if (args.size() < 2 || args.size() > 4) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-    }
-    String target = normalize(args.get(1));
-    if (target.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-    }
-
-    String selector = "*";
-    int limit = 50;
-    if (args.size() >= 3) {
-      String third = normalize(args.get(2));
-      if (args.size() == 3 && looksLikeInteger(third)) {
-        limit = parseRawChatHistoryLimit(third);
-      } else {
-        selector = third;
-        if (selector.isEmpty()) {
-          throw new IllegalArgumentException(
-              "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-        }
-        if (args.size() >= 4) {
-          limit = parseRawChatHistoryLimit(args.get(3));
-        }
-      }
-    }
-    return requestChatHistoryLatest(serverId, target, selector, limit);
-  }
-
-  private Completable sendRawChatHistoryBetween(String serverId, List<String> args) {
-    if (args.size() < 4 || args.size() > 5) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY BETWEEN requires <target> <start-selector> <end-selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String startSelector = normalize(args.get(2));
-    String endSelector = normalize(args.get(3));
-    if (target.isEmpty() || startSelector.isEmpty() || endSelector.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY BETWEEN requires <target> <start-selector> <end-selector> [limit]");
-    }
-    int limit = args.size() > 4 ? parseRawChatHistoryLimit(args.get(4)) : 50;
-    return requestChatHistoryBetween(serverId, target, startSelector, endSelector, limit);
-  }
-
-  private Completable sendRawChatHistoryAround(String serverId, List<String> args) {
-    if (args.size() < 3 || args.size() > 4) {
-      throw new IllegalArgumentException("CHATHISTORY AROUND requires <target> <selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String selector = normalize(args.get(2));
-    if (target.isEmpty() || selector.isEmpty()) {
-      throw new IllegalArgumentException("CHATHISTORY AROUND requires <target> <selector> [limit]");
-    }
-    int limit = args.size() > 3 ? parseRawChatHistoryLimit(args.get(3)) : 50;
-    return requestChatHistoryAround(serverId, target, selector, limit);
-  }
-
   private static String argOrBlank(RawCommand raw, int index, String error) {
     if (raw == null || raw.arguments() == null || index < 0 || index >= raw.arguments().size()) {
       throw new IllegalArgumentException(error);
@@ -2273,40 +2189,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
         .map(MatrixIrcClientService::normalize)
         .filter(s -> !s.isEmpty())
         .collect(java.util.stream.Collectors.joining(" "));
-  }
-
-  private static int parseRawChatHistoryLimit(String rawValue) {
-    String token = normalize(rawValue);
-    if (!looksLikeInteger(token)) {
-      throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer");
-    }
-    try {
-      int parsed = Integer.parseInt(token);
-      if (parsed <= 0) {
-        throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer");
-      }
-      return parsed;
-    } catch (NumberFormatException ex) {
-      throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer", ex);
-    }
-  }
-
-  private static boolean looksLikeInteger(String rawValue) {
-    String token = normalize(rawValue);
-    if (token.isEmpty()) {
-      return false;
-    }
-    for (int i = 0; i < token.length(); i++) {
-      char c = token.charAt(i);
-      if (i == 0 && c == '+') {
-        if (token.length() == 1) return false;
-        continue;
-      }
-      if (c < '0' || c > '9') {
-        return false;
-      }
-    }
-    return true;
   }
 
   private static String rawMatrixMsgType(Map<String, String> tags) {
