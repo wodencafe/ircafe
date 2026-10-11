@@ -40,7 +40,7 @@ class MessageInputDockEditingFunctionalTest {
     "darklaf, false",
     "darklaf, true"
   })
-  void backspaceWorksAfterOpeningAndRefreshingChatDocks(String theme, boolean floating)
+  void editingWorksAfterOpeningAndRefreshingChatDocks(String theme, boolean floating)
       throws Exception {
     assumeFalse(GraphicsEnvironment.isHeadless());
     String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
@@ -71,6 +71,7 @@ class MessageInputDockEditingFunctionalTest {
           });
       focus(robot, main[0]);
       typeAndBackspace(robot, main[0]);
+      checkSelectionNavigation(robot, main[0]);
       SwingUtilities.invokeAndWait(
           () -> {
             separate[0] = new InputDock("separate");
@@ -87,9 +88,11 @@ class MessageInputDockEditingFunctionalTest {
           });
       focus(robot, separate[0]);
       typeAndBackspace(robot, separate[0]);
+      checkSelectionNavigation(robot, separate[0]);
       SwingUtilities.invokeAndWait(() -> Docking.display(main[0]));
       focus(robot, main[0]);
       typeAndBackspace(robot, main[0]);
+      checkSelectionNavigation(robot, main[0]);
     } finally {
       SwingUtilities.invokeAndWait(
           () -> {
@@ -145,6 +148,60 @@ class MessageInputDockEditingFunctionalTest {
     robot.keyRelease(KeyEvent.VK_BACK_SPACE);
     robot.waitForIdle();
     SwingUtilities.invokeAndWait(() -> assertEquals("draft", dock.input.getDraftText()));
+  }
+
+  private static void checkSelectionNavigation(Robot robot, InputDock dock) throws Exception {
+    SwingUtilities.invokeAndWait(() -> dock.input.setDraftText("hello world"));
+    robot.keyPress(KeyEvent.VK_CONTROL);
+    robot.keyPress(KeyEvent.VK_A);
+    robot.keyRelease(KeyEvent.VK_A);
+    robot.keyRelease(KeyEvent.VK_CONTROL);
+    robot.waitForIdle();
+    SwingUtilities.invokeAndWait(
+        () -> assertEquals("hello world", findInput(dock).getSelectedText()));
+    pressArrow(robot, dock, KeyEvent.VK_LEFT, 0);
+    pressArrow(robot, dock, KeyEvent.VK_RIGHT, 1);
+    SwingUtilities.invokeAndWait(() -> findInput(dock).selectAll());
+    pressArrow(robot, dock, KeyEvent.VK_RIGHT, 11);
+    pressArrow(robot, dock, KeyEvent.VK_LEFT, 10);
+
+    for (boolean reversed : new boolean[] {false, true}) {
+      for (int key : new int[] {KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT}) {
+        SwingUtilities.invokeAndWait(
+            () -> {
+              var input = findInput(dock);
+              input.setCaretPosition(reversed ? 8 : 2);
+              input.moveCaretPosition(reversed ? 2 : 8);
+            });
+        pressArrow(robot, dock, key, key == KeyEvent.VK_LEFT ? 2 : 8);
+      }
+    }
+
+    robot.keyPress(KeyEvent.VK_SHIFT);
+    robot.keyPress(KeyEvent.VK_LEFT);
+    robot.keyRelease(KeyEvent.VK_LEFT);
+    robot.keyRelease(KeyEvent.VK_SHIFT);
+    robot.waitForIdle();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          assertEquals(7, findInput(dock).getSelectionStart());
+          assertEquals(8, findInput(dock).getSelectionEnd());
+        });
+  }
+
+  private static void pressArrow(Robot robot, InputDock dock, int key, int expected)
+      throws Exception {
+    robot.keyPress(key);
+    robot.keyRelease(key);
+    robot.waitForIdle();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          var input = findInput(dock);
+          assertEquals(expected, input.getCaretPosition());
+          assertEquals(expected, input.getSelectionStart());
+          assertEquals(expected, input.getSelectionEnd());
+          assertEquals("hello world", input.getText());
+        });
   }
 
   private static SingleLineEmojiTextPane findInput(Component component) {
