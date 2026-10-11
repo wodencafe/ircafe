@@ -1,17 +1,13 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_READ_MARKER;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.LABELED_RESPONSE;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MESSAGE_TAGS;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MULTILINE;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.READ_MARKER;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.STANDARD_REPLIES;
 
 import cafe.woden.ircclient.config.IrcProperties;
@@ -23,7 +19,6 @@ import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.QualifiedTarget;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -57,8 +52,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
-  private static final int BUFFER_CHANNEL = 0x02;
-  private static final int BUFFER_QUERY = 0x04;
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "";
   private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
@@ -89,6 +82,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
   private final QuasselCoreInputCoordinator inputs;
+  private final QuasselCoreOutboundSignalCoordinator outboundSignals;
   private final QuasselCoreHistoryRequestCoordinator historyRequests;
   private final QuasselCoreStateObservationCoordinator stateObservations;
   private final QuasselCoreNetworkManagementCoordinator networkManagement;
@@ -149,6 +143,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             targets,
             (session, target, networkId) ->
                 stateObservations.observeTargetNetwork(session, target, networkId, true));
+    this.outboundSignals =
+        new QuasselCoreOutboundSignalCoordinator(
+            ircv3RuntimeSupport, targets, inputs, stateObservations);
     this.historyRequests =
         new QuasselCoreHistoryRequestCoordinator(
             ircv3RuntimeSupport, targets, this::requireEstablishedSession);
@@ -546,11 +543,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                         + sid);
               }
 
-              QualifiedTarget dest = sanitizeHistoryTarget(target);
-              List<String> rawLines = ircv3RuntimeSupport.typingRawLines(dest.rawTarget(), state);
-              for (String rawLine : rawLines) {
-                inputs.sendRaw(session, "send typing", rawLine);
-              }
+              outboundSignals.sendTyping(session, target, state);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -570,42 +563,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                         + sid);
               }
 
-              QualifiedTarget requested = sanitizeHistoryTarget(target);
-              int typeBitsHint =
-                  looksLikeChannel(requested.baseTarget()) ? BUFFER_CHANNEL : BUFFER_QUERY;
-              QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-                  targets.outboundBuffer(session, typeBitsHint, requested);
-              stateObservations.observeTargetNetwork(
-                  session, requested.baseTarget(), bufferInfo.networkId(), true);
-
-              Instant at = markerAt == null ? Instant.now() : markerAt;
-              String markerTarget =
-                  targets.targetForBuffer(session, bufferInfo, requested.baseTarget());
-              if (markerTarget.isEmpty()) {
-                markerTarget = requested.rawTarget();
-              }
-              long markerMsgId = session.history.readMarkerMsgIdForTimestamp(markerTarget, at);
-              if (markerMsgId > 0L && bufferInfo.bufferId() >= 0) {
-                sendBufferSyncerReadMarkerUpdate(session, bufferInfo.bufferId(), markerMsgId);
-                return;
-              }
-
-              if (!hasCapability(session, READ_MARKER, DRAFT_READ_MARKER)) {
-                throw new IllegalStateException(
-                    "Quassel read marker requires an observed message for "
-                        + requested.rawTarget());
-              }
-
-              List<String> rawLines =
-                  ircv3RuntimeSupport.readMarkerRawLines(requested.rawTarget(), at);
-              if (rawLines.isEmpty()) {
-                throw new IllegalStateException(
-                    "Read-marker runtime provider did not render a command for "
-                        + requested.rawTarget());
-              }
-              for (String rawLine : rawLines) {
-                inputs.sendRaw(session, "send read marker", rawLine);
-              }
+              outboundSignals.sendReadMarker(session, target, markerAt);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -709,8 +667,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public boolean isTypingAvailable(String serverId) {
     QuasselCoreSession session = findEstablishedSession(serverId);
-    if (session == null) return false;
-    return hasCapability(session, MESSAGE_TAGS);
+    return outboundSignals.isTypingAvailable(session);
   }
 
   @Override
@@ -719,24 +676,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (session == null) {
       return backendAvailabilityReason(serverId);
     }
-    if (hasCapability(session, MESSAGE_TAGS)) {
-      return "";
-    }
-    if (!session.features.hasObservedCapabilities()) {
-      return "typing support status is not yet available from Quassel backend state";
-    }
-    if (!hasCapability(session, MESSAGE_TAGS)) {
-      return "message-tags not negotiated in Quassel backend network state";
-    }
-    return "server may be blocking +typing via CLIENTTAGDENY";
+    return outboundSignals.typingAvailabilityReason(session);
   }
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
     QuasselCoreSession session = findEstablishedSession(serverId);
-    return session != null
-        && (session.nativeReadMarkerSupportObserved.get()
-            || hasCapability(session, READ_MARKER, DRAFT_READ_MARKER));
+    return outboundSignals.isReadMarkerAvailable(session);
   }
 
   @Override
@@ -1086,11 +1032,5 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               inputs.sendInput(session, operation, typeBits, bufferName, input);
             })
         .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private void sendBufferSyncerReadMarkerUpdate(
-      QuasselCoreSession session, int bufferId, long markerMsgId) throws Exception {
-    if (session == null) return;
-    session.bufferCommands.updateReadMarker(bufferId, markerMsgId);
   }
 }
