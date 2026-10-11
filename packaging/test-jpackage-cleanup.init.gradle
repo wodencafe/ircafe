@@ -1,0 +1,49 @@
+// Run with -I packaging/test-jpackage-cleanup.init.gradle :verifyJpackageCleanupRegression.
+// Execute the production cleanup actions on disposable outputs without invoking jpackage.
+gradle.projectsEvaluated {
+    def packagingClass = rootProject.tasks.named('jpackage').get().class.classLoader
+        .loadClass('org.panteleyev.jpackage.JPackageTask')
+    def imageTask = rootProject.tasks.register('cleanupImageFixture', packagingClass).get()
+    def installerTask = rootProject.tasks.register('cleanupInstallerFixture', packagingClass).get()
+    rootProject.tasks.register('verifyJpackageCleanupRegression') {
+        doLast {
+            def fixture = new File(temporaryDir, 'outputs')
+            def image = new File(fixture, 'dist/IRCafe')
+            def installer = new File(fixture, 'installer')
+            image.mkdirs()
+            def imageMarker = new File(image, 'portable-image.txt')
+            imageMarker.text = 'keep portable image when deleting installer output'
+            assert imageMarker.setWritable(false)
+            installer.mkdirs()
+            def oldInstaller = new File(installer, 'old.msi')
+            oldInstaller.text = 'stale output'
+            assert oldInstaller.setWritable(false)
+            installerTask.destination.set(installer)
+            installerTask.actions.first().execute(installerTask)
+            assert !installer.exists(): 'installer cleanup must remove stale read-only files'
+            assert imageMarker.exists(): 'installer cleanup must preserve the portable image'
+            imageTask.destination.set(image.parentFile)
+            imageTask.actions.first().execute(imageTask)
+            assert !image.parentFile.exists(): 'app-image output must be gone before jpackage'
+            imageTask.actions.first().execute(imageTask)
+            assert !image.parentFile.exists(): 'cleanup must tolerate an absent destination'
+            def outside = java.nio.file.Files.createTempDirectory('ircafe-cleanup-outside-').toFile()
+            try {
+                def marker = new File(outside, 'keep.txt')
+                marker.text = 'must not delete destinations outside build'
+                imageTask.destination.set(outside)
+                boolean refused = false
+                try {
+                    imageTask.actions.first().execute(imageTask)
+                } catch (org.gradle.api.GradleException expected) {
+                    refused = expected.message.contains('must be inside the build directory')
+                }
+                assert refused: 'outside-build destinations must be refused'
+                assert marker.exists(): 'outside-build files must survive refusal'
+            } finally {
+                rootProject.delete(outside)
+            }
+            println 'PASS: stale/read-only output removed, portable image preserved, absent output safe, outside-build output refused'
+        }
+    }
+}

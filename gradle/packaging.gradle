@@ -134,6 +134,20 @@ def appImageDir = layout.buildDirectory.dir("dist/${appName}")
 // The plugin clears its destination before packaging, so MSI output must be separate.
 def jpackageTaskClass = tasks.named("jpackage").get().class.classLoader
     .loadClass("org.panteleyev.jpackage.JPackageTask")
+
+// The plugin ignores failed File.delete() calls, leaving read-only runtime files on Windows.
+// Gradle's deletion retries with writable files and reports any paths it cannot remove.
+tasks.withType(jpackageTaskClass).configureEach { packagingTask ->
+    doFirst {
+        def outputPath = packagingTask.destination.get().asFile.toPath().toAbsolutePath().normalize()
+        def buildPath = layout.buildDirectory.get().asFile.toPath().toAbsolutePath().normalize()
+        if (outputPath == buildPath || !outputPath.startsWith(buildPath)) {
+            throw new GradleException("Packaging destination must be inside the build directory: ${outputPath}")
+        }
+        delete(outputPath.toFile())
+    }
+}
+
 tasks.register("jpackageMsi", jpackageTaskClass) { installer ->
     group = "distribution"
     description = "Builds a Windows MSI installer with a bundled Java runtime (requires Windows and WiX)."
