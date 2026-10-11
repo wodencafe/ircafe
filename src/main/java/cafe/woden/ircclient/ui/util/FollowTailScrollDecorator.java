@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.util;
 
-import java.awt.event.AdjustmentListener;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.LayoutManager;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -10,6 +13,7 @@ import java.util.function.IntSupplier;
 import javax.swing.BoundedRangeModel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -21,7 +25,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Decorates a transcript scrollpane with "follow tail" behavior: if the user is at the bottom, new
- * content keeps the view pinned to the bot…
+ * content and viewport resizing keep the view pinned to the bottom.
  */
 public final class FollowTailScrollDecorator implements AutoCloseable {
 
@@ -39,6 +43,9 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
   private final JScrollBar bar;
   private final BoundedRangeModel barModel;
+  private final JViewport viewport;
+  private final LayoutManager originalViewportLayout;
+  private final LayoutManager tailPreservingViewportLayout;
 
   private final BooleanSupplier isFollowTail;
   private final Consumer<Boolean> setFollowTail;
@@ -46,6 +53,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   private final IntConsumer setSavedScrollValue;
 
   private boolean programmaticScroll = false;
+  private boolean tailPinPending = false;
   private StyledDocument currentDocument;
 
   private volatile boolean forcePinOnce = false;
@@ -73,13 +81,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
         }
       };
 
-  private final AdjustmentListener barListener =
-      e -> {
-        if (programmaticScroll) return;
-        updateScrollStateFromBar();
-      };
-
-  private final ChangeListener modelListener = (ChangeEvent e) -> onBarModelChanged();
+  private final ChangeListener modelListener = (ChangeEvent e) -> updateScrollStateFromBar();
 
   private boolean closed = false;
 
@@ -97,10 +99,56 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     this.getSavedScrollValue = getSavedScrollValue;
     this.setSavedScrollValue = setSavedScrollValue;
 
-    this.bar.addAdjustmentListener(barListener);
+    this.viewport = scroll.getViewport();
+    this.originalViewportLayout = viewport.getLayout();
+    this.tailPreservingViewportLayout = new TailPreservingViewportLayout();
+    viewport.setLayout(tailPreservingViewportLayout);
+
+    // Observe geometry and value together. Separate adjustment/model listeners can process the
+    // same resize twice, mistaking the second notification for a user scroll away from the tail.
     this.barModel.addChangeListener(modelListener);
 
     SwingUtilities.invokeLater(() -> infoOnce("installed"));
+  }
+
+  private final class TailPreservingViewportLayout implements LayoutManager {
+    @Override
+    public void addLayoutComponent(String name, Component component) {
+      originalViewportLayout.addLayoutComponent(name, component);
+    }
+
+    @Override
+    public void removeLayoutComponent(Component component) {
+      originalViewportLayout.removeLayoutComponent(component);
+    }
+
+    @Override
+    public Dimension preferredLayoutSize(Container parent) {
+      return originalViewportLayout.preferredLayoutSize(parent);
+    }
+
+    @Override
+    public Dimension minimumLayoutSize(Container parent) {
+      return originalViewportLayout.minimumLayoutSize(parent);
+    }
+
+    @Override
+    public void layoutContainer(Container parent) {
+      // Rewrapping can move the viewport before the scrollbar's maximum/extent change. Guard
+      // the entire layout so this intermediate value change cannot disable follow-tail.
+      boolean previousProgrammaticScroll = programmaticScroll;
+      programmaticScroll = true;
+      try {
+        originalViewportLayout.layoutContainer(parent);
+      } finally {
+        programmaticScroll = previousProgrammaticScroll;
+        captureBarState();
+      }
+      if (safeIsFollowTail() || forcePinOnce) {
+        int bottom = bar.getMaximum() - barModel.getExtent();
+        if (bar.getValue() < bottom - 2) scheduleTailPin();
+      }
+    }
   }
 
   private boolean safeIsFollowTail() {
@@ -213,54 +261,22 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     }
 
     infoOnce("docMutation -> maybeAutoScroll");
+    scheduleTailPin();
+  }
+
+  private void scheduleTailPin() {
+    if (closed || tailPinPending) return;
+    tailPinPending = true;
     SwingUtilities.invokeLater(
         () -> {
+          tailPinPending = false;
+          if (closed || !(safeIsFollowTail() || forcePinOnce)) return;
           try {
             scrollToBottom();
           } finally {
-            // Clear the one-shot pin after we have successfully re-pinned.
             forcePinOnce = false;
           }
         });
-  }
-
-  private void onBarModelChanged() {
-    if (closed) return;
-
-    // Ignore re-entrant updates caused by our own scroll operations.
-    if (programmaticScroll) {
-      captureBarState();
-      return;
-    }
-
-    int max = bar.getMaximum();
-    int extent = barModel.getExtent();
-    int val = bar.getValue();
-
-    boolean maxOrExtentChanged = (max != lastBarMax) || (extent != lastBarExtent);
-    if (!maxOrExtentChanged) {
-      lastBarValue = val;
-      return;
-    }
-
-    boolean wasAtBottom = lastBarMax < 0 || (lastBarValue + lastBarExtent) >= (lastBarMax - 2);
-
-    // Update the cached model state.
-    lastBarMax = max;
-    lastBarExtent = extent;
-    lastBarValue = val;
-
-    if ((safeIsFollowTail() && wasAtBottom) || forcePinOnce) {
-      infoOnce("barModelChanged -> repin");
-      SwingUtilities.invokeLater(
-          () -> {
-            try {
-              scrollToBottom();
-            } finally {
-              forcePinOnce = false;
-            }
-          });
-    }
   }
 
   public void armTailPinIfAtBottomNow() {
@@ -285,6 +301,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
       // Clamp-to-bottom: setting to maximum will be constrained by the model to (max - extent).
       bar.setValue(bar.getMaximum());
       captureBarState();
+      setSavedScrollValue.accept(bar.getValue());
     } finally {
       programmaticScroll = false;
     }
@@ -292,17 +309,23 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
   public void updateScrollStateFromBar() {
     if (closed) return;
+    if (programmaticScroll) {
+      captureBarState();
+      return;
+    }
 
     int max = bar.getMaximum();
     int extent = barModel.getExtent();
     int val = bar.getValue();
 
     boolean maxOrExtentChanged = (max != lastBarMax) || (extent != lastBarExtent);
+    boolean valueChanged = val != lastBarValue;
     boolean wasAtBottom = lastBarMax < 0 || (lastBarValue + lastBarExtent) >= (lastBarMax - 2);
     boolean atBottomNow = (val + extent) >= (max - 2);
 
     if (forcePinOnce) {
       setFollowTailWithReason(true, "forcePinOnce");
+      if (maxOrExtentChanged) scheduleTailPin();
       setSavedScrollValue.accept(val);
       lastBarMax = max;
       lastBarExtent = extent;
@@ -311,8 +334,9 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     }
 
     if (maxOrExtentChanged) {
-      if (safeIsFollowTail() && wasAtBottom) {
-        setFollowTailWithReason(true, "modelChurn.wasAtBottom");
+      if (safeIsFollowTail() && (wasAtBottom || tailPinPending)) {
+        infoOnce("barModelChanged -> repin");
+        scheduleTailPin();
       }
       setSavedScrollValue.accept(val);
       lastBarMax = max;
@@ -324,7 +348,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     if (atBottomNow) {
       // When the user reaches the bottom, re-enable follow-tail.
       setFollowTailWithReason(true, "atBottomNow");
-    } else if (safeIsFollowTail()) {
+    } else if (valueChanged && safeIsFollowTail()) {
       // Only treat a non-bottom position as user intent when the model is otherwise stable.
       setFollowTailWithReason(false, "userScrolledAway");
     }
@@ -362,8 +386,11 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     if (closed) return;
     closed = true;
 
+    if (viewport.getLayout() == tailPreservingViewportLayout) {
+      viewport.setLayout(originalViewportLayout);
+    }
+
     try {
-      bar.removeAdjustmentListener(barListener);
       barModel.removeChangeListener(modelListener);
     } catch (Exception ignored) {
     }

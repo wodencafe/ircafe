@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
@@ -69,6 +70,26 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 class ChatDockableWiringSmokeTest {
+
+  @Test
+  void startupScrollCallbacksWaitForReadMarkerCoordinator() throws Exception {
+    AtomicReference<Throwable> uncaught = new AtomicReference<>();
+    Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+    Thread.setDefaultUncaughtExceptionHandler(
+        (thread, failure) -> uncaught.compareAndSet(null, failure));
+    Fixture fixture = null;
+    try {
+      fixture = createFixture(mock(ExecutorService.class), mock(ExecutorService.class), true);
+      flushEdt();
+      assertNull(uncaught.get(), "startup must not call an uninitialized scroll-state coordinator");
+    } finally {
+      try {
+        if (fixture != null) fixture.shutdown(false);
+      } finally {
+        Thread.setDefaultUncaughtExceptionHandler(previous);
+      }
+    }
+  }
 
   @Test
   void targetSelectionUsesInjectedTypingPort() throws Exception {
@@ -270,7 +291,7 @@ class ChatDockableWiringSmokeTest {
     }
   }
 
-  private static Fixture createFixture() throws Exception {
+  static Fixture createFixture() throws Exception {
     return createFixture(
         VirtualThreads.newSingleThreadExecutor("test-chat-dockable-wiring-log-viewer"),
         VirtualThreads.newSingleThreadExecutor("test-chat-dockable-wiring-interceptor"));
@@ -292,6 +313,14 @@ class ChatDockableWiringSmokeTest {
 
   private static Fixture createFixture(
       ExecutorService logViewerExecutor, ExecutorService interceptorRefreshExecutor)
+      throws Exception {
+    return createFixture(logViewerExecutor, interceptorRefreshExecutor, false);
+  }
+
+  private static Fixture createFixture(
+      ExecutorService logViewerExecutor,
+      ExecutorService interceptorRefreshExecutor,
+      boolean constructOffEdt)
       throws Exception {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
@@ -339,7 +368,7 @@ class ChatDockableWiringSmokeTest {
         new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
 
     AtomicReference<ChatDockable> holder = new AtomicReference<>();
-    onEdt(
+    ThrowingRunnable createChat =
         () ->
             holder.set(
                 new ChatDockable(
@@ -383,7 +412,20 @@ class ChatDockableWiringSmokeTest {
                     spellcheckSettingsBus,
                     commandHistoryStore,
                     logViewerExecutor,
-                    interceptorRefreshExecutor)));
+                    interceptorRefreshExecutor));
+    if (constructOffEdt) {
+      when(backendUiProfileProvider.profileForServer(""))
+          .thenAnswer(
+              invocation -> {
+                // Spring builds this bean off the EDT. Drain callbacks midway through construction
+                // so this test exercises startup ordering without relying on a timing race.
+                flushEdt();
+                return null;
+              });
+      createChat.run();
+    } else {
+      onEdt(createChat);
+    }
 
     return new Fixture(
         holder.get(),
@@ -489,7 +531,7 @@ class ChatDockableWiringSmokeTest {
     T get() throws Exception;
   }
 
-  private record Fixture(
+  record Fixture(
       ChatDockable chat,
       IrcMediatorInteractionPort irc,
       IrcTypingPort typingPort,
