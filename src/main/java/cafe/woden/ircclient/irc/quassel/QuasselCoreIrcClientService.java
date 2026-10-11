@@ -963,16 +963,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     try {
-      QuasselCoreReadMarkerCoordinator markers = readMarkerCoordinator(session);
-      QuasselCoreSyncDispatcher sync = syncDispatcher(session, markers);
-      QuasselCoreRpcDispatcher rpc = rpcDispatcher(session, inboundCoordinator(session, markers));
-      QuasselCoreSignalProxyDispatcher dispatcher =
-          new QuasselCoreSignalProxyDispatcher(session, rpc::dispatch, sync::dispatch);
+      QuasselCoreInboundPipeline pipeline =
+          new QuasselCoreInboundPipeline(
+              session, targets, stateObservations, ircv3RuntimeSupport, bus::onNext);
       readLoop.read(
           sid,
           socket,
           () -> shuttingDown.get() || session.closeRequested.get(),
-          dispatcher::dispatch,
+          pipeline::dispatch,
           failure -> handleReadFailure(session, failure));
     } finally {
       session.readiness.close();
@@ -997,171 +995,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
-  }
-
-  private QuasselCoreInboundMessageCoordinator inboundCoordinator(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers) {
-    return new QuasselCoreInboundMessageCoordinator(
-        session,
-        markers,
-        targets,
-        ircv3RuntimeSupport,
-        new QuasselCoreInboundMessageCoordinator.SessionPort() {
-          @Override
-          public QuasselCoreDatastreamCodec.BufferInfoValue resolveBuffer(
-              QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
-            return stateObservations.resolveBuffer(session, incoming);
-          }
-
-          @Override
-          public String currentNick(int networkId) {
-            return session.nicks.forNetwork(networkId);
-          }
-
-          @Override
-          public boolean isSelfNick(String nick, int networkId) {
-            return session.nicks.isSelf(nick, networkId);
-          }
-
-          @Override
-          public void observeTargetNetwork(String target, int networkId) {
-            stateObservations.observeTargetNetwork(session, target, networkId, true);
-          }
-
-          @Override
-          public void observeNick(int networkId, Instant at, String nick) {
-            session.nicks.observe(networkId, nick, at);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreRpcDispatcher rpcDispatcher(
-      QuasselCoreSession session, QuasselCoreInboundMessageCoordinator inbound) {
-    QuasselCoreNetworkLifecycleTranslator networks =
-        new QuasselCoreNetworkLifecycleTranslator(
-            session.serverId,
-            session.networks::claimCreatedName,
-            (networkId, name) -> stateObservations.observeNetwork(session, networkId, name),
-            networkId -> stateObservations.forgetNetwork(session, networkId),
-            (networkId, state) -> stateObservations.observeFullState(session, networkId, state));
-    return new QuasselCoreRpcDispatcher(
-        session,
-        networks,
-        new QuasselCoreRpcDispatcher.SessionPort() {
-          @Override
-          public void displayMessage(QuasselCoreDatastreamCodec.MessageValue message) {
-            inbound.handle(message);
-          }
-
-          @Override
-          public void observeBuffer(QuasselCoreDatastreamCodec.BufferInfoValue merged) {
-            stateObservations.observeBuffer(session, merged);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreSyncDispatcher syncDispatcher(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers) {
-    return new QuasselCoreSyncDispatcher(
-        session,
-        networkSyncTranslator(session),
-        new QuasselCoreSyncDispatcher.SessionPort() {
-          @Override
-          public void applyBufferInfoSnapshot(List<Object> values) {
-            stateObservations.applyBufferSnapshot(session, values);
-          }
-
-          @Override
-          public void observeReadMarkers(String slotName, List<Object> values) {
-            markers.observeSync(slotName, values);
-          }
-
-          @Override
-          public void receiveBacklog(List<Object> values) {
-            handleBacklogSync(session, markers, values);
-          }
-
-          @Override
-          public void observeNetwork(int networkId, String name) {
-            stateObservations.observeNetwork(session, networkId, name);
-          }
-
-          @Override
-          public String qualifyTarget(String target, int networkId) {
-            return targets.qualifyTarget(session, target, networkId);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreNetworkSyncTranslator networkSyncTranslator(QuasselCoreSession session) {
-    return new QuasselCoreNetworkSyncTranslator(
-        session.serverId,
-        (networkId, name) -> stateObservations.observeNetwork(session, networkId, name),
-        (networkId, state) -> stateObservations.observeState(session, networkId, state),
-        (networkId, state) -> stateObservations.observeFullState(session, networkId, state),
-        (networkId, nick) -> session.nicks.observe(networkId, nick, Instant.now()));
-  }
-
-  private QuasselCoreReadMarkerCoordinator readMarkerCoordinator(QuasselCoreSession session) {
-    return new QuasselCoreReadMarkerCoordinator(
-        session,
-        new QuasselCoreReadMarkerCoordinator.SessionPort() {
-          @Override
-          public String currentNick(int networkId) {
-            return session.nicks.forNetwork(networkId);
-          }
-
-          @Override
-          public String historyTarget(
-              QuasselCoreDatastreamCodec.BufferInfoValue buffer, String from) {
-            return targets.targetForBuffer(session, buffer, from);
-          }
-
-          @Override
-          public String qualifyTarget(String target, int networkId) {
-            return targets.qualifyTarget(session, target, networkId);
-          }
-
-          @Override
-          public void observeTargetNetwork(String target, int networkId) {
-            stateObservations.observeTargetNetwork(session, target, networkId, true);
-          }
-
-          @Override
-          public void emit(IrcEvent.ReadMarkerObserved event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private void handleBacklogSync(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers, List<Object> values) {
-    IrcEvent.ChatHistoryBatchReceived batch =
-        session.backlog.sync(
-            values,
-            session.buffers::get,
-            info -> stateObservations.resolveBuffer(session, info),
-            (info, from) -> targets.targetForBuffer(session, info, from),
-            (target, networkId) ->
-                stateObservations.observeTargetNetwork(session, target, networkId, true),
-            (message, entry) ->
-                markers.observeHistory(entry.target(), message.messageId(), entry.at()));
-    if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
   }
 
   private static int primaryNetworkId(QuasselCoreSession session) {
