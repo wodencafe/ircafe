@@ -84,6 +84,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreInputCoordinator inputs;
   private final QuasselCoreOutboundSignalCoordinator outboundSignals;
   private final QuasselCoreHistoryRequestCoordinator historyRequests;
+  private final QuasselCoreLagProbeCoordinator lagProbes;
   private final QuasselCoreStateObservationCoordinator stateObservations;
   private final QuasselCoreNetworkManagementCoordinator networkManagement;
 
@@ -149,6 +150,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.historyRequests =
         new QuasselCoreHistoryRequestCoordinator(
             ircv3RuntimeSupport, targets, this::requireEstablishedSession);
+    this.lagProbes =
+        new QuasselCoreLagProbeCoordinator(this::requireEstablishedSession, sessions::get);
     IrcProperties.Client client = props == null ? null : props.client();
     this.reconnects =
         new QuasselCoreReconnectCoordinator(
@@ -714,39 +717,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable requestLagProbe(String serverId) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "request lag probe");
-              Socket socket = session.socketRef.get();
-              if (socket == null) {
-                throw new IllegalStateException("Quassel socket is closed");
-              }
-
-              QuasselCoreDatastreamCodec.QtDateTimeValue token = session.lag.beginProbe();
-
-              try {
-                session.outbound.send(
-                    socket,
-                    (codec, out) -> {
-                      codec.writeSignalProxyHeartBeat(out, token);
-                    });
-              } catch (Exception e) {
-                session.lag.cancelProbe();
-                throw e;
-              }
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return lagProbes.request(serverId);
   }
 
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null || session.socketRef.get() == null) return OptionalLong.empty();
-    return session.lag.lastMeasuredLagMs();
+    return lagProbes.lastMeasuredLagMs(serverId);
   }
 
   private QuasselCoreSession findEstablishedSession(String serverId) {
