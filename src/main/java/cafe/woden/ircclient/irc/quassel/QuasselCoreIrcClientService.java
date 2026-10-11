@@ -74,7 +74,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private final ServerCatalog serverCatalog;
   private final QuasselCoreSocketConnector socketConnector;
-  private final QuasselCoreProtocolProbe protocolProbe;
+  private final QuasselCoreHandshakeCoordinator handshakes;
   private final QuasselCoreAuthHandshake authHandshake;
   private final QuasselCoreReadLoop readLoop;
   private final QuasselCoreSignalProxySender signalProxySender;
@@ -116,7 +116,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselIrcv3RuntimeSupport ircv3RuntimeSupport) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.socketConnector = Objects.requireNonNull(socketConnector, "socketConnector");
-    this.protocolProbe = Objects.requireNonNull(protocolProbe, "protocolProbe");
+    this.handshakes =
+        new QuasselCoreHandshakeCoordinator(this.socketConnector, protocolProbe, authHandshake);
     this.authHandshake = Objects.requireNonNull(authHandshake, "authHandshake");
     this.readLoop =
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
@@ -266,23 +267,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 closeSession(removed, "Completing Quassel Core setup", false);
               }
 
-              try (Socket socket = socketConnector.connect(server)) {
-                QuasselCoreProtocolProbe.ProbeSelection probe = protocolProbe.negotiate(socket);
-                if (probe.protocolType() != QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM) {
-                  throw new IllegalStateException(
-                      "Quassel core selected unsupported protocol "
-                          + QuasselCoreProtocolProbe.protocolLabel(probe.protocolType()));
-                }
-                authHandshake.performCoreSetup(
-                    socket,
-                    new QuasselCoreAuthHandshake.CoreSetupRequest(
-                        req.adminUser(),
-                        req.adminPassword(),
-                        req.storageBackend(),
-                        req.authenticator(),
-                        req.storageSetupData(),
-                        req.authSetupData()));
-              }
+              handshakes.performSetup(server, req);
 
               pendingSetupByServer.remove(sid);
               availabilityReasonByServer.put(
@@ -763,12 +748,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         return;
       }
 
-      QuasselCoreProtocolProbe.ProbeSelection probe = protocolProbe.negotiate(openedSocket);
-      if (probe.protocolType() != QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM) {
-        throw new IllegalStateException(
-            "Quassel core selected unsupported protocol "
-                + QuasselCoreProtocolProbe.protocolLabel(probe.protocolType()));
-      }
+      QuasselCoreProtocolProbe.ProbeSelection probe = handshakes.negotiateDatastream(openedSocket);
 
       session.socketRef.set(openedSocket);
       session.phase.set(QuasselSessionPhase.TRANSPORT_CONNECTED);
