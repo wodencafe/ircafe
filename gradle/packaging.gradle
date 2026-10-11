@@ -93,7 +93,7 @@ jpackage {
     type = appImageType
 
     verbose = true
-    temp = "${buildDir}/jpackage/tmp"
+    // Let jpackage create and clean its temporary directory on each invocation.
 
     javaOptions = [
         "-Dfile.encoding=UTF-8"
