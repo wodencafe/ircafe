@@ -54,7 +54,7 @@ final class QuasselCoreNetworkCreationCoordinator {
     this.commands = Objects.requireNonNull(commands, "commands");
   }
 
-  // The service normalizes the request and retains its IO scheduler boundary.
+  // The network management coordinator normalizes the request; the service owns IO scheduling.
   void create(QuasselCoreNetworkCreateRequest request) throws Exception {
     if (request.identityId() == null && !identities.hasKnown()) {
       maybeCreateDefaultIdentityForNetwork(request);
