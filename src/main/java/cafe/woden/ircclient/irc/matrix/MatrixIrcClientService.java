@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc.matrix;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.matrix.MatrixHistoryCursorCoordinator.parseHistoryMessageIdSelector;
+import static cafe.woden.ircclient.irc.matrix.MatrixHistoryCursorCoordinator.parseHistoryTimestampSelector;
 import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixRoomAlias;
 import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixRoomId;
 import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixUserId;
@@ -21,7 +23,6 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,10 +58,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   private static final String RAW_TAG_MATRIX_MEDIA_URL = MatrixProtocol.RAW_TAG_MATRIX_MEDIA_URL;
   private static final String RAW_TAG_MATRIX_UPLOAD_PATH =
       MatrixProtocol.RAW_TAG_MATRIX_UPLOAD_PATH;
-  private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX =
-      MatrixProtocol.HISTORY_SELECTOR_TIMESTAMP_PREFIX;
-  private static final String HISTORY_SELECTOR_MSGID_PREFIX =
-      MatrixProtocol.HISTORY_SELECTOR_MSGID_PREFIX;
   private static final int MATRIX_TYPING_TIMEOUT_MS = 30_000;
   private static final int SYNC_INTERVAL_SECONDS = 3;
   private static final int SYNC_TIMEOUT_MS = 0;
@@ -92,6 +89,7 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncMutationEventProjector syncMutationEventProjector;
   private final MatrixHistoryCursorCoordinator historyCursorCoordinator;
+  private final MatrixHistoryRequestCoordinator historyRequests;
   private final MatrixReactionEventResolver reactionEventResolver;
   private final MatrixLocalEchoEmitter localEchoEmitter;
   private final MatrixSyncClient syncClient;
@@ -177,6 +175,15 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
     this.syncMutationEventProjector = new MatrixSyncMutationEventProjector(bus::onNext);
     this.historyCursorCoordinator =
         new MatrixHistoryCursorCoordinator(this.roomHistoryClient, this.syncClient);
+    this.historyRequests =
+        new MatrixHistoryRequestCoordinator(
+            this.serverCatalog,
+            roomTargetResolver,
+            historyCursorCoordinator,
+            sessionsByServer::get,
+            this::backendAvailabilityReason,
+            this::historySessionView,
+            this::emitHistoryBatch);
     this.reactionEventResolver =
         new MatrixReactionEventResolver(
             this.roomHistoryClient,
@@ -1015,255 +1022,31 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
-    String token = normalize(selector);
-    if (token.isEmpty()) {
-      return requestChatHistoryBefore(serverId, target, Instant.now(), limit);
-    }
-
-    Instant ts = parseHistoryTimestampSelector(token);
-    if (ts != null) {
-      return requestChatHistoryBefore(serverId, target, ts, limit);
-    }
-
-    String messageId = parseHistoryMessageIdSelector(token);
-    if (!messageId.isEmpty()) {
-      return requestChatHistoryBeforeByMessageId(
-          serverId, target, messageId, limit, "chat-history-before");
-    }
-
-    return Completable.error(
-        new IllegalArgumentException("selector must be msgid=... or timestamp=..."));
+    return historyRequests.requestBefore(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
-    String token = normalize(selector);
-    if (token.isEmpty() || "*".equals(token)) {
-      return requestChatHistoryBefore(serverId, target, Instant.now(), limit);
-    }
-    Instant ts = parseHistoryTimestampSelector(token);
-    if (ts != null) {
-      return requestChatHistoryBefore(serverId, target, ts, limit);
-    }
-    String messageId = parseHistoryMessageIdSelector(token);
-    if (!messageId.isEmpty()) {
-      return requestChatHistoryBeforeByMessageId(
-          serverId, target, messageId, limit, "chat-history-latest");
-    }
-    return Completable.error(
-        new IllegalArgumentException("selector must be *, msgid=..., or timestamp=..."));
+    return historyRequests.requestLatest(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBetween(
       String serverId, String target, String startSelector, String endSelector, int limit) {
-    String startToken = normalize(startSelector);
-    String endToken = normalize(endSelector);
-    if (startToken.isEmpty() || endToken.isEmpty()) {
-      return Completable.error(
-          new IllegalArgumentException(
-              "CHATHISTORY BETWEEN requires <start-selector> <end-selector>"));
-    }
-
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history-between",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId =
-                  roomTargetResolver.resolveHistoryRoomId(sid, requestedTarget, server, session);
-              Instant startAt =
-                  historyCursorCoordinator.resolveHistorySelectorInstant(
-                      sid,
-                      server,
-                      historySession,
-                      roomId,
-                      startToken,
-                      "chat-history-between",
-                      "start selector");
-              Instant endAt =
-                  historyCursorCoordinator.resolveHistorySelectorInstant(
-                      sid,
-                      server,
-                      historySession,
-                      roomId,
-                      endToken,
-                      "chat-history-between",
-                      "end selector");
-              Instant endExclusive = endAt == null ? Instant.now() : endAt;
-              if (startAt != null && !startAt.isBefore(endExclusive)) {
-                throw new IllegalArgumentException(
-                    "start selector must be earlier than end selector");
-              }
-
-              Instant startInclusive = startAt == null ? Instant.EPOCH : startAt;
-              String forwardCursor =
-                  historyCursorCoordinator.resolveForwardCursorForTimestamp(
-                      sid, server, historySession, roomId, startInclusive.toEpochMilli());
-              List<ChatHistoryEntry> entries =
-                  historyCursorCoordinator.fetchHistoryEntriesForwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      startInclusive,
-                      endExclusive,
-                      requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestBetween(serverId, target, startSelector, endSelector, limit);
   }
 
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-              String token = normalize(selector);
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history-around",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId =
-                  roomTargetResolver.resolveHistoryRoomId(sid, requestedTarget, server, session);
-
-              Instant centerAt;
-              if (token.isEmpty() || "*".equals(token)) {
-                centerAt = Instant.now();
-              } else {
-                centerAt =
-                    historyCursorCoordinator.resolveHistorySelectorInstant(
-                        sid,
-                        server,
-                        historySession,
-                        roomId,
-                        token,
-                        "chat-history-around",
-                        "selector");
-              }
-
-              String forwardCursor =
-                  historyCursorCoordinator.resolveForwardCursorForTimestamp(
-                      sid, server, historySession, roomId, centerAt.toEpochMilli());
-              int scanLimit = Math.min(200, Math.max(requestedLimit * 4, requestedLimit + 20));
-              List<ChatHistoryEntry> backwardCandidates =
-                  historyCursorCoordinator.fetchHistoryEntriesBackwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      null,
-                      null,
-                      scanLimit);
-              List<ChatHistoryEntry> forwardCandidates =
-                  historyCursorCoordinator.fetchHistoryEntriesForwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      null,
-                      null,
-                      scanLimit);
-              List<ChatHistoryEntry> candidates =
-                  MatrixHistoryCursorCoordinator.mergeHistoryCandidates(
-                      backwardCandidates, forwardCandidates);
-              List<ChatHistoryEntry> entries =
-                  MatrixHistoryCursorCoordinator.selectEntriesAroundTimestamp(
-                      candidates, centerAt, requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestAround(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, Instant beforeExclusive, int limit) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId =
-                  roomTargetResolver.resolveHistoryRoomId(sid, requestedTarget, server, session);
-              long beforeEpochMs =
-                  beforeExclusive == null
-                      ? System.currentTimeMillis()
-                      : beforeExclusive.toEpochMilli();
-              List<ChatHistoryEntry> entries =
-                  historyCursorCoordinator.fetchHistoryEntriesBefore(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      beforeEpochMs,
-                      requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestBefore(serverId, target, beforeExclusive, limit);
   }
 
   @Override
@@ -1615,85 +1398,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
         return session.roomEventTimestampMs(roomId, eventId);
       }
     };
-  }
-
-  private Completable unsupportedChatHistoryMode(String operation, String serverId, String detail) {
-    String sid = normalizeServerId(serverId);
-    String message = normalize(detail);
-    if (message.isEmpty()) {
-      message = UNSUPPORTED_OPERATION_REASON;
-    }
-    if (!sid.isEmpty() && !sessionsByServer.containsKey(sid)) {
-      message = backendAvailabilityReason(sid);
-    }
-    return Completable.error(
-        new BackendNotAvailableException(
-            IrcProperties.Server.Backend.MATRIX, operation, sid, message));
-  }
-
-  private static Instant parseHistoryTimestampSelector(String selector) {
-    String token = normalize(selector);
-    if (!token.toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_TIMESTAMP_PREFIX)) {
-      return null;
-    }
-    String value = normalize(token.substring(HISTORY_SELECTOR_TIMESTAMP_PREFIX.length()));
-    if (value.isEmpty()) {
-      throw new IllegalArgumentException("timestamp selector is blank");
-    }
-    try {
-      return Instant.parse(value);
-    } catch (DateTimeParseException ex) {
-      throw new IllegalArgumentException("timestamp selector is invalid: " + value, ex);
-    }
-  }
-
-  private static boolean historyMsgidSelector(String selector) {
-    return normalize(selector).toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_MSGID_PREFIX);
-  }
-
-  private static String parseHistoryMessageIdSelector(String selector) {
-    String token = normalize(selector);
-    if (!historyMsgidSelector(token)) {
-      return "";
-    }
-    String messageId = normalize(token.substring(HISTORY_SELECTOR_MSGID_PREFIX.length()));
-    if (messageId.isEmpty()) {
-      throw new IllegalArgumentException("msgid selector is blank");
-    }
-    return messageId;
-  }
-
-  private Completable requestChatHistoryBeforeByMessageId(
-      String serverId, String target, String messageId, int limit, String operation) {
-    return Completable.defer(
-        () -> {
-          String sid = normalizeServerId(serverId);
-          if (sid.isEmpty()) {
-            return Completable.error(new IllegalArgumentException(SERVER_ID_BLANK));
-          }
-          String requestedTarget = normalize(target);
-          if (requestedTarget.isEmpty()) {
-            return Completable.error(new IllegalArgumentException("target is blank"));
-          }
-
-          MatrixSession session = sessionsByServer.get(sid);
-          if (session == null) {
-            return Completable.error(
-                new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    operation,
-                    sid,
-                    backendAvailabilityReason(sid)));
-          }
-
-          IrcProperties.Server server = serverCatalog.require(sid);
-          String roomId =
-              roomTargetResolver.resolveHistoryRoomId(sid, requestedTarget, server, session);
-          Instant marker =
-              historyCursorCoordinator.resolveHistoryMessageIdInstant(
-                  sid, server, historySessionView(session), roomId, messageId, operation);
-          return requestChatHistoryBefore(sid, requestedTarget, marker, limit);
-        });
   }
 
   private Completable sendRawPrivmsg(String serverId, String rawLine, RawCommand raw) {
