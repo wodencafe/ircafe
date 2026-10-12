@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.closeQuietly;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -74,6 +75,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreReadLoop readLoop;
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
+  private final QuasselCoreSessionLifecycle sessionLifecycle;
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
   private final QuasselCoreInputCoordinator inputs;
@@ -162,6 +164,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             sid -> connectInternal(sid, false),
             bus::onNext,
             RxVirtualSchedulers::io);
+    this.sessionLifecycle =
+        new QuasselCoreSessionLifecycle(
+            sessions,
+            availabilityReasonByServer::put,
+            shuttingDown::get,
+            reconnects,
+            sessionEvents,
+            bus::onNext);
     this.setups =
         new QuasselCoreSetupCoordinator(
             serverCatalog, handshakes, this::prepareCoreSetup, availabilityReasonByServer::put);
@@ -177,7 +187,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (!shuttingDown.compareAndSet(false, true)) return;
     reconnects.close();
     for (Map.Entry<String, QuasselCoreSession> entry : sessions.entrySet()) {
-      closeSession(entry.getValue(), "Client shutting down", false);
+      sessionLifecycle.closeSession(entry.getValue(), "Client shutting down", false);
     }
     sessions.clear();
     availabilityReasonByServer.clear();
@@ -356,7 +366,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 return;
               }
 
-              closeSession(removed, normalizeDisconnectReason(reason), true);
+              sessionLifecycle.closeSession(removed, normalizeDisconnectReason(reason), true);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -597,12 +607,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return lagProbes.lastMeasuredLagMs(serverId);
   }
 
-  private void scheduleReconnectIfEligible(QuasselCoreSession session, String reason) {
-    if (session == null || shuttingDown.get() || session.closeRequested.get()) return;
-    if (!session.reconnectScheduled.compareAndSet(false, true)) return;
-    reconnects.schedule(session.serverId, reason);
-  }
-
   private void establishSession(IrcProperties.Server server, QuasselCoreSession session) {
     String sid = session.serverId;
     Socket openedSocket = null;
@@ -680,7 +684,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       availabilityReasonByServer.put(sid, reason);
       bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
       sessionEvents.emitDisconnectedOnce(session, reason);
-      scheduleReconnectIfEligible(session, reason);
+      sessionLifecycle.scheduleReconnectIfEligible(session, reason);
     }
   }
 
@@ -701,30 +705,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           socket,
           () -> shuttingDown.get() || session.closeRequested.get(),
           pipeline::dispatch,
-          failure -> handleReadFailure(session, failure));
+          failure -> sessionLifecycle.handleReadFailure(session, failure));
     } finally {
-      session.readiness.close();
-      closeQuietly(session.socketRef.getAndSet(null));
-      sessions.remove(sid, session);
-      if (session.closeRequested.get()) {
-        String reason = normalizeDisconnectReason(session.closeReason.get());
-        availabilityReasonByServer.put(sid, reason);
-        sessionEvents.emitDisconnectedOnce(session, reason);
-      }
+      sessionLifecycle.finishReadLoop(session);
     }
-  }
-
-  private void handleReadFailure(QuasselCoreSession session, QuasselCoreReadLoop.Failure failure) {
-    session.readiness.close();
-    String sid = session.serverId;
-    String reason = failure.reason();
-    availabilityReasonByServer.put(sid, reason);
-    if (failure.cause() != null) {
-      bus.onNext(
-          new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, failure.cause())));
-    }
-    sessionEvents.emitDisconnectedOnce(session, reason);
-    scheduleReconnectIfEligible(session, reason);
   }
 
   private void prepareCoreSetup(String serverId) {
@@ -732,32 +716,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     reconnects.reset(serverId);
     QuasselCoreSession removed = sessions.remove(serverId);
     if (removed != null) {
-      closeSession(removed, "Completing Quassel Core setup", false);
-    }
-  }
-
-  private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
-    if (session == null) return;
-    session.closeRequested.set(true);
-    session.closeReason.set(normalizeDisconnectReason(reason));
-
-    session.readiness.close();
-
-    session.disposeReadLoopTask();
-
-    closeQuietly(session.socketRef.getAndSet(null));
-    session.clearObservedState();
-    availabilityReasonByServer.put(session.serverId, session.closeReason.get());
-    if (emitDisconnected) {
-      sessionEvents.emitDisconnectedOnce(session, session.closeReason.get());
-    }
-  }
-
-  private static void closeQuietly(Socket socket) {
-    if (socket == null) return;
-    try {
-      socket.close();
-    } catch (Exception ignored) {
+      sessionLifecycle.closeSession(removed, "Completing Quassel Core setup", false);
     }
   }
 
