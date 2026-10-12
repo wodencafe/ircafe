@@ -2,7 +2,6 @@ package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -19,14 +18,12 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
-import java.net.Socket;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -51,8 +48,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
-  private static final String PHASE_PROTOCOL_NEGOTIATED = "protocol-negotiated";
-
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
   private final QuasselCoreSessionEventPublisher sessionEvents =
@@ -63,11 +58,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
   private final ServerCatalog serverCatalog;
-  private final QuasselCoreSocketConnector socketConnector;
-  private final QuasselCoreHandshakeCoordinator handshakes;
   private final QuasselCoreSetupCoordinator setups;
-  private final QuasselCoreAuthHandshake authHandshake;
-  private final QuasselCoreSessionBootstrap sessionBootstrap;
+  private final QuasselCoreSessionEstablisher sessionEstablisher;
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselCoreSessionLifecycle sessionLifecycle;
@@ -108,10 +100,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       IrcProperties props,
       QuasselIrcv3RuntimeSupport ircv3RuntimeSupport) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-    this.socketConnector = Objects.requireNonNull(socketConnector, "socketConnector");
-    this.handshakes =
-        new QuasselCoreHandshakeCoordinator(this.socketConnector, protocolProbe, authHandshake);
-    this.authHandshake = Objects.requireNonNull(authHandshake, "authHandshake");
+    Objects.requireNonNull(socketConnector, "socketConnector");
+    QuasselCoreHandshakeCoordinator handshakes =
+        new QuasselCoreHandshakeCoordinator(socketConnector, protocolProbe, authHandshake);
+    Objects.requireNonNull(authHandshake, "authHandshake");
     QuasselCoreReadLoop readLoop =
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
@@ -182,9 +174,18 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             this::prepareCoreSetup,
             availabilityReasonByServer::put,
             sessionEvents);
-    this.sessionBootstrap =
+    QuasselCoreSessionBootstrap sessionBootstrap =
         new QuasselCoreSessionBootstrap(
             stateObservations, networkManagement, sessionReader, this::onSessionEstablished);
+    this.sessionEstablisher =
+        new QuasselCoreSessionEstablisher(
+            socketConnector,
+            handshakes,
+            authHandshake,
+            sessionBootstrap,
+            sessionLifecycle,
+            setups,
+            sessionEvents);
   }
 
   @PreDestroy
@@ -339,7 +340,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
               sessionEvents.emitConnecting(next);
 
-              RxVirtualSchedulers.io().scheduleDirect(() -> establishSession(server, next));
+              RxVirtualSchedulers.io()
+                  .scheduleDirect(() -> sessionEstablisher.establish(server, next));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -608,38 +610,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return lagProbes.lastMeasuredLagMs(serverId);
-  }
-
-  private void establishSession(IrcProperties.Server server, QuasselCoreSession session) {
-    Socket openedSocket = null;
-    try {
-      if (sessionLifecycle.abortEstablishmentIfRequested(session, null)) return;
-
-      openedSocket = socketConnector.connect(server);
-      if (sessionLifecycle.abortEstablishmentIfRequested(session, openedSocket)) return;
-
-      QuasselCoreProtocolProbe.ProbeSelection probe = handshakes.negotiateDatastream(openedSocket);
-
-      session.socketRef.set(openedSocket);
-      session.phase.set(QuasselSessionPhase.TRANSPORT_CONNECTED);
-      sessionEvents.emitConnected(session);
-
-      session.probeSelection.set(probe);
-      session.phase.set(QuasselSessionPhase.PROTOCOL_NEGOTIATED);
-      sessionEvents.emitConnectionPhase(
-          session, PHASE_PROTOCOL_NEGOTIATED, renderProbeSource(probe));
-
-      session.phase.set(QuasselSessionPhase.AUTHENTICATING);
-      QuasselCoreAuthHandshake.AuthResult auth = authHandshake.authenticate(openedSocket, server);
-      sessionBootstrap.complete(session, auth);
-    } catch (QuasselCoreAuthHandshake.CoreSetupRequiredException e) {
-      sessionLifecycle.discardFailedConnection(session, openedSocket);
-      if (session.closeRequested.get()) return;
-
-      setups.reportRequired(session, e);
-    } catch (Exception e) {
-      sessionLifecycle.handleConnectFailure(session, openedSocket, e);
-    }
   }
 
   private void onSessionEstablished(String serverId) {
