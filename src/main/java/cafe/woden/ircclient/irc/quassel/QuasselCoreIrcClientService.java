@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
@@ -54,14 +56,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "";
-  private static final String DEFAULT_DISCONNECT_REASON = "Client requested disconnect";
-  private static final String FEATURE_PHASE_PREFIX = "quassel-phase=";
-  private static final String FEATURE_DETAIL_PREFIX = ";detail=";
   private static final String PHASE_PROTOCOL_NEGOTIATED = "protocol-negotiated";
   private static final String PHASE_SETUP_REQUIRED = "setup-required";
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
+  private final QuasselCoreSessionEventPublisher sessionEvents =
+      new QuasselCoreSessionEventPublisher(bus::onNext);
   private final QuasselCoreObservationMediator observations = new QuasselCoreObservationMediator();
   private final Map<String, QuasselCoreSession> sessions = new ConcurrentHashMap<>();
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
@@ -687,7 +688,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
       session.probeSelection.set(probe);
       session.phase.set(QuasselSessionPhase.PROTOCOL_NEGOTIATED);
-      emitConnectionPhase(session, PHASE_PROTOCOL_NEGOTIATED, renderProbeSource(probe));
+      sessionEvents.emitConnectionPhase(
+          session, PHASE_PROTOCOL_NEGOTIATED, renderProbeSource(probe));
 
       session.phase.set(QuasselSessionPhase.AUTHENTICATING);
       QuasselCoreAuthHandshake.AuthResult auth = authHandshake.authenticate(openedSocket, server);
@@ -721,9 +723,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       availabilityReasonByServer.put(sid, reason);
       pendingSetupByServer.put(
           sid, QuasselCoreSetupSupport.buildSetupPrompt(sid, reason, e.setupFields()));
-      emitConnectionPhase(session, PHASE_SETUP_REQUIRED, reason);
+      sessionEvents.emitConnectionPhase(session, PHASE_SETUP_REQUIRED, reason);
       bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
-      emitDisconnectedOnce(session, reason);
+      sessionEvents.emitDisconnectedOnce(session, reason);
     } catch (Exception e) {
       closeQuietly(openedSocket);
       sessions.remove(sid, session);
@@ -733,7 +735,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       String reason = detail.isEmpty() ? "Connect failed" : ("Connect failed: " + detail);
       availabilityReasonByServer.put(sid, reason);
       bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
-      emitDisconnectedOnce(session, reason);
+      sessionEvents.emitDisconnectedOnce(session, reason);
       scheduleReconnectIfEligible(session, reason);
     }
   }
@@ -763,7 +765,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       if (session.closeRequested.get()) {
         String reason = normalizeDisconnectReason(session.closeReason.get());
         availabilityReasonByServer.put(sid, reason);
-        emitDisconnectedOnce(session, reason);
+        sessionEvents.emitDisconnectedOnce(session, reason);
       }
     }
   }
@@ -777,7 +779,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       bus.onNext(
           new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, failure.cause())));
     }
-    emitDisconnectedOnce(session, reason);
+    sessionEvents.emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
   }
 
@@ -800,18 +802,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.clearObservedState();
     availabilityReasonByServer.put(session.serverId, session.closeReason.get());
     if (emitDisconnected) {
-      emitDisconnectedOnce(session, session.closeReason.get());
+      sessionEvents.emitDisconnectedOnce(session, session.closeReason.get());
     }
-  }
-
-  private void emitDisconnectedOnce(QuasselCoreSession session, String reason) {
-    if (session == null) return;
-    session.readiness.close();
-    if (!session.disconnectedEmitted.compareAndSet(false, true)) return;
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.Disconnected(Instant.now(), normalizeDisconnectReason(reason))));
   }
 
   private static void closeQuietly(Socket socket) {
@@ -831,40 +823,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return Objects.toString(serverId, "").trim();
   }
 
-  private static String normalizeDisconnectReason(String reason) {
-    String value = Objects.toString(reason, "").trim();
-    if (value.isEmpty()) return DEFAULT_DISCONNECT_REASON;
-    return value;
-  }
-
   private static String renderThrowableMessage(Throwable err) {
     if (err == null) return "";
     String message = Objects.toString(err.getMessage(), "").trim();
     if (!message.isEmpty()) return message;
     return err.getClass().getSimpleName();
-  }
-
-  private static String renderProbeSource(QuasselCoreProtocolProbe.ProbeSelection probe) {
-    return "quassel-probe protocol="
-        + QuasselCoreProtocolProbe.protocolLabel(probe.protocolType())
-        + " proto-features="
-        + QuasselCoreProtocolProbe.hex16(probe.protocolFeatures())
-        + " conn-features="
-        + QuasselCoreProtocolProbe.hex8(probe.connectionFeatures());
-  }
-
-  private void emitConnectionPhase(QuasselCoreSession session, String phase, String detail) {
-    if (session == null) return;
-    String phaseToken = Objects.toString(phase, "").trim();
-    if (phaseToken.isEmpty()) return;
-    String source = FEATURE_PHASE_PREFIX + phaseToken;
-    String detailToken = Objects.toString(detail, "").trim();
-    if (!detailToken.isEmpty()) {
-      source = source + FEATURE_DETAIL_PREFIX + detailToken.replace('\n', ' ').replace('\r', ' ');
-    }
-    bus.onNext(
-        new ServerIrcEvent(
-            session.serverId, new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), source)));
   }
 
   private QuasselCoreSession requireEstablishedSession(String serverId, String operation)
