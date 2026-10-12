@@ -53,8 +53,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
-  private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
-  private static final String BUFFER_SYNCER_OBJECT = "";
   private static final String PHASE_PROTOCOL_NEGOTIATED = "protocol-negotiated";
   private static final String PHASE_SETUP_REQUIRED = "setup-required";
 
@@ -72,7 +70,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreHandshakeCoordinator handshakes;
   private final QuasselCoreSetupCoordinator setups;
   private final QuasselCoreAuthHandshake authHandshake;
-  private final QuasselCoreSessionReader sessionReader;
+  private final QuasselCoreSessionBootstrap sessionBootstrap;
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselCoreSessionLifecycle sessionLifecycle;
@@ -171,7 +169,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             reconnects,
             sessionEvents,
             bus::onNext);
-    this.sessionReader =
+    QuasselCoreSessionReader sessionReader =
         new QuasselCoreSessionReader(
             readLoop,
             session ->
@@ -184,6 +182,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.setups =
         new QuasselCoreSetupCoordinator(
             serverCatalog, handshakes, this::prepareCoreSetup, availabilityReasonByServer::put);
+    this.sessionBootstrap =
+        new QuasselCoreSessionBootstrap(
+            stateObservations, networkManagement, sessionReader, this::onSessionEstablished);
   }
 
   @PreDestroy
@@ -652,24 +653,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
       session.phase.set(QuasselSessionPhase.AUTHENTICATING);
       QuasselCoreAuthHandshake.AuthResult auth = authHandshake.authenticate(openedSocket, server);
-      session.initialize(
-          auth,
-          id -> stateObservations.observeNetwork(session, id, ""),
-          info ->
-              stateObservations.observeTargetNetwork(
-                  session, info.bufferName(), info.networkId(), false));
-      session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
-      availabilityReasonByServer.remove(sid);
-      setups.forget(sid);
-      reconnects.reset(sid);
-      reconnects.cancel(sid, false);
-
-      sendSignalProxyInitRequest(session, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT);
-      for (Integer networkId :
-          session.networks.knownIds(session.authResult.get(), session.buffers.values())) {
-        networkManagement.requestNetworkInitState(session, networkId);
-      }
-      sessionReader.start(session);
+      sessionBootstrap.complete(session, auth);
     } catch (QuasselCoreAuthHandshake.CoreSetupRequiredException e) {
       sessionLifecycle.discardFailedConnection(session, openedSocket);
       if (session.closeRequested.get()) return;
@@ -683,6 +667,13 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     } catch (Exception e) {
       sessionLifecycle.handleConnectFailure(session, openedSocket, e);
     }
+  }
+
+  private void onSessionEstablished(String serverId) {
+    availabilityReasonByServer.remove(serverId);
+    setups.forget(serverId);
+    reconnects.reset(serverId);
+    reconnects.cancel(serverId, false);
   }
 
   private void prepareCoreSetup(String serverId) {
@@ -701,11 +692,5 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
-  }
-
-  private void sendSignalProxyInitRequest(
-      QuasselCoreSession session, String className, String objectName) throws Exception {
-    if (session == null) return;
-    session.networkCommands.requestInit(className, objectName);
   }
 }
