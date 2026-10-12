@@ -4,6 +4,7 @@ import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERV
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.closeQuietly;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.renderThrowableMessage;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -664,8 +665,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       session.readLoopTask.set(readTask);
       session.readiness.scheduleFallback();
     } catch (QuasselCoreAuthHandshake.CoreSetupRequiredException e) {
-      closeQuietly(openedSocket);
-      sessions.remove(sid, session);
+      sessionLifecycle.discardFailedConnection(session, openedSocket);
       if (session.closeRequested.get()) return;
 
       String detail = renderThrowableMessage(e);
@@ -675,16 +675,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
       sessionEvents.emitDisconnectedOnce(session, reason);
     } catch (Exception e) {
-      closeQuietly(openedSocket);
-      sessions.remove(sid, session);
-      if (session.closeRequested.get()) return;
-
-      String detail = renderThrowableMessage(e);
-      String reason = detail.isEmpty() ? "Connect failed" : ("Connect failed: " + detail);
-      availabilityReasonByServer.put(sid, reason);
-      bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
-      sessionEvents.emitDisconnectedOnce(session, reason);
-      sessionLifecycle.scheduleReconnectIfEligible(session, reason);
+      sessionLifecycle.handleConnectFailure(session, openedSocket, e);
     }
   }
 
@@ -727,13 +718,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
-  }
-
-  private static String renderThrowableMessage(Throwable err) {
-    if (err == null) return "";
-    String message = Objects.toString(err.getMessage(), "").trim();
-    if (!message.isEmpty()) return message;
-    return err.getClass().getSimpleName();
   }
 
   private void sendSignalProxyInitRequest(

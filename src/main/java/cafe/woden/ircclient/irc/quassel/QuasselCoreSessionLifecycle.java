@@ -7,6 +7,7 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import java.net.Socket;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -15,9 +16,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Coordinates session teardown, read-failure publication, and reconnect eligibility. The service
- * owns the shared session map and read tasks; this collaborator creates no workers or
- * subscriptions.
+ * Coordinates session teardown, failure publication, and reconnect eligibility. The service owns
+ * the shared session map and read tasks; this collaborator creates no workers or subscriptions.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSessionLifecycle {
@@ -59,12 +59,28 @@ final class QuasselCoreSessionLifecycle {
 
   void handleReadFailure(QuasselCoreSession session, QuasselCoreReadLoop.Failure failure) {
     session.readiness.close();
+    publishFailure(session, failure.reason(), failure.cause());
+  }
+
+  void handleConnectFailure(QuasselCoreSession session, Socket openedSocket, Exception failure) {
+    discardFailedConnection(session, openedSocket);
+    if (session.closeRequested.get()) return;
+
+    String detail = renderThrowableMessage(failure);
+    String reason = detail.isEmpty() ? "Connect failed" : ("Connect failed: " + detail);
+    publishFailure(session, reason, failure);
+  }
+
+  void discardFailedConnection(QuasselCoreSession session, Socket openedSocket) {
+    closeQuietly(openedSocket);
+    sessions.remove(session.serverId, session);
+  }
+
+  private void publishFailure(QuasselCoreSession session, String reason, Throwable cause) {
     String sid = session.serverId;
-    String reason = failure.reason();
     rememberAvailability.accept(sid, reason);
-    if (failure.cause() != null) {
-      events.accept(
-          new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, failure.cause())));
+    if (cause != null) {
+      events.accept(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, cause)));
     }
     sessionEvents.emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
@@ -82,5 +98,12 @@ final class QuasselCoreSessionLifecycle {
       socket.close();
     } catch (Exception ignored) {
     }
+  }
+
+  static String renderThrowableMessage(Throwable err) {
+    if (err == null) return "";
+    String message = Objects.toString(err.getMessage(), "").trim();
+    if (!message.isEmpty()) return message;
+    return err.getClass().getSimpleName();
   }
 }

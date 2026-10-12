@@ -283,6 +283,167 @@ class QuasselCoreSessionLifecycleTest {
     verifyNoMoreInteractions(reconnects);
   }
 
+  @Test
+  void connectFailureClosesSocketAndRemovesSessionBeforePublishingAndClosingReadiness()
+      throws Exception {
+    sessions.put("core", session);
+    session.readiness.fallbackTask.set(
+        Disposable.fromRunnable(
+            () -> {
+              assertFalse(sessions.containsKey("core"));
+              assertEquals(1, events.size());
+              assertEquals("Connect failed: bad credentials", reasons.get("core"));
+              trace.add("readiness");
+            }));
+    doAnswer(
+            invocation -> {
+              assertSame(session, sessions.get("core"));
+              assertTrue(events.isEmpty());
+              trace.add("socket");
+              return null;
+            })
+        .when(socket)
+        .close();
+    doAnswer(
+            invocation -> {
+              assertTrue(session.disconnectedEmitted.get());
+              assertTrue(session.reconnectScheduled.get());
+              trace.add("reconnect");
+              return null;
+            })
+        .when(reconnects)
+        .schedule("core", "Connect failed: bad credentials");
+    var failure = new IOException(" bad credentials ");
+    lifecycle.handleConnectFailure(session, socket, failure);
+    assertEquals(
+        List.of("socket", "availability", "error", "readiness", "disconnected", "reconnect"),
+        trace);
+    assertFailure(failure, "Connect failed: bad credentials");
+    assertNull(session.readiness.fallbackTask.get());
+    assertFalse(session.closeRequested.get());
+    verify(socket).close();
+    verify(reconnects).schedule("core", "Connect failed: bad credentials");
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   "})
+  void connectFailureWithoutAMessageUsesTheExceptionClass(String message) {
+    sessions.put("core", session);
+    var failure = new IOException(message);
+    lifecycle.handleConnectFailure(session, null, failure);
+    assertFalse(sessions.containsKey("core"));
+    assertFailure(failure, "Connect failed: IOException");
+    verify(reconnects).schedule("core", "Connect failed: IOException");
+  }
+
+  @Test
+  void anonymousConnectFailureWithNoMessageUsesTheFallbackReason() {
+    var failure = new IOException("") {};
+    lifecycle.handleConnectFailure(session, null, failure);
+    assertFailure(failure, "Connect failed");
+    verify(reconnects).schedule("core", "Connect failed");
+  }
+
+  @Test
+  void connectFailureAfterRequestedCloseStillCleansUpWithoutPublishingOrReconnecting()
+      throws Exception {
+    sessions.put("core", session);
+    reasons.put("core", "requested close");
+    session.closeRequested.set(true);
+    lifecycle.handleConnectFailure(session, socket, new IOException("late failure"));
+    assertFalse(sessions.containsKey("core"));
+    assertEquals("requested close", reasons.get("core"));
+    assertTrue(trace.isEmpty());
+    assertTrue(events.isEmpty());
+    assertFalse(session.reconnectScheduled.get());
+    verify(socket).close();
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void closeRequestedDuringFailedSocketCleanupSuppressesPublication() throws Exception {
+    sessions.put("core", session);
+    doAnswer(
+            invocation -> {
+              session.closeRequested.set(true);
+              return null;
+            })
+        .when(socket)
+        .close();
+    lifecycle.handleConnectFailure(session, socket, new IOException("failure"));
+    assertFalse(sessions.containsKey("core"));
+    assertTrue(events.isEmpty());
+    assertTrue(reasons.isEmpty());
+    verify(socket).close();
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void connectFailureDuringShutdownStillReportsFailureWithoutReconnecting() throws Exception {
+    sessions.put("core", session);
+    shuttingDown.set(true);
+    var failure = new IOException("shutdown failure");
+    lifecycle.handleConnectFailure(session, socket, failure);
+    assertFalse(sessions.containsKey("core"));
+    assertFailure(failure, "Connect failed: shutdown failure");
+    assertFalse(session.reconnectScheduled.get());
+    verify(socket).close();
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void lateConnectFailureCannotRemoveReplacementSessionOrCloseItsSocket() throws Exception {
+    var replacement = session();
+    Socket replacementSocket = mock(Socket.class);
+    replacement.socketRef.set(replacementSocket);
+    sessions.put("core", replacement);
+    var failure = new IOException("old failure");
+    lifecycle.handleConnectFailure(session, socket, failure);
+    assertSame(replacement, sessions.get("core"));
+    assertSame(replacementSocket, replacement.socketRef.get());
+    assertFalse(replacement.closeRequested.get());
+    assertFalse(replacement.disconnectedEmitted.get());
+    assertFailure(failure, "Connect failed: old failure");
+    verify(socket).close();
+    verifyNoInteractions(replacementSocket);
+  }
+
+  @Test
+  void failedSocketCloseDoesNotMaskTheOriginalConnectionFailure() throws Exception {
+    sessions.put("core", session);
+    doThrow(new IOException("socket close failed")).when(socket).close();
+    var failure = new IOException("probe failed");
+    assertDoesNotThrow(() -> lifecycle.handleConnectFailure(session, socket, failure));
+    assertFalse(sessions.containsKey("core"));
+    assertFailure(failure, "Connect failed: probe failed");
+    verify(reconnects).schedule("core", "Connect failed: probe failed");
+  }
+
+  @Test
+  void discardingSetupRequiredConnectionOnlyClosesItsSocketAndRemovesThatSession()
+      throws Exception {
+    sessions.put("core", session);
+    lifecycle.discardFailedConnection(session, socket);
+    assertFalse(sessions.containsKey("core"));
+    assertFalse(session.closeRequested.get());
+    assertFalse(session.disconnectedEmitted.get());
+    assertTrue(trace.isEmpty());
+    assertTrue(reasons.isEmpty());
+    verify(socket).close();
+    verifyNoInteractions(reconnects);
+  }
+
+  private void assertFailure(Exception failure, String reason) {
+    assertEquals(reason, reasons.get("core"));
+    assertEquals(2, events.size());
+    var error = assertInstanceOf(IrcEvent.Error.class, events.getFirst().event());
+    assertSame(failure, error.cause());
+    assertEquals(reason, error.message());
+    assertEquals(
+        reason, assertInstanceOf(IrcEvent.Disconnected.class, events.getLast().event()).reason());
+  }
+
   private void seed() {
     sessions.put("core", session);
     session.buffers.merge(new QuasselCoreDatastreamCodec.BufferInfoValue(1, 1, 0x02, -1, "#room"));
