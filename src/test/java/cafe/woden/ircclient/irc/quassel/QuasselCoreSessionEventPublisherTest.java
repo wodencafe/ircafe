@@ -83,9 +83,115 @@ class QuasselCoreSessionEventPublisherTest {
 
   @Test
   void missingSessionIsANoopForPhaseAndDisconnectPublication() {
+    publisher.emitConnecting(null);
+    publisher.emitConnected(null);
     publisher.emitConnectionPhase(null, "setup-required", "detail");
     publisher.emitDisconnectedOnce(null, "reason");
     assertTrue(events.isEmpty());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"connecting", "connected"})
+  void connectionNotificationsPreservePayloadTimestampAndSessionState(String kind) {
+    session.nicks.observe(-1, "observedNick", Instant.now());
+    readinessEvents.clear();
+    var phase =
+        "connecting".equals(kind)
+            ? QuasselSessionPhase.TRANSPORT_CONNECTING
+            : QuasselSessionPhase.TRANSPORT_CONNECTED;
+    session.phase.set(phase);
+    Socket socket = session.socketRef.get();
+    var fallback = Disposable.empty();
+    session.readiness.fallbackTask.set(fallback);
+    Instant before = Instant.now();
+    publishConnection(publisher, kind);
+    Instant after = Instant.now();
+    assertEquals(1, events.size());
+    assertEquals("core", events.getFirst().serverId());
+    Instant at;
+    if ("connecting".equals(kind)) {
+      var event = assertInstanceOf(IrcEvent.Connecting.class, events.getFirst().event());
+      assertEquals("core.example", event.serverHost());
+      assertEquals(4242, event.serverPort());
+      assertEquals("alice", event.nick());
+      at = event.at();
+    } else {
+      var event = assertInstanceOf(IrcEvent.Connected.class, events.getFirst().event());
+      assertEquals("core.example", event.serverHost());
+      assertEquals(4242, event.serverPort());
+      assertEquals("observedNick", event.nick());
+      at = event.at();
+    }
+    assertFalse(at.isBefore(before));
+    assertFalse(at.isAfter(after));
+    assertEquals(phase, session.phase.get());
+    assertSame(socket, session.socketRef.get());
+    assertSame(fallback, session.readiness.fallbackTask.get());
+    assertFalse(fallback.isDisposed());
+    assertFalse(session.closeRequested.get());
+    assertFalse(session.disconnectedEmitted.get());
+    assertTrue(readinessEvents.isEmpty());
+    session.readiness.close();
+  }
+
+  @Test
+  void connectionNotificationsRemainOrderedAndReadTheObservedNickAtPublicationTime() {
+    publisher.emitConnecting(session);
+    publisher.emitConnected(session);
+    session.nicks.observe(-1, "newNick", Instant.now());
+    publisher.emitConnected(session);
+    publisher.emitConnecting(session);
+    assertEquals(
+        "alice", assertInstanceOf(IrcEvent.Connecting.class, events.get(0).event()).nick());
+    assertEquals("alice", assertInstanceOf(IrcEvent.Connected.class, events.get(1).event()).nick());
+    assertEquals(
+        "newNick", assertInstanceOf(IrcEvent.Connected.class, events.get(2).event()).nick());
+    assertEquals(
+        "alice", assertInstanceOf(IrcEvent.Connecting.class, events.get(3).event()).nick());
+  }
+
+  @Test
+  void connectedNotificationUsesTheLastObservedNickEvenWhenCurrentPrimaryNickDiffers() {
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 1, List.of(1), java.util.Map.of()));
+    session.networks.observe(1, "primary");
+    session.nicks.observe(1, "primaryNick", Instant.now());
+    session.nicks.observe(-1, "lastObserved", Instant.now());
+    assertEquals("primaryNick", session.nicks.current());
+    publisher.emitConnected(session);
+    var event = assertInstanceOf(IrcEvent.Connected.class, events.getFirst().event());
+    assertEquals("lastObserved", event.nick());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"connecting", "connected"})
+  void connectionPublicationFailuresPropagateWithoutChangingPhaseOrReadiness(String kind) {
+    var attempts = new AtomicInteger();
+    var failure = new IllegalStateException("observer failed");
+    var rejecting =
+        new QuasselCoreSessionEventPublisher(
+            event -> {
+              attempts.incrementAndGet();
+              throw failure;
+            });
+    var fallback = Disposable.empty();
+    session.readiness.fallbackTask.set(fallback);
+    var phase = session.phase.get();
+    assertSame(
+        failure,
+        assertThrows(IllegalStateException.class, () -> publishConnection(rejecting, kind)));
+    assertEquals(1, attempts.get());
+    assertEquals(phase, session.phase.get());
+    assertFalse(session.disconnectedEmitted.get());
+    assertFalse(session.closeRequested.get());
+    assertSame(fallback, session.readiness.fallbackTask.get());
+    assertFalse(fallback.isDisposed());
+    session.readiness.close();
+  }
+
+  private void publishConnection(QuasselCoreSessionEventPublisher target, String kind) {
+    if ("connecting".equals(kind)) target.emitConnecting(session);
+    else target.emitConnected(session);
   }
 
   @Test

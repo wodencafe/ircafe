@@ -9,7 +9,10 @@ import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-/** Publishes phase diagnostics and one disconnect event per session, closing readiness first. */
+/**
+ * Publishes connection notifications, phase diagnostics, and one disconnect event per session,
+ * closing readiness before disconnect publication.
+ */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSessionEventPublisher {
   private static final String DEFAULT_DISCONNECT_REASON = "Client requested disconnect";
@@ -17,6 +20,27 @@ final class QuasselCoreSessionEventPublisher {
   private static final String FEATURE_DETAIL_PREFIX = ";detail=";
 
   @NonNull private final Consumer<ServerIrcEvent> events;
+
+  void emitConnecting(QuasselCoreSession session) {
+    if (session == null) return;
+    events.accept(
+        new ServerIrcEvent(
+            session.serverId,
+            new IrcEvent.Connecting(
+                Instant.now(), session.connectedHost, session.connectedPort, session.initialNick)));
+  }
+
+  void emitConnected(QuasselCoreSession session) {
+    if (session == null) return;
+    events.accept(
+        new ServerIrcEvent(
+            session.serverId,
+            new IrcEvent.Connected(
+                Instant.now(),
+                session.connectedHost,
+                session.connectedPort,
+                session.nicks.lastObservedNick())));
+  }
 
   void emitDisconnectedOnce(QuasselCoreSession session, String reason) {
     if (session == null) return;

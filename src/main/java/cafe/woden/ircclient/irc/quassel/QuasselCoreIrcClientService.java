@@ -337,14 +337,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
               QuasselCoreSession previous = sessions.putIfAbsent(sid, next);
               if (previous != null) return;
 
-              bus.onNext(
-                  new ServerIrcEvent(
-                      sid,
-                      new IrcEvent.Connecting(
-                          Instant.now(),
-                          next.connectedHost,
-                          next.connectedPort,
-                          next.initialNick)));
+              sessionEvents.emitConnecting(next);
 
               RxVirtualSchedulers.io().scheduleDirect(() -> establishSession(server, next));
             })
@@ -637,14 +630,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
       session.socketRef.set(openedSocket);
       session.phase.set(QuasselSessionPhase.TRANSPORT_CONNECTED);
-      bus.onNext(
-          new ServerIrcEvent(
-              sid,
-              new IrcEvent.Connected(
-                  Instant.now(),
-                  session.connectedHost,
-                  session.connectedPort,
-                  session.nicks.lastObservedNick())));
+      sessionEvents.emitConnected(session);
 
       session.probeSelection.set(probe);
       session.phase.set(QuasselSessionPhase.PROTOCOL_NEGOTIATED);
