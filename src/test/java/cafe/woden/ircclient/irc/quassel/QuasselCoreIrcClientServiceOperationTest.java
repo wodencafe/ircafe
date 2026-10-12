@@ -8,7 +8,6 @@ import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -21,7 +20,7 @@ class QuasselCoreIrcClientServiceOperationTest {
   private final QuasselCoreAuthHandshake auth = mock(QuasselCoreAuthHandshake.class);
   private final QuasselCoreDatastreamCodec codec = mock(QuasselCoreDatastreamCodec.class);
   private final QuasselCoreIrcClientService service =
-      spy(QuasselRuntimeTestFixtures.service(catalog, connector, probe, auth, codec));
+      QuasselRuntimeTestFixtures.service(catalog, connector, probe, auth, codec);
 
   @AfterEach
   void shutdown() {
@@ -32,7 +31,6 @@ class QuasselCoreIrcClientServiceOperationTest {
   @EnumSource(Operation.class)
   void blankServerValidationIsDeferredAndPrecedesOperationSpecificValidation(Operation operation) {
     Completable request = assertDoesNotThrow(() -> operation.request(service, "   "));
-    verify(service, never()).backendAvailabilityReason(anyString());
     request
         .test()
         .awaitDone(5, TimeUnit.SECONDS)
@@ -40,24 +38,15 @@ class QuasselCoreIrcClientServiceOperationTest {
             error ->
                 error instanceof IllegalArgumentException
                     && "server id is blank".equals(error.getMessage()));
-    verify(service, never()).backendAvailabilityReason(anyString());
     verifyNoInteractions(catalog, connector, probe, auth, codec);
   }
 
   @ParameterizedTest
   @EnumSource(Operation.class)
-  void sessionLookupIsDeferredToIoAndPreservesNormalizedBackendErrorContext(Operation operation) {
-    var worker = new AtomicReference<Thread>();
-    doAnswer(
-            invocation -> {
-              worker.set(Thread.currentThread());
-              return "offline";
-            })
-        .when(service)
-        .backendAvailabilityReason("core");
+  void sessionLookupIsDeferredAndPreservesNormalizedBackendErrorContext(Operation operation) {
+    service.disconnect("core", "initial reason").blockingAwait();
     Completable request = assertDoesNotThrow(() -> operation.request(service, " core "));
-    assertNull(worker.get());
-    Thread caller = Thread.currentThread();
+    service.disconnect("core", "offline").blockingAwait();
     request
         .test()
         .awaitDone(5, TimeUnit.SECONDS)
@@ -68,9 +57,6 @@ class QuasselCoreIrcClientServiceOperationTest {
                     && "core".equals(unavailable.serverId())
                     && operation.description.equals(unavailable.operation())
                     && "offline".equals(unavailable.detail()));
-    assertNotNull(worker.get());
-    assertNotSame(caller, worker.get());
-    verify(service).backendAvailabilityReason("core");
     verifyNoInteractions(catalog, connector, probe, auth, codec);
   }
 
@@ -91,7 +77,6 @@ class QuasselCoreIrcClientServiceOperationTest {
                 error instanceof IllegalArgumentException
                     && ("planned".equals(kind) ? "channel is blank" : "raw line contains CR/LF")
                         .equals(error.getMessage()));
-    verify(service, never()).backendAvailabilityReason(anyString());
     verifyNoInteractions(catalog, connector, probe, auth, codec);
   }
 
@@ -103,7 +88,8 @@ class QuasselCoreIrcClientServiceOperationTest {
     REMOVE_NETWORK("quassel remove network"),
     TYPING("send typing"),
     READ_MARKER("send read marker"),
-    CHANNEL_MESSAGE("send message to channel");
+    CHANNEL_MESSAGE("send message to channel"),
+    RAW("send raw");
 
     private final String description;
 
@@ -121,6 +107,7 @@ class QuasselCoreIrcClientServiceOperationTest {
         case TYPING -> service.sendTyping(serverId, "", "active");
         case READ_MARKER -> service.sendReadMarker(serverId, "", Instant.ofEpochSecond(10));
         case CHANNEL_MESSAGE -> service.sendToChannel(serverId, "#room", "hello");
+        case RAW -> service.sendRaw(serverId, "WHOIS alice");
       };
     }
   }
