@@ -25,7 +25,6 @@ import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
@@ -73,11 +72,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreHandshakeCoordinator handshakes;
   private final QuasselCoreSetupCoordinator setups;
   private final QuasselCoreAuthHandshake authHandshake;
-  private final QuasselCoreReadLoop readLoop;
+  private final QuasselCoreSessionReader sessionReader;
   private final QuasselCoreSignalProxySender signalProxySender;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselCoreSessionLifecycle sessionLifecycle;
-  private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
   private final QuasselCoreInputCoordinator inputs;
   private final QuasselCoreOutboundSignalCoordinator outboundSignals;
@@ -119,10 +117,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.handshakes =
         new QuasselCoreHandshakeCoordinator(this.socketConnector, protocolProbe, authHandshake);
     this.authHandshake = Objects.requireNonNull(authHandshake, "authHandshake");
-    this.readLoop =
+    QuasselCoreReadLoop readLoop =
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
     this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
-    this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
+    Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
     this.targets =
         new QuasselCoreTargetResolver(
             new QuasselCoreTargetResolver.SessionPort() {
@@ -173,6 +171,16 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             reconnects,
             sessionEvents,
             bus::onNext);
+    this.sessionReader =
+        new QuasselCoreSessionReader(
+            readLoop,
+            session ->
+                new QuasselCoreInboundPipeline(
+                        session, targets, stateObservations, ircv3RuntimeSupport, bus::onNext)
+                    ::dispatch,
+            shuttingDown::get,
+            sessionLifecycle,
+            RxVirtualSchedulers::io);
     this.setups =
         new QuasselCoreSetupCoordinator(
             serverCatalog, handshakes, this::prepareCoreSetup, availabilityReasonByServer::put);
@@ -661,9 +669,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
           session.networks.knownIds(session.authResult.get(), session.buffers.values())) {
         networkManagement.requestNetworkInitState(session, networkId);
       }
-      Disposable readTask = RxVirtualSchedulers.io().scheduleDirect(() -> runReadLoop(session));
-      session.readLoopTask.set(readTask);
-      session.readiness.scheduleFallback();
+      sessionReader.start(session);
     } catch (QuasselCoreAuthHandshake.CoreSetupRequiredException e) {
       sessionLifecycle.discardFailedConnection(session, openedSocket);
       if (session.closeRequested.get()) return;
@@ -676,29 +682,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       sessionEvents.emitDisconnectedOnce(session, reason);
     } catch (Exception e) {
       sessionLifecycle.handleConnectFailure(session, openedSocket, e);
-    }
-  }
-
-  private void runReadLoop(QuasselCoreSession session) {
-    String sid = session.serverId;
-    Socket socket = session.socketRef.get();
-    if (socket == null) {
-      session.readiness.close();
-      return;
-    }
-
-    try {
-      QuasselCoreInboundPipeline pipeline =
-          new QuasselCoreInboundPipeline(
-              session, targets, stateObservations, ircv3RuntimeSupport, bus::onNext);
-      readLoop.read(
-          sid,
-          socket,
-          () -> shuttingDown.get() || session.closeRequested.get(),
-          pipeline::dispatch,
-          failure -> sessionLifecycle.handleReadFailure(session, failure));
-    } finally {
-      sessionLifecycle.finishReadLoop(session);
     }
   }
 
