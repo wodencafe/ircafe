@@ -54,9 +54,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "";
-  private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
-  private static final String HANDSHAKE_INCOMPLETE_REASON =
-      "Quassel protocol negotiated, but login/session handshake is not complete";
   private static final String DEFAULT_DISCONNECT_REASON = "Client requested disconnect";
   private static final String FEATURE_PHASE_PREFIX = "quassel-phase=";
   private static final String FEATURE_DETAIL_PREFIX = ";detail=";
@@ -85,6 +82,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreOutboundSignalCoordinator outboundSignals;
   private final QuasselCoreHistoryRequestCoordinator historyRequests;
   private final QuasselCoreLagProbeCoordinator lagProbes;
+  private final QuasselCoreSessionQueries sessionQueries;
   private final QuasselCoreStateObservationCoordinator stateObservations;
   private final QuasselCoreNetworkManagementCoordinator networkManagement;
 
@@ -151,6 +149,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.historyRequests =
         new QuasselCoreHistoryRequestCoordinator(
             ircv3RuntimeSupport, targets, this::requireEstablishedSession);
+    this.sessionQueries =
+        new QuasselCoreSessionQueries(sessions::get, availabilityReasonByServer::get);
     this.lagProbes =
         new QuasselCoreLagProbeCoordinator(this::requireEstablishedSession, sessions::get);
     IrcProperties.Client client = props == null ? null : props.client();
@@ -192,32 +192,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null || session.socketRef.get() == null) return Optional.empty();
-    String nick = session.nicks.current();
-    return nick.isEmpty() ? Optional.empty() : Optional.of(nick);
+    return sessionQueries.currentNick(serverId);
   }
 
   @Override
   public String backendAvailabilityReason(String serverId) {
-    String sid = normalizeServerId(serverId);
-    QuasselCoreSession session = sessions.get(sid);
-    if (session != null) {
-      QuasselSessionPhase phase = session.phase.get();
-      if (phase == QuasselSessionPhase.SESSION_ESTABLISHED) {
-        return "";
-      }
-      if (phase == QuasselSessionPhase.AUTHENTICATING
-          || phase == QuasselSessionPhase.PROTOCOL_NEGOTIATED) {
-        return HANDSHAKE_INCOMPLETE_REASON;
-      }
-      if (phase == QuasselSessionPhase.TRANSPORT_CONNECTED) {
-        return "Quassel transport connected, but protocol negotiation is incomplete";
-      }
-    }
-    String remembered = Objects.toString(availabilityReasonByServer.get(sid), "").trim();
-    if (!remembered.isEmpty()) return remembered;
-    return BACKEND_UNAVAILABLE_REASON;
+    return sessionQueries.availabilityReason(serverId);
   }
 
   @Override
@@ -228,11 +208,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean hasEstablishedQuasselCoreSession(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return false;
-    QuasselCoreSession session = sessions.get(sid);
-    if (session == null || session.socketRef.get() == null) return false;
-    return session.phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED;
+    return sessionQueries.hasEstablished(serverId);
   }
 
   @Override
@@ -548,79 +524,79 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isChatHistoryAvailable(String serverId) {
-    return isSessionEstablished(serverId);
+    return sessionQueries.isEstablished(serverId);
   }
 
   @Override
   public boolean isEchoMessageAvailable(String serverId) {
-    return isSessionEstablished(serverId);
+    return sessionQueries.isEstablished(serverId);
   }
 
   @Override
   public boolean isMessageTagsAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MULTILINE, DRAFT_MULTILINE);
   }
 
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMultilineLimits()) return 0L;
     return session.features.multilineMaxBytes(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMultilineLimits()) return 0;
     return session.features.multilineMaxLines(primaryNetworkId(session));
   }
 
   @Override
   public boolean isExperimentalMessageEditAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, DRAFT_MESSAGE_EDIT);
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, DRAFT_MESSAGE_REDACTION);
   }
 
   @Override
   public boolean isTypingAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return outboundSignals.isTypingAvailable(session);
   }
 
   @Override
   public String typingAvailabilityReason(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null) {
       return backendAvailabilityReason(serverId);
     }
@@ -629,25 +605,25 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return outboundSignals.isReadMarkerAvailable(session);
   }
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, LABELED_RESPONSE);
   }
 
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, STANDARD_REPLIES);
   }
 
   @Override
   public boolean isMonitorAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return session != null
         && session.features.hasMonitorState()
         && session.features.monitorAvailable(primaryNetworkId(session));
@@ -655,7 +631,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public int negotiatedMonitorLimit(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMonitorState()) return 0;
     return session.features.monitorLimit(primaryNetworkId(session));
   }
@@ -668,18 +644,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return lagProbes.lastMeasuredLagMs(serverId);
-  }
-
-  private QuasselCoreSession findEstablishedSession(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null) return null;
-    if (session.socketRef.get() == null) return null;
-    if (session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) return null;
-    return session;
-  }
-
-  private boolean isSessionEstablished(String serverId) {
-    return findEstablishedSession(serverId) != null;
   }
 
   private boolean hasCapability(QuasselCoreSession session, String... capabilities) {
@@ -906,10 +870,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private QuasselCoreSession requireEstablishedSession(String serverId, String operation)
       throws BackendNotAvailableException {
     String sid = normalizeServerId(serverId);
-    QuasselCoreSession session = sessions.get(sid);
-    if (session == null
-        || session.socketRef.get() == null
-        || session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) {
+    QuasselCoreSession session = sessionQueries.findEstablished(sid);
+    if (session == null) {
       throw new BackendNotAvailableException(
           IrcProperties.Server.Backend.QUASSEL_CORE,
           operation,
