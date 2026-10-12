@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -430,6 +431,104 @@ class QuasselCoreSessionLifecycleTest {
     assertFalse(session.disconnectedEmitted.get());
     assertTrue(trace.isEmpty());
     assertTrue(reasons.isEmpty());
+    verify(socket).close();
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void establishmentContinuesWhenNoCancellationIsRequestedWithoutTouchingSocketOrState() {
+    seed();
+    session.socketRef.set(socket);
+    assertFalse(lifecycle.abortEstablishmentIfRequested(session, null));
+    assertFalse(lifecycle.abortEstablishmentIfRequested(session, socket));
+    assertSame(session, sessions.get("core"));
+    assertSame(socket, session.socketRef.get());
+    assertFalse(session.buffers.values().isEmpty());
+    assertTrue(trace.isEmpty());
+    verifyNoInteractions(socket, reconnects);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"shutdown,false", "shutdown,true", "requested,false", "requested,true"})
+  void requestedAbortClosesOnlyTheSuppliedSocketAndRemovesSessionWithoutPublishing(
+      String reason, boolean socketOpened) throws Exception {
+    seed();
+    var readinessTask = Disposable.empty();
+    var readTask = Disposable.empty();
+    session.readiness.fallbackTask.set(readinessTask);
+    session.readLoopTask.set(readTask);
+    if ("shutdown".equals(reason)) shuttingDown.set(true);
+    else session.closeRequested.set(true);
+    assertTrue(lifecycle.abortEstablishmentIfRequested(session, socketOpened ? socket : null));
+    assertFalse(sessions.containsKey("core"));
+    assertFalse(session.buffers.values().isEmpty());
+    assertEquals("requested".equals(reason), session.closeRequested.get());
+    assertFalse(session.disconnectedEmitted.get());
+    assertFalse(session.reconnectScheduled.get());
+    assertFalse(readinessTask.isDisposed());
+    assertFalse(readTask.isDisposed());
+    assertTrue(trace.isEmpty());
+    assertTrue(reasons.isEmpty());
+    if (socketOpened) verify(socket).close();
+    else verifyNoInteractions(socket);
+    verifyNoInteractions(reconnects);
+    session.readiness.close();
+    session.disposeReadLoopTask();
+  }
+
+  @Test
+  void establishmentGuardObservesCancellationBetweenPreAndPostSocketChecks() throws Exception {
+    sessions.put("core", session);
+    assertFalse(lifecycle.abortEstablishmentIfRequested(session, null));
+    session.closeRequested.set(true);
+    assertTrue(lifecycle.abortEstablishmentIfRequested(session, socket));
+    assertFalse(sessions.containsKey("core"));
+    verify(socket).close();
+    assertTrue(events.isEmpty());
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void abortedEstablishmentDoesNotRemoveReplacementOrCloseItsSocket() throws Exception {
+    var replacement = session();
+    Socket replacementSocket = mock(Socket.class);
+    replacement.socketRef.set(replacementSocket);
+    sessions.put("core", replacement);
+    session.closeRequested.set(true);
+    assertTrue(lifecycle.abortEstablishmentIfRequested(session, socket));
+    assertSame(replacement, sessions.get("core"));
+    assertSame(replacementSocket, replacement.socketRef.get());
+    assertFalse(replacement.closeRequested.get());
+    verify(socket).close();
+    verifyNoInteractions(replacementSocket, reconnects);
+  }
+
+  @Test
+  void abortedEstablishmentStillRemovesSessionWhenSocketCloseThrows() throws Exception {
+    sessions.put("core", session);
+    shuttingDown.set(true);
+    doThrow(new IOException("close failed")).when(socket).close();
+    assertTrue(lifecycle.abortEstablishmentIfRequested(session, socket));
+    assertFalse(sessions.containsKey("core"));
+    assertTrue(trace.isEmpty());
+    verifyNoInteractions(reconnects);
+  }
+
+  @Test
+  void requestedAbortRemainsEffectiveIfShutdownFlagChangesWhileClosingSocket() throws Exception {
+    sessions.put("core", session);
+    shuttingDown.set(true);
+    doAnswer(
+            invocation -> {
+              shuttingDown.set(false);
+              return null;
+            })
+        .when(socket)
+        .close();
+    assertTrue(lifecycle.abortEstablishmentIfRequested(session, socket));
+    assertFalse(shuttingDown.get());
+    assertFalse(sessions.containsKey("core"));
+    assertTrue(events.isEmpty());
     verify(socket).close();
     verifyNoInteractions(reconnects);
   }

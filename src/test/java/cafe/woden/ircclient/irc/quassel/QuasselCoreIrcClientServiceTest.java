@@ -350,6 +350,61 @@ class QuasselCoreIrcClientServiceTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void cancellationWhileSocketIsOpeningStopsBeforeNegotiation(boolean shutdown) throws Exception {
+    ServerCatalog catalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe probe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake auth = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec codec = mock(QuasselCoreDatastreamCodec.class);
+    IrcProperties.Server server = server();
+    Socket socket = mock(Socket.class);
+    var opening = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var closed = new CountDownLatch(1);
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server))
+        .thenAnswer(
+            invocation -> {
+              opening.countDown();
+              assertTrue(release.await(5, TimeUnit.SECONDS));
+              return socket;
+            });
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              closed.countDown();
+              return null;
+            })
+        .when(socket)
+        .close();
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, auth, codec);
+    var events = service.events().test();
+    try {
+      service.connect("quassel").blockingAwait();
+      assertTrue(opening.await(5, TimeUnit.SECONDS));
+      if (shutdown) service.shutdownNow();
+      else service.disconnect("quassel", "cancel opening").blockingAwait();
+      release.countDown();
+      assertTrue(closed.await(5, TimeUnit.SECONDS));
+      verify(socket).close();
+      org.mockito.Mockito.verifyNoInteractions(probe, auth, codec);
+      assertInstanceOf(IrcEvent.Connecting.class, events.values().getFirst().event());
+      assertEquals(shutdown ? 1 : 2, events.values().size());
+      if (!shutdown) {
+        assertEquals(
+            "cancel opening",
+            assertInstanceOf(IrcEvent.Disconnected.class, events.values().getLast().event())
+                .reason());
+        assertEquals("cancel opening", service.backendAvailabilityReason("quassel"));
+      }
+    } finally {
+      release.countDown();
+      service.shutdownNow();
+      events.cancel();
+    }
+  }
+
   @Test
   void disconnectReasonWinsWhenReadLoopSeesEofDuringClose() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);

@@ -3,7 +3,6 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.closeQuietly;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.renderThrowableMessage;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
@@ -614,17 +613,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     String sid = session.serverId;
     Socket openedSocket = null;
     try {
-      if (shuttingDown.get() || session.closeRequested.get()) {
-        sessions.remove(sid, session);
-        return;
-      }
+      if (sessionLifecycle.abortEstablishmentIfRequested(session, null)) return;
 
       openedSocket = socketConnector.connect(server);
-      if (shuttingDown.get() || session.closeRequested.get()) {
-        closeQuietly(openedSocket);
-        sessions.remove(sid, session);
-        return;
-      }
+      if (sessionLifecycle.abortEstablishmentIfRequested(session, openedSocket)) return;
 
       QuasselCoreProtocolProbe.ProbeSelection probe = handshakes.negotiateDatastream(openedSocket);
 

@@ -16,8 +16,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Coordinates session teardown, failure publication, and reconnect eligibility. The service owns
- * the shared session map and read tasks; this collaborator creates no workers or subscriptions.
+ * Coordinates connection cancellation, session teardown, failure publication, and reconnect
+ * eligibility. The service owns the shared session map and read tasks; this collaborator creates no
+ * workers or subscriptions.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSessionLifecycle {
@@ -74,6 +75,12 @@ final class QuasselCoreSessionLifecycle {
   void discardFailedConnection(QuasselCoreSession session, Socket openedSocket) {
     closeQuietly(openedSocket);
     sessions.remove(session.serverId, session);
+  }
+
+  boolean abortEstablishmentIfRequested(QuasselCoreSession session, Socket openedSocket) {
+    if (!shuttingDown.getAsBoolean() && !session.closeRequested.get()) return false;
+    discardFailedConnection(session, openedSocket);
+    return true;
   }
 
   private void publishFailure(QuasselCoreSession session, String reason, Throwable cause) {
