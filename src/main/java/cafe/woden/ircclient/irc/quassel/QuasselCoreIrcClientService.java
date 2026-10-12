@@ -535,58 +535,47 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isMessageTagsAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, MESSAGE_TAGS);
+    return sessionQueries.hasCapability(serverId, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, MESSAGE_TAGS);
+    return sessionQueries.hasCapability(serverId, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, MESSAGE_TAGS);
+    return sessionQueries.hasCapability(serverId, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, MESSAGE_TAGS);
+    return sessionQueries.hasCapability(serverId, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, MULTILINE, DRAFT_MULTILINE);
+    return sessionQueries.hasCapability(serverId, MULTILINE, DRAFT_MULTILINE);
   }
 
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    if (session == null || !session.features.hasMultilineLimits()) return 0L;
-    return session.features.multilineMaxBytes(primaryNetworkId(session));
+    return sessionQueries.multilineMaxBytes(serverId);
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    if (session == null || !session.features.hasMultilineLimits()) return 0;
-    return session.features.multilineMaxLines(primaryNetworkId(session));
+    return sessionQueries.multilineMaxLines(serverId);
   }
 
   @Override
   public boolean isExperimentalMessageEditAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, DRAFT_MESSAGE_EDIT);
+    return sessionQueries.hasCapability(serverId, DRAFT_MESSAGE_EDIT);
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, DRAFT_MESSAGE_REDACTION);
+    return sessionQueries.hasCapability(serverId, DRAFT_MESSAGE_REDACTION);
   }
 
   @Override
@@ -612,29 +601,22 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, LABELED_RESPONSE);
+    return sessionQueries.hasCapability(serverId, LABELED_RESPONSE);
   }
 
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return hasCapability(session, STANDARD_REPLIES);
+    return sessionQueries.hasCapability(serverId, STANDARD_REPLIES);
   }
 
   @Override
   public boolean isMonitorAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return session != null
-        && session.features.hasMonitorState()
-        && session.features.monitorAvailable(primaryNetworkId(session));
+    return sessionQueries.monitorAvailable(serverId);
   }
 
   @Override
   public int negotiatedMonitorLimit(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    if (session == null || !session.features.hasMonitorState()) return 0;
-    return session.features.monitorLimit(primaryNetworkId(session));
+    return sessionQueries.monitorLimit(serverId);
   }
 
   @Override
@@ -645,10 +627,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return lagProbes.lastMeasuredLagMs(serverId);
-  }
-
-  private boolean hasCapability(QuasselCoreSession session, String... capabilities) {
-    return session != null && session.features.hasAnyCapability(capabilities);
   }
 
   private void scheduleReconnectIfEligible(QuasselCoreSession session, String reason) {
@@ -781,12 +759,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     sessionEvents.emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
-  }
-
-  private static int primaryNetworkId(QuasselCoreSession session) {
-    return session == null
-        ? -1
-        : session.networks.primaryNetworkId(session.authResult.get(), session.buffers.values());
   }
 
   private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {

@@ -68,6 +68,42 @@ final class QuasselCoreSessionQueries {
     return findEstablished(serverId) != null;
   }
 
+  boolean hasCapability(String serverId, String... capabilities) {
+    QuasselCoreSession session = findEstablished(serverId);
+    return session != null && session.features.hasAnyCapability(capabilities);
+  }
+
+  long multilineMaxBytes(String serverId) {
+    QuasselCoreSession session = findEstablished(serverId);
+    if (session == null || !session.features.hasMultilineLimits()) return 0L;
+    return session.features.multilineMaxBytes(primaryNetworkId(session));
+  }
+
+  int multilineMaxLines(String serverId) {
+    QuasselCoreSession session = findEstablished(serverId);
+    if (session == null || !session.features.hasMultilineLimits()) return 0;
+    return session.features.multilineMaxLines(primaryNetworkId(session));
+  }
+
+  boolean monitorAvailable(String serverId) {
+    QuasselCoreSession session = findEstablished(serverId);
+    return session != null
+        && session.features.hasMonitorState()
+        && session.features.monitorAvailable(primaryNetworkId(session));
+  }
+
+  int monitorLimit(String serverId) {
+    QuasselCoreSession session = findEstablished(serverId);
+    if (session == null || !session.features.hasMonitorState()) return 0;
+    return session.features.monitorLimit(primaryNetworkId(session));
+  }
+
+  private static int primaryNetworkId(QuasselCoreSession session) {
+    return session == null
+        ? -1
+        : session.networks.primaryNetworkId(session.authResult.get(), session.buffers.values());
+  }
+
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }

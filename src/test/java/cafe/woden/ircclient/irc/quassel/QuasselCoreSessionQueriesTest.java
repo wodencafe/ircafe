@@ -222,4 +222,143 @@ class QuasselCoreSessionQueriesTest {
     session.socketRef.set(new Socket());
     return session;
   }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "missing",
+        "closed",
+        "TRANSPORT_CONNECTING",
+        "TRANSPORT_CONNECTED",
+        "PROTOCOL_NEGOTIATED",
+        "AUTHENTICATING"
+      })
+  void featuresRemainUnavailableUntilTheSessionIsEstablishedWithASocket(String state) {
+    establishSession();
+    seedFeatures(session, 7, 4096, 4, 50);
+    if ("missing".equals(state)) sessions.remove("core");
+    else if ("closed".equals(state)) session.socketRef.set(null);
+    else session.phase.set(QuasselSessionPhase.valueOf(state));
+    events.clear();
+    assertUnavailableFeatures();
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void establishedSessionWithoutFeatureObservationsHasNoAvailabilityOrLimits() {
+    establishSession();
+    assertUnavailableFeatures();
+  }
+
+  @Test
+  void capabilitiesAreAggregatedAcrossNetworksAndKeepCanonicalAndAlternativeMatching() {
+    establishSession();
+    session.features.observeCapabilities(7, Map.of("capsEnabled", List.of("message-tags")));
+    session.features.observeCapabilities(
+        8, Map.of("capsEnabled", List.of("draft/multiline", "draft/read-marker")));
+    events.clear();
+    assertTrue(queries.hasCapability(" core ", "MESSAGE-TAGS"));
+    assertTrue(queries.hasCapability("core", "multiline", "draft/multiline"));
+    assertTrue(queries.hasCapability("core", "read-marker", "draft/read-marker"));
+    assertFalse(queries.hasCapability("core", "labeled-response"));
+    assertFalse(queries.hasCapability("core"));
+    assertFalse(queries.hasCapability("core", (String[]) null));
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void negotiatedLimitsFollowTheCurrentPrimaryNetworkWithoutPublishingEvents() {
+    establishSession();
+    seedFeatures(session, 8, 8192, 8, 150);
+    seedFeatures(session, 7, 4096, 4, 50);
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 7, List.of(7, 8), Map.of()));
+    events.clear();
+    assertLimits(4096, 4, 50);
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 8, List.of(7, 8), Map.of()));
+    assertLimits(8192, 8, 150);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void missingPrimaryNetworkFeatureStateUsesTheExistingObservedFallback() {
+    establishSession();
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 7, List.of(7, 8), Map.of()));
+    seedFeatures(session, 8, 8192, 8, 150);
+    assertLimits(8192, 8, 150);
+  }
+
+  @Test
+  void primaryNetworkCanBeResolvedFromBuffersWithoutAuthenticationMetadata() {
+    establishSession();
+    session.buffers.merge(new QuasselCoreDatastreamCodec.BufferInfoValue(99, 9, 2, -1, "#room"));
+    seedFeatures(session, 8, 8192, 8, 150);
+    seedFeatures(session, 9, 2048, 2, 25);
+    assertNull(session.authResult.get());
+    assertLimits(2048, 2, 25);
+  }
+
+  @Test
+  void explicitlyUnsupportedPrimaryMonitorDoesNotBorrowSecondarySupport() {
+    establishSession();
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 7, List.of(7, 8), Map.of()));
+    session.features.observeMonitor(8, true, 150);
+    session.features.observeMonitor(7, false, 50);
+    assertFalse(queries.monitorAvailable("core"));
+    assertEquals(0, queries.monitorLimit("core"));
+  }
+
+  @Test
+  void clearingFeatureStateIsImmediatelyVisibleToQueries() {
+    establishSession();
+    seedFeatures(session, 7, 4096, 4, 50);
+    assertLimits(4096, 4, 50);
+    assertTrue(queries.hasCapability("core", "multiline"));
+    session.features.clear();
+    assertUnavailableFeatures();
+  }
+
+  @Test
+  void featureQueriesFollowSessionReplacementWithoutBorrowingOldObservations() {
+    establishSession();
+    seedFeatures(session, 7, 4096, 4, 50);
+    assertLimits(4096, 4, 50);
+    var replacement = session("replacement");
+    replacement.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+    sessions.put("core", replacement);
+    assertUnavailableFeatures();
+    seedFeatures(replacement, 7, 8192, 8, 150);
+    assertLimits(8192, 8, 150);
+  }
+
+  private void establishSession() {
+    sessions.put("core", session);
+    session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+  }
+
+  private static void seedFeatures(
+      QuasselCoreSession session, int network, long bytes, long lines, long monitorLimit) {
+    session.features.observeCapabilities(
+        network,
+        Map.of("capsEnabled", Map.of("multiline", Map.of("max-bytes", bytes, "max-lines", lines))));
+    session.features.observeMonitor(network, true, monitorLimit);
+  }
+
+  private void assertLimits(long bytes, int lines, int monitorLimit) {
+    assertEquals(bytes, queries.multilineMaxBytes(" core "));
+    assertEquals(lines, queries.multilineMaxLines(" core "));
+    assertTrue(queries.monitorAvailable(" core "));
+    assertEquals(monitorLimit, queries.monitorLimit(" core "));
+  }
+
+  private void assertUnavailableFeatures() {
+    assertFalse(queries.hasCapability("core", "multiline"));
+    assertEquals(0, queries.multilineMaxBytes("core"));
+    assertEquals(0, queries.multilineMaxLines("core"));
+    assertFalse(queries.monitorAvailable("core"));
+    assertEquals(0, queries.monitorLimit("core"));
+  }
 }
