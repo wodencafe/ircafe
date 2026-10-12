@@ -292,76 +292,44 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session =
-                  requireEstablishedSession(sid, "quassel connect network");
-              networkManagement.connect(session, networkIdOrName);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel connect network",
+        (ignored, session) -> networkManagement.connect(session, networkIdOrName));
   }
 
   @Override
   public Completable quasselCoreDisconnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session =
-                  requireEstablishedSession(sid, "quassel disconnect network");
-              networkManagement.disconnect(session, networkIdOrName);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel disconnect network",
+        (ignored, session) -> networkManagement.disconnect(session, networkIdOrName));
   }
 
   @Override
   public Completable quasselCoreCreateNetwork(
       String serverId, QuasselCoreNetworkCreateRequest request) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel create network");
-              networkManagement.create(session, request);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel create network",
+        (ignored, session) -> networkManagement.create(session, request));
   }
 
   @Override
   public Completable quasselCoreUpdateNetwork(
       String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel update network");
-              networkManagement.update(session, networkIdOrName, request);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel update network",
+        (ignored, session) -> networkManagement.update(session, networkIdOrName, request));
   }
 
   @Override
   public Completable quasselCoreRemoveNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel remove network");
-              networkManagement.remove(session, networkIdOrName);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel remove network",
+        (ignored, session) -> networkManagement.remove(session, networkIdOrName));
   }
 
   @Override
@@ -514,46 +482,38 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable sendTyping(String serverId, String target, String state) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "send typing");
-              if (!isTypingAvailable(sid)) {
-                String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
-                String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
-                throw new IllegalStateException(
-                    "Typing indicators not available (requires message-tags and server allowing +typing)"
-                        + suffix
-                        + ": "
-                        + sid);
-              }
+    return withEstablishedSession(
+        serverId,
+        "send typing",
+        (sid, session) -> {
+          if (!isTypingAvailable(sid)) {
+            String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
+            String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
+            throw new IllegalStateException(
+                "Typing indicators not available (requires message-tags and server allowing +typing)"
+                    + suffix
+                    + ": "
+                    + sid);
+          }
 
-              outboundSignals.sendTyping(session, target, state);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+          outboundSignals.sendTyping(session, target, state);
+        });
   }
 
   @Override
   public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "send read marker");
-              if (!isReadMarkerAvailable(sid)) {
-                throw new IllegalStateException(
-                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
-                        + sid);
-              }
+    return withEstablishedSession(
+        serverId,
+        "send read marker",
+        (sid, session) -> {
+          if (!isReadMarkerAvailable(sid)) {
+            throw new IllegalStateException(
+                "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
+                    + sid);
+          }
 
-              outboundSignals.sendReadMarker(session, target, markerAt);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+          outboundSignals.sendReadMarker(session, target, markerAt);
+        });
   }
 
   @Override
@@ -965,6 +925,23 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     session.networkCommands.requestInit(className, objectName);
   }
 
+  @FunctionalInterface
+  private interface EstablishedSessionAction {
+    void run(String serverId, QuasselCoreSession session) throws Exception;
+  }
+
+  private Completable withEstablishedSession(
+      String serverId, String operation, EstablishedSessionAction action) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) throw new IllegalArgumentException(SERVER_ID_BLANK);
+              QuasselCoreSession session = requireEstablishedSession(sid, operation);
+              action.run(sid, session);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
   private Completable sendPlannedInput(
       String serverId, Supplier<QuasselCoreUserInput.Plan> planner) {
     QuasselCoreUserInput.Plan plan;
@@ -979,14 +956,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private Completable sendInputWithBuffer(
       String serverId, String operation, int typeBits, String bufferName, String input) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) throw new IllegalArgumentException(SERVER_ID_BLANK);
-
-              QuasselCoreSession session = requireEstablishedSession(sid, operation);
-              inputs.sendInput(session, operation, typeBits, bufferName, input);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        operation,
+        (ignored, session) -> inputs.sendInput(session, operation, typeBits, bufferName, input));
   }
 }
