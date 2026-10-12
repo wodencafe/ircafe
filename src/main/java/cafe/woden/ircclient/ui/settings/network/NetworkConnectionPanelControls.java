@@ -9,6 +9,7 @@ final class NetworkConnectionPanelControls {
   final FloodProtectionControls floodProtection;
   final BouncerControls bouncer;
   final JCheckBox trustAllTlsCertificates;
+  final JCheckBox allowLegacyRsaTls;
   final JPanel panel;
 
   NetworkConnectionPanelControls(
@@ -17,12 +18,14 @@ final class NetworkConnectionPanelControls {
       FloodProtectionControls floodProtection,
       BouncerControls bouncer,
       JCheckBox trustAllTlsCertificates,
+      JCheckBox allowLegacyRsaTls,
       JPanel panel) {
     this.proxy = proxy;
     this.heartbeat = heartbeat;
     this.floodProtection = floodProtection;
     this.bouncer = bouncer;
     this.trustAllTlsCertificates = trustAllTlsCertificates;
+    this.allowLegacyRsaTls = allowLegacyRsaTls;
     this.panel = panel;
   }
 }

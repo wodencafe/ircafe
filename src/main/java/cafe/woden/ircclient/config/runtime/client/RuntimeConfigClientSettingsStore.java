@@ -26,6 +26,17 @@ public class RuntimeConfigClientSettingsStore {
         "TLS trust-all setting", trustAllCertificates, "tls", "trustAllCertificates");
   }
 
+  public synchronized boolean readTlsAllowLegacyRsa() {
+    return clientSection
+        .readValue("legacy RSA TLS setting", "tls", "allowLegacyRsa")
+        .map(value -> Boolean.parseBoolean(String.valueOf(value)))
+        .orElse(false);
+  }
+
+  public synchronized void rememberTlsAllowLegacyRsa(boolean allowLegacyRsa) {
+    clientSection.putValue("legacy RSA TLS setting", allowLegacyRsa, "tls", "allowLegacyRsa");
+  }
+
   public synchronized void rememberHeartbeat(IrcProperties.Heartbeat heartbeat) {
     HeartbeatSettings hb = RuntimeConfigClientSettingsCodec.normalizeHeartbeat(heartbeat);
 

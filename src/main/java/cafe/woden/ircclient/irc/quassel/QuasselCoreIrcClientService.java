@@ -1,20 +1,13 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreDisplayText.looksLikeChannel;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreLogSummary.summarizeNetworkInfoForLog;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkConnected;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreNetworkStateParser.parseNetworkIdentityId;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.sanitizeHistoryTarget;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreVariantSupport.containsCrlf;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_READ_MARKER;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.LABELED_RESPONSE;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MESSAGE_TAGS;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MULTILINE;
-import static cafe.woden.ircclient.util.Ircv3CapabilityNames.READ_MARKER;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.STANDARD_REPLIES;
 
 import cafe.woden.ircclient.config.IrcProperties;
@@ -26,7 +19,6 @@ import cafe.woden.ircclient.irc.backend.IrcBackendRuntimeClientService;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
-import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.QualifiedTarget;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -36,8 +28,6 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.net.Socket;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,8 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -61,20 +49,11 @@ import org.springframework.stereotype.Service;
 @Service
 @InfrastructureLayer
 public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientService {
-  private static final Logger log = LoggerFactory.getLogger(QuasselCoreIrcClientService.class);
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
 
-  private static final int BUFFER_STATUS = 0x01;
-  private static final int BUFFER_CHANNEL = 0x02;
-  private static final int BUFFER_QUERY = 0x04;
-  private static final String SYNC_CONNECT_NETWORK_SLOT = "requestConnect";
-  private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "";
-  private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
-  private static final String HANDSHAKE_INCOMPLETE_REASON =
-      "Quassel protocol negotiated, but login/session handshake is not complete";
   private static final String DEFAULT_DISCONNECT_REASON = "Client requested disconnect";
   private static final String FEATURE_PHASE_PREFIX = "quassel-phase=";
   private static final String FEATURE_DETAIL_PREFIX = ";detail=";
@@ -92,7 +71,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private final ServerCatalog serverCatalog;
   private final QuasselCoreSocketConnector socketConnector;
-  private final QuasselCoreProtocolProbe protocolProbe;
+  private final QuasselCoreHandshakeCoordinator handshakes;
   private final QuasselCoreAuthHandshake authHandshake;
   private final QuasselCoreReadLoop readLoop;
   private final QuasselCoreSignalProxySender signalProxySender;
@@ -100,6 +79,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselIrcv3RuntimeSupport ircv3RuntimeSupport;
   private final QuasselCoreTargetResolver targets;
   private final QuasselCoreInputCoordinator inputs;
+  private final QuasselCoreOutboundSignalCoordinator outboundSignals;
+  private final QuasselCoreHistoryRequestCoordinator historyRequests;
+  private final QuasselCoreLagProbeCoordinator lagProbes;
+  private final QuasselCoreSessionQueries sessionQueries;
+  private final QuasselCoreStateObservationCoordinator stateObservations;
+  private final QuasselCoreNetworkManagementCoordinator networkManagement;
 
   @Autowired
   public QuasselCoreIrcClientService(
@@ -129,7 +114,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselIrcv3RuntimeSupport ircv3RuntimeSupport) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.socketConnector = Objects.requireNonNull(socketConnector, "socketConnector");
-    this.protocolProbe = Objects.requireNonNull(protocolProbe, "protocolProbe");
+    this.handshakes =
+        new QuasselCoreHandshakeCoordinator(this.socketConnector, protocolProbe, authHandshake);
     this.authHandshake = Objects.requireNonNull(authHandshake, "authHandshake");
     this.readLoop =
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
@@ -140,7 +126,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             new QuasselCoreTargetResolver.SessionPort() {
               @Override
               public void observeNetwork(QuasselCoreSession session, int networkId) {
-                observeKnownNetwork(session, networkId, "");
+                stateObservations.observeNetwork(session, networkId, "");
               }
 
               @Override
@@ -148,11 +134,25 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 return session.nicks.isSelf(nick, networkId);
               }
             });
+    this.stateObservations =
+        new QuasselCoreStateObservationCoordinator(targets, observations::observeNetwork);
+    this.networkManagement =
+        new QuasselCoreNetworkManagementCoordinator(observations, stateObservations);
     this.inputs =
         new QuasselCoreInputCoordinator(
             targets,
             (session, target, networkId) ->
-                noteTargetNetworkHint(session, target, networkId, true));
+                stateObservations.observeTargetNetwork(session, target, networkId, true));
+    this.outboundSignals =
+        new QuasselCoreOutboundSignalCoordinator(
+            ircv3RuntimeSupport, targets, inputs, stateObservations);
+    this.historyRequests =
+        new QuasselCoreHistoryRequestCoordinator(
+            ircv3RuntimeSupport, targets, this::requireEstablishedSession);
+    this.sessionQueries =
+        new QuasselCoreSessionQueries(sessions::get, availabilityReasonByServer::get);
+    this.lagProbes =
+        new QuasselCoreLagProbeCoordinator(this::requireEstablishedSession, sessions::get);
     IrcProperties.Client client = props == null ? null : props.client();
     this.reconnects =
         new QuasselCoreReconnectCoordinator(
@@ -192,32 +192,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null || session.socketRef.get() == null) return Optional.empty();
-    String nick = session.nicks.current();
-    return nick.isEmpty() ? Optional.empty() : Optional.of(nick);
+    return sessionQueries.currentNick(serverId);
   }
 
   @Override
   public String backendAvailabilityReason(String serverId) {
-    String sid = normalizeServerId(serverId);
-    QuasselCoreSession session = sessions.get(sid);
-    if (session != null) {
-      QuasselSessionPhase phase = session.phase.get();
-      if (phase == QuasselSessionPhase.SESSION_ESTABLISHED) {
-        return "";
-      }
-      if (phase == QuasselSessionPhase.AUTHENTICATING
-          || phase == QuasselSessionPhase.PROTOCOL_NEGOTIATED) {
-        return HANDSHAKE_INCOMPLETE_REASON;
-      }
-      if (phase == QuasselSessionPhase.TRANSPORT_CONNECTED) {
-        return "Quassel transport connected, but protocol negotiation is incomplete";
-      }
-    }
-    String remembered = Objects.toString(availabilityReasonByServer.get(sid), "").trim();
-    if (!remembered.isEmpty()) return remembered;
-    return BACKEND_UNAVAILABLE_REASON;
+    return sessionQueries.availabilityReason(serverId);
   }
 
   @Override
@@ -228,11 +208,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean hasEstablishedQuasselCoreSession(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return false;
-    QuasselCoreSession session = sessions.get(sid);
-    if (session == null || session.socketRef.get() == null) return false;
-    return session.phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED;
+    return sessionQueries.hasEstablished(serverId);
   }
 
   @Override
@@ -267,23 +243,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                 closeSession(removed, "Completing Quassel Core setup", false);
               }
 
-              try (Socket socket = socketConnector.connect(server)) {
-                QuasselCoreProtocolProbe.ProbeSelection probe = protocolProbe.negotiate(socket);
-                if (probe.protocolType() != QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM) {
-                  throw new IllegalStateException(
-                      "Quassel core selected unsupported protocol "
-                          + QuasselCoreProtocolProbe.protocolLabel(probe.protocolType()));
-                }
-                authHandshake.performCoreSetup(
-                    socket,
-                    new QuasselCoreAuthHandshake.CoreSetupRequest(
-                        req.adminUser(),
-                        req.adminPassword(),
-                        req.storageBackend(),
-                        req.authenticator(),
-                        req.storageSetupData(),
-                        req.authSetupData()));
-              }
+              handshakes.performSetup(server, req);
 
               pendingSetupByServer.remove(sid);
               availabilityReasonByServer.put(
@@ -298,7 +258,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     if (sid.isEmpty()) return List.of();
     QuasselCoreSession session = sessions.get(sid);
     if (session == null || session.socketRef.get() == null) return List.of();
-    return snapshotQuasselCoreNetworks(session);
+    return stateObservations.snapshot(session);
   }
 
   @Override
@@ -308,146 +268,44 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session =
-                  requireEstablishedSession(sid, "quassel connect network");
-              int networkId =
-                  resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel connect network");
-              log.debug(
-                  "Quassel connect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
-                  sid,
-                  Objects.toString(networkIdOrName, ""),
-                  networkId,
-                  SYNC_CONNECT_NETWORK_SLOT);
-              QuasselCoreNetworkSummary targetSummary =
-                  findNetworkSummaryById(snapshotQuasselCoreNetworks(session), networkId);
-              if (targetSummary == null) {
-                log.debug(
-                    "Quassel connect target summary missing from current snapshot: serverId={}, networkId={}, knownNetworkIds={}, displayNames={}, stateKeys={}",
-                    sid,
-                    networkId,
-                    collectKnownNetworkIds(session),
-                    session.networks.displayNames(),
-                    session.networks.stateIds());
-              } else {
-                log.debug(
-                    "Quassel connect target summary: serverId={}, networkId={}, networkName={}, connected={}, enabled={}, identityId={}, host={}, port={}, tls={}, rawState={}",
-                    sid,
-                    networkId,
-                    targetSummary.networkName(),
-                    targetSummary.connected(),
-                    targetSummary.enabled(),
-                    targetSummary.identityId(),
-                    targetSummary.serverHost(),
-                    targetSummary.serverPort(),
-                    targetSummary.useTls(),
-                    summarizeNetworkInfoForLog(targetSummary.rawState()));
-              }
-              boolean repairConfirmed = maybeRepairNetworkIdentityBeforeConnect(session, networkId);
-              if (!repairConfirmed) {
-                log.debug(
-                    "Skipping Quassel connect because identity repair is not confirmed yet: serverId={}, networkId={}",
-                    sid,
-                    networkId);
-                return;
-              }
-              sendNetworkRequest(session, networkId, SYNC_CONNECT_NETWORK_SLOT);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel connect network",
+        (ignored, session) -> networkManagement.connect(session, networkIdOrName));
   }
 
   @Override
   public Completable quasselCoreDisconnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session =
-                  requireEstablishedSession(sid, "quassel disconnect network");
-              int networkId =
-                  resolveQuasselNetworkId(
-                      session, sid, networkIdOrName, "quassel disconnect network");
-              log.debug(
-                  "Quassel disconnect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
-                  sid,
-                  Objects.toString(networkIdOrName, ""),
-                  networkId,
-                  SYNC_DISCONNECT_NETWORK_SLOT);
-              sendNetworkRequest(session, networkId, SYNC_DISCONNECT_NETWORK_SLOT);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel disconnect network",
+        (ignored, session) -> networkManagement.disconnect(session, networkIdOrName));
   }
 
   @Override
   public Completable quasselCoreCreateNetwork(
       String serverId, QuasselCoreNetworkCreateRequest request) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel create network");
-              QuasselCoreNetworkCreateRequest req =
-                  QuasselCoreNetworkRequests.normalizeCreateRequest(
-                      Objects.requireNonNull(request, "request"));
-              log.debug(
-                  "Quassel create network preflight: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, identityNames={}, authNetworkIds={}",
-                  sid,
-                  req.identityId(),
-                  session.identities.knownIds(),
-                  session.identities.stateIds(),
-                  session.identities.names(),
-                  Optional.ofNullable(session.authResult.get())
-                      .map(QuasselCoreAuthHandshake.AuthResult::networkIds)
-                      .orElse(List.of()));
-              coordinateNetworkCreation(session, req);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel create network",
+        (ignored, session) -> networkManagement.create(session, request));
   }
 
   @Override
   public Completable quasselCoreUpdateNetwork(
       String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel update network");
-              int networkId =
-                  resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel update network");
-              QuasselCoreNetworkUpdateRequest req =
-                  QuasselCoreNetworkRequests.normalizeUpdateRequest(
-                      Objects.requireNonNull(request, "request"));
-              sendUpdateNetworkRequest(session, networkId, req);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel update network",
+        (ignored, session) -> networkManagement.update(session, networkIdOrName, request));
   }
 
   @Override
   public Completable quasselCoreRemoveNetwork(String serverId, String networkIdOrName) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "quassel remove network");
-              int networkId =
-                  resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel remove network");
-              sendRemoveNetworkRequest(session, networkId);
-              forgetKnownNetwork(session, networkId);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return withEstablishedSession(
+        serverId,
+        "quassel remove network",
+        (ignored, session) -> networkManagement.remove(session, networkIdOrName));
   }
 
   @Override
@@ -600,247 +458,172 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable sendTyping(String serverId, String target, String state) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "send typing");
-              if (!isTypingAvailable(sid)) {
-                String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
-                String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
-                throw new IllegalStateException(
-                    "Typing indicators not available (requires message-tags and server allowing +typing)"
-                        + suffix
-                        + ": "
-                        + sid);
-              }
+    return withEstablishedSession(
+        serverId,
+        "send typing",
+        (sid, session) -> {
+          if (!isTypingAvailable(sid)) {
+            String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
+            String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
+            throw new IllegalStateException(
+                "Typing indicators not available (requires message-tags and server allowing +typing)"
+                    + suffix
+                    + ": "
+                    + sid);
+          }
 
-              QualifiedTarget dest = sanitizeHistoryTarget(target);
-              List<String> rawLines = ircv3RuntimeSupport.typingRawLines(dest.rawTarget(), state);
-              for (String rawLine : rawLines) {
-                inputs.sendRaw(session, "send typing", rawLine);
-              }
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+          outboundSignals.sendTyping(session, target, state);
+        });
   }
 
   @Override
   public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "send read marker");
-              if (!isReadMarkerAvailable(sid)) {
-                throw new IllegalStateException(
-                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
-                        + sid);
-              }
+    return withEstablishedSession(
+        serverId,
+        "send read marker",
+        (sid, session) -> {
+          if (!isReadMarkerAvailable(sid)) {
+            throw new IllegalStateException(
+                "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
+                    + sid);
+          }
 
-              QualifiedTarget requested = sanitizeHistoryTarget(target);
-              int typeBitsHint =
-                  looksLikeChannel(requested.baseTarget()) ? BUFFER_CHANNEL : BUFFER_QUERY;
-              QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-                  targets.outboundBuffer(session, typeBitsHint, requested);
-              noteTargetNetworkHint(session, requested.baseTarget(), bufferInfo.networkId(), true);
-
-              Instant at = markerAt == null ? Instant.now() : markerAt;
-              String markerTarget =
-                  targets.targetForBuffer(session, bufferInfo, requested.baseTarget());
-              if (markerTarget.isEmpty()) {
-                markerTarget = requested.rawTarget();
-              }
-              long markerMsgId = session.history.readMarkerMsgIdForTimestamp(markerTarget, at);
-              if (markerMsgId > 0L && bufferInfo.bufferId() >= 0) {
-                sendBufferSyncerReadMarkerUpdate(session, bufferInfo.bufferId(), markerMsgId);
-                return;
-              }
-
-              if (!hasCapability(session, READ_MARKER, DRAFT_READ_MARKER)) {
-                throw new IllegalStateException(
-                    "Quassel read marker requires an observed message for "
-                        + requested.rawTarget());
-              }
-
-              List<String> rawLines =
-                  ircv3RuntimeSupport.readMarkerRawLines(requested.rawTarget(), at);
-              if (rawLines.isEmpty()) {
-                throw new IllegalStateException(
-                    "Read-marker runtime provider did not render a command for "
-                        + requested.rawTarget());
-              }
-              for (String rawLine : rawLines) {
-                inputs.sendRaw(session, "send read marker", rawLine);
-              }
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+          outboundSignals.sendReadMarker(session, target, markerAt);
+        });
   }
 
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, Instant beforeExclusive, int limit) {
-    return requestHistory(
-        serverId,
-        "request chat history",
-        () ->
-            ircv3RuntimeSupport.chatHistoryBefore(
-                target, "", limit, beforeExclusive == null ? Instant.now() : beforeExclusive));
+    return historyRequests.requestBefore(serverId, target, beforeExclusive, limit);
   }
 
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request chat history",
-        () -> ircv3RuntimeSupport.chatHistoryBefore(target, selector, limit, Instant.now()));
+    return historyRequests.requestBefore(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request latest chat history",
-        () -> ircv3RuntimeSupport.chatHistoryLatest(target, selector, limit));
+    return historyRequests.requestLatest(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBetween(
       String serverId, String target, String startSelector, String endSelector, int limit) {
-    return requestHistory(
-        serverId,
-        "request bounded chat history",
-        () -> ircv3RuntimeSupport.chatHistoryBetween(target, startSelector, endSelector, limit));
+    return historyRequests.requestBetween(serverId, target, startSelector, endSelector, limit);
   }
 
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    return requestHistory(
-        serverId,
-        "request surrounding chat history",
-        () -> ircv3RuntimeSupport.chatHistoryAround(target, selector, limit));
+    return historyRequests.requestAround(serverId, target, selector, limit);
   }
 
   @Override
   public boolean isChatHistoryAvailable(String serverId) {
-    return isSessionEstablished(serverId);
+    return sessionQueries.isEstablished(serverId);
   }
 
   @Override
   public boolean isEchoMessageAvailable(String serverId) {
-    return isSessionEstablished(serverId);
+    return sessionQueries.isEstablished(serverId);
   }
 
   @Override
   public boolean isMessageTagsAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MESSAGE_TAGS);
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, MULTILINE, DRAFT_MULTILINE);
   }
 
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMultilineLimits()) return 0L;
     return session.features.multilineMaxBytes(primaryNetworkId(session));
   }
 
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMultilineLimits()) return 0;
     return session.features.multilineMaxLines(primaryNetworkId(session));
   }
 
   @Override
   public boolean isExperimentalMessageEditAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, DRAFT_MESSAGE_EDIT);
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, DRAFT_MESSAGE_REDACTION);
   }
 
   @Override
   public boolean isTypingAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
-    if (session == null) return false;
-    return hasCapability(session, MESSAGE_TAGS);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
+    return outboundSignals.isTypingAvailable(session);
   }
 
   @Override
   public String typingAvailabilityReason(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null) {
       return backendAvailabilityReason(serverId);
     }
-    if (hasCapability(session, MESSAGE_TAGS)) {
-      return "";
-    }
-    if (!session.features.hasObservedCapabilities()) {
-      return "typing support status is not yet available from Quassel backend state";
-    }
-    if (!hasCapability(session, MESSAGE_TAGS)) {
-      return "message-tags not negotiated in Quassel backend network state";
-    }
-    return "server may be blocking +typing via CLIENTTAGDENY";
+    return outboundSignals.typingAvailabilityReason(session);
   }
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
-    return session != null
-        && (session.nativeReadMarkerSupportObserved.get()
-            || hasCapability(session, READ_MARKER, DRAFT_READ_MARKER));
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
+    return outboundSignals.isReadMarkerAvailable(session);
   }
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, LABELED_RESPONSE);
   }
 
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return hasCapability(session, STANDARD_REPLIES);
   }
 
   @Override
   public boolean isMonitorAvailable(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     return session != null
         && session.features.hasMonitorState()
         && session.features.monitorAvailable(primaryNetworkId(session));
@@ -848,102 +631,23 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public int negotiatedMonitorLimit(String serverId) {
-    QuasselCoreSession session = findEstablishedSession(serverId);
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
     if (session == null || !session.features.hasMonitorState()) return 0;
     return session.features.monitorLimit(primaryNetworkId(session));
   }
 
   @Override
   public Completable requestLagProbe(String serverId) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSession session = requireEstablishedSession(sid, "request lag probe");
-              Socket socket = session.socketRef.get();
-              if (socket == null) {
-                throw new IllegalStateException("Quassel socket is closed");
-              }
-
-              QuasselCoreDatastreamCodec.QtDateTimeValue token = session.lag.beginProbe();
-
-              try {
-                session.outbound.send(
-                    socket,
-                    (codec, out) -> {
-                      codec.writeSignalProxyHeartBeat(out, token);
-                    });
-              } catch (Exception e) {
-                session.lag.cancelProbe();
-                throw e;
-              }
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return lagProbes.request(serverId);
   }
 
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null || session.socketRef.get() == null) return OptionalLong.empty();
-    return session.lag.lastMeasuredLagMs();
-  }
-
-  private QuasselCoreSession findEstablishedSession(String serverId) {
-    QuasselCoreSession session = sessions.get(normalizeServerId(serverId));
-    if (session == null) return null;
-    if (session.socketRef.get() == null) return null;
-    if (session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) return null;
-    return session;
-  }
-
-  private boolean isSessionEstablished(String serverId) {
-    return findEstablishedSession(serverId) != null;
+    return lagProbes.lastMeasuredLagMs(serverId);
   }
 
   private boolean hasCapability(QuasselCoreSession session, String... capabilities) {
     return session != null && session.features.hasAnyCapability(capabilities);
-  }
-
-  private Completable requestHistory(
-      String serverId, String operation, Supplier<Ircv3ChatHistoryRuntimeSupport.Plan> planner) {
-    return Completable.fromAction(
-            () -> {
-              Ircv3ChatHistoryRuntimeSupport.Plan plan = planner.get();
-              HistoryRequestContext ctx = prepareHistoryRequest(serverId, plan.target(), operation);
-              QuasselCoreHistoryRequestPlanner.BacklogRequest request =
-                  QuasselCoreHistoryRequestPlanner.plan(ctx.session().history, plan);
-              ctx.session()
-                  .bufferCommands
-                  .requestBacklog(
-                      ctx.bufferInfo(), request.firstMsgId(), request.lastMsgId(), request.limit());
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private HistoryRequestContext prepareHistoryRequest(
-      String serverId, String target, String operation) throws BackendNotAvailableException {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) {
-      throw new IllegalArgumentException(SERVER_ID_BLANK);
-    }
-    QualifiedTarget tgt = sanitizeHistoryTarget(target);
-    QuasselCoreSession session = requireEstablishedSession(sid, operation);
-    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
-        targets.historyBuffer(session, sid, operation, tgt);
-    return new HistoryRequestContext(session, bufferInfo);
-  }
-
-  private void noteTargetNetworkHint(
-      QuasselCoreSession session, String target, int networkId, boolean preferObservedNetwork) {
-    if (session == null || networkId < 0) return;
-    observeKnownNetwork(session, networkId, "");
-    if (preferObservedNetwork) {
-      session.targetNetworkHints.observe(target, networkId);
-    } else {
-      session.targetNetworkHints.seed(target, networkId, () -> firstKnownNetworkId(session));
-    }
   }
 
   private void scheduleReconnectIfEligible(QuasselCoreSession session, String reason) {
@@ -968,12 +672,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         return;
       }
 
-      QuasselCoreProtocolProbe.ProbeSelection probe = protocolProbe.negotiate(openedSocket);
-      if (probe.protocolType() != QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM) {
-        throw new IllegalStateException(
-            "Quassel core selected unsupported protocol "
-                + QuasselCoreProtocolProbe.protocolLabel(probe.protocolType()));
-      }
+      QuasselCoreProtocolProbe.ProbeSelection probe = handshakes.negotiateDatastream(openedSocket);
 
       session.socketRef.set(openedSocket);
       session.phase.set(QuasselSessionPhase.TRANSPORT_CONNECTED);
@@ -994,8 +693,10 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselCoreAuthHandshake.AuthResult auth = authHandshake.authenticate(openedSocket, server);
       session.initialize(
           auth,
-          id -> observeKnownNetwork(session, id, ""),
-          info -> noteTargetNetworkHint(session, info.bufferName(), info.networkId(), false));
+          id -> stateObservations.observeNetwork(session, id, ""),
+          info ->
+              stateObservations.observeTargetNetwork(
+                  session, info.bufferName(), info.networkId(), false));
       session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
       availabilityReasonByServer.remove(sid);
       pendingSetupByServer.remove(sid);
@@ -1003,8 +704,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       reconnects.cancel(sid, false);
 
       sendSignalProxyInitRequest(session, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT);
-      for (Integer networkId : collectKnownNetworkIds(session)) {
-        requestNetworkInitState(session, networkId);
+      for (Integer networkId :
+          session.networks.knownIds(session.authResult.get(), session.buffers.values())) {
+        networkManagement.requestNetworkInitState(session, networkId);
       }
       Disposable readTask = RxVirtualSchedulers.io().scheduleDirect(() -> runReadLoop(session));
       session.readLoopTask.set(readTask);
@@ -1045,16 +747,14 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
 
     try {
-      QuasselCoreReadMarkerCoordinator markers = readMarkerCoordinator(session);
-      QuasselCoreSyncDispatcher sync = syncDispatcher(session, markers);
-      QuasselCoreRpcDispatcher rpc = rpcDispatcher(session, inboundCoordinator(session, markers));
-      QuasselCoreSignalProxyDispatcher dispatcher =
-          new QuasselCoreSignalProxyDispatcher(session, rpc::dispatch, sync::dispatch);
+      QuasselCoreInboundPipeline pipeline =
+          new QuasselCoreInboundPipeline(
+              session, targets, stateObservations, ircv3RuntimeSupport, bus::onNext);
       readLoop.read(
           sid,
           socket,
           () -> shuttingDown.get() || session.closeRequested.get(),
-          dispatcher::dispatch,
+          pipeline::dispatch,
           failure -> handleReadFailure(session, failure));
     } finally {
       session.readiness.close();
@@ -1081,377 +781,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     scheduleReconnectIfEligible(session, reason);
   }
 
-  private QuasselCoreInboundMessageCoordinator inboundCoordinator(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers) {
-    return new QuasselCoreInboundMessageCoordinator(
-        session,
-        markers,
-        targets,
-        ircv3RuntimeSupport,
-        new QuasselCoreInboundMessageCoordinator.SessionPort() {
-          @Override
-          public QuasselCoreDatastreamCodec.BufferInfoValue resolveBuffer(
-              QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
-            return resolveBufferInfo(session, incoming);
-          }
-
-          @Override
-          public String currentNick(int networkId) {
-            return session.nicks.forNetwork(networkId);
-          }
-
-          @Override
-          public boolean isSelfNick(String nick, int networkId) {
-            return session.nicks.isSelf(nick, networkId);
-          }
-
-          @Override
-          public void observeTargetNetwork(String target, int networkId) {
-            noteTargetNetworkHint(session, target, networkId, true);
-          }
-
-          @Override
-          public void observeNick(int networkId, Instant at, String nick) {
-            session.nicks.observe(networkId, nick, at);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreRpcDispatcher rpcDispatcher(
-      QuasselCoreSession session, QuasselCoreInboundMessageCoordinator inbound) {
-    QuasselCoreNetworkLifecycleTranslator networks =
-        new QuasselCoreNetworkLifecycleTranslator(
-            session.serverId,
-            session.networks::claimCreatedName,
-            (networkId, name) -> observeKnownNetwork(session, networkId, name),
-            networkId -> forgetKnownNetwork(session, networkId),
-            (networkId, state) -> observeFullNetworkState(session, networkId, state));
-    return new QuasselCoreRpcDispatcher(
-        session,
-        networks,
-        new QuasselCoreRpcDispatcher.SessionPort() {
-          @Override
-          public void displayMessage(QuasselCoreDatastreamCodec.MessageValue message) {
-            inbound.handle(message);
-          }
-
-          @Override
-          public void observeBuffer(QuasselCoreDatastreamCodec.BufferInfoValue merged) {
-            observeUpdatedBuffer(session, merged);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreSyncDispatcher syncDispatcher(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers) {
-    return new QuasselCoreSyncDispatcher(
-        session,
-        networkSyncTranslator(session),
-        new QuasselCoreSyncDispatcher.SessionPort() {
-          @Override
-          public void applyBufferInfoSnapshot(List<Object> values) {
-            QuasselCoreIrcClientService.this.applyBufferInfoSnapshot(session, values);
-          }
-
-          @Override
-          public void observeReadMarkers(String slotName, List<Object> values) {
-            markers.observeSync(slotName, values);
-          }
-
-          @Override
-          public void receiveBacklog(List<Object> values) {
-            handleBacklogSync(session, markers, values);
-          }
-
-          @Override
-          public void observeNetwork(int networkId, String name) {
-            observeKnownNetwork(session, networkId, name);
-          }
-
-          @Override
-          public String qualifyTarget(String target, int networkId) {
-            return targets.qualifyTarget(session, target, networkId);
-          }
-
-          @Override
-          public void emit(IrcEvent event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private QuasselCoreNetworkSyncTranslator networkSyncTranslator(QuasselCoreSession session) {
-    return new QuasselCoreNetworkSyncTranslator(
-        session.serverId,
-        (networkId, name) -> observeKnownNetwork(session, networkId, name),
-        (networkId, state) -> observeNetworkStateSnapshot(session, networkId, state),
-        (networkId, state) -> observeFullNetworkState(session, networkId, state),
-        (networkId, nick) -> session.nicks.observe(networkId, nick, Instant.now()));
-  }
-
-  private void observeFullNetworkState(QuasselCoreSession session, int networkId, Map<?, ?> state) {
-    observeNetworkStateSnapshot(session, networkId, state);
-    observeNetworkCapabilities(session, networkId, state);
-    observeNetworkMonitorSupport(session, networkId, state);
-  }
-
-  private void applyBufferInfoSnapshot(QuasselCoreSession session, List<Object> values) {
-    if (values == null || values.isEmpty()) return;
-    ArrayList<QuasselCoreDatastreamCodec.BufferInfoValue> found = new ArrayList<>();
-    for (Object value : values) {
-      collectBufferInfos(value, found);
-    }
-    if (found.isEmpty()) return;
-    for (QuasselCoreDatastreamCodec.BufferInfoValue info : found) {
-      if (info == null || info.bufferId() < 0) continue;
-      QuasselCoreDatastreamCodec.BufferInfoValue merged = session.buffers.merge(info);
-      observeUpdatedBuffer(session, merged);
-    }
-  }
-
-  private static void collectBufferInfos(
-      Object raw, List<QuasselCoreDatastreamCodec.BufferInfoValue> out) {
-    if (raw == null || out == null) return;
-    if (raw instanceof QuasselCoreDatastreamCodec.BufferInfoValue info) {
-      out.add(info);
-      return;
-    }
-    if (raw instanceof List<?> list) {
-      for (Object value : list) {
-        collectBufferInfos(value, out);
-      }
-      return;
-    }
-    if (raw instanceof Map<?, ?> map) {
-      for (Object value : map.values()) {
-        collectBufferInfos(value, out);
-      }
-    }
-  }
-
-  private void observeUpdatedBuffer(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue merged) {
-    observeKnownNetwork(session, merged.networkId(), "");
-    noteTargetNetworkHint(session, merged.bufferName(), merged.networkId(), false);
-    emitJoinedChannelFromBufferInfoIfNetworkConnected(session, merged);
-  }
-
-  private QuasselCoreReadMarkerCoordinator readMarkerCoordinator(QuasselCoreSession session) {
-    return new QuasselCoreReadMarkerCoordinator(
-        session,
-        new QuasselCoreReadMarkerCoordinator.SessionPort() {
-          @Override
-          public String currentNick(int networkId) {
-            return session.nicks.forNetwork(networkId);
-          }
-
-          @Override
-          public String historyTarget(
-              QuasselCoreDatastreamCodec.BufferInfoValue buffer, String from) {
-            return targets.targetForBuffer(session, buffer, from);
-          }
-
-          @Override
-          public String qualifyTarget(String target, int networkId) {
-            return targets.qualifyTarget(session, target, networkId);
-          }
-
-          @Override
-          public void observeTargetNetwork(String target, int networkId) {
-            noteTargetNetworkHint(session, target, networkId, true);
-          }
-
-          @Override
-          public void emit(IrcEvent.ReadMarkerObserved event) {
-            bus.onNext(new ServerIrcEvent(session.serverId, event));
-          }
-        });
-  }
-
-  private void observeNetworkCapabilities(
-      QuasselCoreSession session, int networkId, Map<?, ?> stateMap) {
-    if (session == null) return;
-    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    session.features.observeCapabilities(resolvedNetworkId, stateMap);
-  }
-
-  private void observeNetworkMonitorSupport(
-      QuasselCoreSession session, int networkId, Map<?, ?> stateMap) {
-    if (session == null) return;
-    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
-    session.features.observeMonitor(resolvedNetworkId, stateMap);
-  }
-
-  private void handleBacklogSync(
-      QuasselCoreSession session, QuasselCoreReadMarkerCoordinator markers, List<Object> values) {
-    IrcEvent.ChatHistoryBatchReceived batch =
-        session.backlog.sync(
-            values,
-            session.buffers::get,
-            info -> resolveBufferInfo(session, info),
-            (info, from) -> targets.targetForBuffer(session, info, from),
-            (target, networkId) -> noteTargetNetworkHint(session, target, networkId, true),
-            (message, entry) ->
-                markers.observeHistory(entry.target(), message.messageId(), entry.at()));
-    if (batch != null) bus.onNext(new ServerIrcEvent(session.serverId, batch));
-  }
-
-  private QuasselCoreDatastreamCodec.BufferInfoValue resolveBufferInfo(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
-    if (incoming == null) {
-      int networkId = primaryNetworkId(session);
-      return new QuasselCoreDatastreamCodec.BufferInfoValue(-1, networkId, BUFFER_STATUS, -1, "");
-    }
-
-    if (incoming.bufferId() < 0) {
-      return incoming;
-    }
-
-    QuasselCoreDatastreamCodec.BufferInfoValue merged = session.buffers.resolve(incoming);
-    observeKnownNetwork(session, merged.networkId(), "");
-    return merged;
-  }
-
-  private static String normalizedBufferName(
-      QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
-    if (bufferInfo == null) return "";
-    return Objects.toString(bufferInfo.bufferName(), "").trim();
-  }
-
-  private static boolean isChannelBuffer(QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
-    if (bufferInfo == null) return false;
-    return (bufferInfo.typeBits() & BUFFER_CHANNEL) != 0;
-  }
-
   private static int primaryNetworkId(QuasselCoreSession session) {
     return session == null
         ? -1
         : session.networks.primaryNetworkId(session.authResult.get(), session.buffers.values());
   }
-
-  private void observeKnownNetwork(QuasselCoreSession session, int networkId, String networkName) {
-    if (session == null || networkId < 0) return;
-    session.networks.observe(networkId, networkName);
-    emitQuasselNetworkSnapshotEvent(session, "observe-known-network");
-  }
-
-  private void forgetKnownNetwork(QuasselCoreSession session, int networkId) {
-    if (session == null || networkId < 0) return;
-    session.networks.forget(networkId);
-    session.nicks.forgetNetwork(networkId);
-    session.features.removeNetwork(networkId);
-    session.buffers.forgetNetwork(networkId, session.pendingReadMarkers::forgetBuffer);
-    session.targetNetworkHints.forgetNetwork(networkId);
-    session.membership.forgetNetwork(networkId);
-    emitQuasselNetworkSnapshotEvent(session, "forget-known-network");
-  }
-
-  private void observeNetworkStateSnapshot(
-      QuasselCoreSession session, int networkId, Map<?, ?> stateMap) {
-    if (session == null) return;
-    Map<String, Object> merged = session.networks.observeState(networkId, stateMap);
-    if (merged == null) return;
-    session.membership.reconcileNetwork(
-        networkId,
-        parseNetworkConnected(merged),
-        session.buffers.values(),
-        (channel, id) -> targets.qualifyTarget(session, channel, id),
-        (target, id) -> noteTargetNetworkHint(session, target, id, true));
-    emitQuasselNetworkSnapshotEvent(session, "observe-network-state");
-  }
-
-  private void emitJoinedChannelFromBufferInfoIfNetworkConnected(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
-    if (session == null || bufferInfo == null) return;
-    int networkId = bufferInfo.networkId();
-    if (networkId < 0) return;
-    Map<String, Object> state = session.networks.state(networkId);
-    if (!parseNetworkConnected(state)) return;
-    session.membership.observeBuffer(
-        bufferInfo,
-        Instant.now(),
-        (channel, id) -> targets.qualifyTarget(session, channel, id),
-        (target, id) -> noteTargetNetworkHint(session, target, id, true));
-  }
-
-  private static int firstKnownIdentityId(QuasselCoreSession session) {
-    return session == null ? -1 : session.identities.firstKnownId();
-  }
-
-  private List<QuasselCoreNetworkSummary> snapshotQuasselCoreNetworks(QuasselCoreSession session) {
-    return session == null
-        ? List.of()
-        : session.networks.snapshot(session.authResult.get(), session.buffers.values());
-  }
-
-  private void emitQuasselNetworkSnapshotEvent(QuasselCoreSession session, String source) {
-    if (session == null) return;
-    String sid = normalizeServerId(session.serverId);
-    if (sid.isEmpty()) return;
-    List<QuasselCoreNetworkSummary> snapshot = snapshotQuasselCoreNetworks(session);
-    observations.observeNetwork(new QuasselCoreNetworkSnapshotEvent(sid, snapshot, source));
-  }
-
-  private static LinkedHashSet<Integer> collectKnownNetworkIds(QuasselCoreSession session) {
-    return session == null
-        ? new LinkedHashSet<>()
-        : session.networks.knownIds(session.authResult.get(), session.buffers.values());
-  }
-
-  private int resolveQuasselNetworkId(
-      QuasselCoreSession session, String serverId, String networkIdOrName, String operation) {
-    if (session == null) throw new IllegalStateException("Quassel session is missing");
-    int resolved = session.networks.resolve(networkIdOrName);
-    if (resolved >= 0) return resolved;
-    String raw = Objects.toString(networkIdOrName, "").trim();
-    throw new BackendNotAvailableException(
-        IrcProperties.Server.Backend.QUASSEL_CORE,
-        operation,
-        serverId,
-        "unknown Quassel network '" + raw + "' (run /quasselnet list)");
-  }
-
-  private static int resolveQuasselIdentityId(
-      QuasselCoreSession session, Integer requestedIdentityId) {
-    if (requestedIdentityId != null && requestedIdentityId.intValue() > 0) {
-      return requestedIdentityId.intValue();
-    }
-    if (session != null) {
-      int observedIdentity = firstKnownIdentityId(session);
-      if (observedIdentity >= 0) return observedIdentity;
-      int primary = primaryNetworkId(session);
-      if (primary >= 0) {
-        Map<String, Object> state = session.networks.state(primary);
-        int fromPrimary = parseNetworkIdentityId(state);
-        if (fromPrimary >= 0) return fromPrimary;
-      }
-      for (Map<String, Object> state : session.networks.states()) {
-        int parsed = parseNetworkIdentityId(state);
-        if (parsed >= 0) return parsed;
-      }
-      log.debug(
-          "Falling back to default Quassel identity id=1: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, networkStateKeys={}",
-          session.serverId,
-          requestedIdentityId,
-          session.identities.knownIds(),
-          session.identities.stateIds(),
-          session.networks.stateIds());
-    }
-    return 1;
-  }
-
-  private record HistoryRequestContext(
-      QuasselCoreSession session, QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {}
 
   private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
     if (session == null) return;
@@ -1536,10 +870,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private QuasselCoreSession requireEstablishedSession(String serverId, String operation)
       throws BackendNotAvailableException {
     String sid = normalizeServerId(serverId);
-    QuasselCoreSession session = sessions.get(sid);
-    if (session == null
-        || session.socketRef.get() == null
-        || session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) {
+    QuasselCoreSession session = sessionQueries.findEstablished(sid);
+    if (session == null) {
       throw new BackendNotAvailableException(
           IrcProperties.Server.Backend.QUASSEL_CORE,
           operation,
@@ -1549,82 +881,27 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     return session;
   }
 
-  private static QuasselCoreNetworkCommandSender networkCommands(QuasselCoreSession session) {
-    if (session == null) throw new IllegalStateException("Quassel session is missing");
-    return session.networkCommands;
-  }
-
-  private void sendNetworkRequest(QuasselCoreSession session, int networkId, String slotName)
-      throws Exception {
-    networkCommands(session).syncNetwork(networkId, slotName);
-  }
-
-  private boolean maybeRepairNetworkIdentityBeforeConnect(QuasselCoreSession session, int networkId)
-      throws Exception {
-    if (session == null || networkId < 0) return true;
-    return new QuasselCoreNetworkConnectPreflight(
-            session.serverId,
-            session.networks,
-            session.identities,
-            observations,
-            () -> resolveQuasselIdentityId(session, null),
-            () -> collectKnownNetworkIds(session),
-            networkCommandMediator(session))
-        .prepare(networkId);
-  }
-
-  private void requestNetworkInitState(QuasselCoreSession session, int networkId) throws Exception {
-    if (session == null || networkId < 0) return;
-    networkCommandMediator(session).requestNetworkInitState(networkId);
-  }
-
   private void sendSignalProxyInitRequest(
       QuasselCoreSession session, String className, String objectName) throws Exception {
     if (session == null) return;
     session.networkCommands.requestInit(className, objectName);
   }
 
-  private static QuasselCoreNetworkSummary findNetworkSummaryById(
-      List<QuasselCoreNetworkSummary> networks, int networkId) {
-    if (networks == null || networks.isEmpty() || networkId < 0) return null;
-    for (QuasselCoreNetworkSummary summary : networks) {
-      if (summary == null || summary.networkId() < 0) continue;
-      if (summary.networkId() == networkId) return summary;
-    }
-    return null;
+  @FunctionalInterface
+  private interface EstablishedSessionAction {
+    void run(String serverId, QuasselCoreSession session) throws Exception;
   }
 
-  private void coordinateNetworkCreation(
-      QuasselCoreSession session, QuasselCoreNetworkCreateRequest request) throws Exception {
-    new QuasselCoreNetworkCreationCoordinator(
-            session.serverId,
-            session.initialNick,
-            session.identities,
-            session.networks,
-            observations,
-            requested -> resolveQuasselIdentityId(session, requested),
-            () -> collectKnownNetworkIds(session),
-            networkCommandMediator(session))
-        .create(request);
-  }
-
-  private void sendUpdateNetworkRequest(
-      QuasselCoreSession session, int networkId, QuasselCoreNetworkUpdateRequest request)
-      throws Exception {
-    networkCommandMediator(session).updateNetwork(networkId, request);
-  }
-
-  private QuasselCoreNetworkCommandMediator networkCommandMediator(QuasselCoreSession session) {
-    if (session == null) throw new IllegalStateException("Quassel session is missing");
-    return new QuasselCoreNetworkCommandMediator(
-        session,
-        () -> resolveQuasselIdentityId(session, null),
-        (networkId, name) -> observeKnownNetwork(session, networkId, name));
-  }
-
-  private void sendRemoveNetworkRequest(QuasselCoreSession session, int networkId)
-      throws Exception {
-    networkCommands(session).removeNetwork(networkId);
+  private Completable withEstablishedSession(
+      String serverId, String operation, EstablishedSessionAction action) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) throw new IllegalArgumentException(SERVER_ID_BLANK);
+              QuasselCoreSession session = requireEstablishedSession(sid, operation);
+              action.run(sid, session);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   private Completable sendPlannedInput(
@@ -1641,26 +918,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private Completable sendInputWithBuffer(
       String serverId, String operation, int typeBits, String bufferName, String input) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) throw new IllegalArgumentException(SERVER_ID_BLANK);
-
-              QuasselCoreSession session = requireEstablishedSession(sid, operation);
-              inputs.sendInput(session, operation, typeBits, bufferName, input);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private void sendBufferSyncerReadMarkerUpdate(
-      QuasselCoreSession session, int bufferId, long markerMsgId) throws Exception {
-    if (session == null) return;
-    session.bufferCommands.updateReadMarker(bufferId, markerMsgId);
-  }
-
-  private static int firstKnownNetworkId(QuasselCoreSession session) {
-    return session == null
-        ? -1
-        : session.networks.firstKnownNetworkId(session.authResult.get(), session.buffers.values());
+    return withEstablishedSession(
+        serverId,
+        operation,
+        (ignored, session) -> inputs.sendInput(session, operation, typeBits, bufferName, input));
   }
 }

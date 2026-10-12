@@ -51,6 +51,7 @@ public final class NetworkAdvancedControlsSupport {
             NetFloodProtectionContext.settings(),
             closeables,
             trustAllTlsCertificates,
+            runtimeConfig != null && runtimeConfig.readClientTlsAllowLegacyRsa(),
             preferLoginHintDefault,
             loginTemplateDefault);
     UserLookupsPanelControls userLookups =
@@ -65,6 +66,7 @@ public final class NetworkAdvancedControlsSupport {
         connection.bouncer,
         userLookups.monitorIsonPollIntervalSeconds,
         connection.trustAllTlsCertificates,
+        connection.allowLegacyRsaTls,
         connection.panel,
         userLookups.panel);
   }
@@ -145,7 +147,13 @@ public final class NetworkAdvancedControlsSupport {
             flood.enabled().isSelected(),
             PreferencesUiSupport.spinnerInt(flood.commandIntervalMs()),
             PreferencesUiSupport.spinnerInt(flood.autoJoinDelaySeconds()) * 1000L);
-    return new NetworkSettings(proxy, heartbeat, floodProtection, bouncer, trustAllTlsCertificates);
+    return new NetworkSettings(
+        proxy,
+        heartbeat,
+        floodProtection,
+        bouncer,
+        trustAllTlsCertificates,
+        controls.allowLegacyRsaTls().isSelected());
   }
 
   public static void rememberSettings(
@@ -164,6 +172,7 @@ public final class NetworkAdvancedControlsSupport {
     runtimeConfig.rememberGenericBouncerPreferLoginHint(settings.bouncer().preferLoginHint());
     runtimeConfig.rememberGenericBouncerLoginTemplate(settings.bouncer().loginTemplate());
     runtimeConfig.rememberClientTlsTrustAllCertificates(settings.trustAllTlsCertificates());
+    runtimeConfig.rememberClientTlsAllowLegacyRsa(settings.allowLegacyRsaTls());
     NetTlsContext.configure(settings.trustAllTlsCertificates());
   }
 
@@ -178,7 +187,8 @@ public final class NetworkAdvancedControlsSupport {
       IrcProperties.Heartbeat heartbeat,
       IrcProperties.FloodProtection floodProtection,
       BouncerSettings bouncer,
-      boolean trustAllTlsCertificates) {}
+      boolean trustAllTlsCertificates,
+      boolean allowLegacyRsaTls) {}
 
   public record BouncerSettings(boolean preferLoginHint, String loginTemplate) {
     public BouncerSettings {

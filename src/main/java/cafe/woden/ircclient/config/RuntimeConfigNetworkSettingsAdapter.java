@@ -57,4 +57,14 @@ public final class RuntimeConfigNetworkSettingsAdapter implements NetworkSetting
   public void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
     runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllCertificates);
   }
+
+  @Override
+  public boolean readClientTlsAllowLegacyRsa() {
+    return runtimeConfig.readClientTlsAllowLegacyRsa();
+  }
+
+  @Override
+  public void rememberClientTlsAllowLegacyRsa(boolean allowLegacyRsa) {
+    runtimeConfig.rememberClientTlsAllowLegacyRsa(allowLegacyRsa);
+  }
 }

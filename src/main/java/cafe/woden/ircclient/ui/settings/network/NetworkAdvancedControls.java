@@ -13,5 +13,6 @@ public record NetworkAdvancedControls(
     BouncerControls bouncer,
     JSpinner monitorIsonPollIntervalSeconds,
     JCheckBox trustAllTlsCertificates,
+    JCheckBox allowLegacyRsaTls,
     JPanel networkPanel,
     JPanel userLookupsPanel) {}

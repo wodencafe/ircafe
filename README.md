@@ -265,6 +265,43 @@ make jar
 java -jar build/libs/*.jar
 ```
 
+### Connecting to servers with legacy RSA TLS
+
+Some older IRC servers only support static RSA key exchange, which Java 25 blocks by
+default. If a server fails with `SSLHandshakeException: Received fatal alert:
+handshake_failure` and its cipher configuration has been confirmed as the cause,
+open **Preferences → Network → TLS / SSL**, enable **Allow legacy RSA TLS ciphers
+(requires restart)**, click **Apply** or **OK**, then close and reopen IRCafe. The
+preference is saved under `irc.client.tls.allowLegacyRsa` in the runtime configuration
+file and read before TLS initializes. A missing or unreadable preference defaults
+to disabled. Custom runtime config paths, including `--ircafe.runtime-config`,
+are honored at startup.
+
+You can also override the saved preference for one launch with:
+
+```bash
+java -jar ircafe.jar --ircafe.tls.allow-legacy-rsa=true
+# Packaged launcher (also usable in a Windows shortcut's Target):
+IRCafe --ircafe.tls.allow-legacy-rsa=true
+# From source:
+./gradlew bootRun --args='--ircafe.tls.allow-legacy-rsa=true'
+```
+
+Replace `ircafe.jar` or `IRCafe` with your jar or launcher path. This preference
+is off by default and applies to **all TLS connections in that IRCafe process**,
+including HTTPS and Quassel Core connections. It allows `TLS_RSA_*` cipher suites,
+which lack forward secrecy, while retaining certificate validation and the other
+Java algorithm restrictions. It does not edit the installed Java security file.
+The startup log records when compatibility is enabled.
+
+This is separate from the server's **Trust all certificates** option. Enabling that
+option alone cannot fix a blocked cipher. A server administrator enabling modern
+ECDHE ciphers or TLS 1.3 is the preferred fix. To disable compatibility, close IRCafe
+and reopen it after disabling the preference. Explicit launch arguments take
+precedence over the saved preference: `=false` forces compatibility off and `=true`
+forces it on. Java caches this policy when TLS is initialized, so changes in
+Preferences take effect only after restarting.
+
 ## Release verification
 
 The **Release (jpackage + flatpak)** workflow verifies the exact tagged commit

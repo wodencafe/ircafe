@@ -46,6 +46,7 @@ class FloodProtectionPreferencesFunctionalTest {
                       controls.bouncer,
                       null,
                       controls.trustAllTlsCertificates,
+                      controls.allowLegacyRsaTls,
                       controls.panel,
                       null);
               var settings = NetworkAdvancedControlsSupport.readSettings(advanced);
@@ -85,6 +86,7 @@ class FloodProtectionPreferencesFunctionalTest {
         new IrcProperties.Heartbeat(true, 15000, 360000),
         NetFloodProtectionContext.settings(),
         closeables,
+        false,
         false,
         false,
         "{base}/{network}");

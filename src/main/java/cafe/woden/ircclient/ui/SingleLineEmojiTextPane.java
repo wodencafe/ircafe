@@ -2,13 +2,19 @@ package cafe.woden.ircclient.ui;
 
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.Objects;
+import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ActionMap;
+import javax.swing.JComponent;
 import javax.swing.JTextPane;
+import javax.swing.KeyStroke;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultEditorKit;
 import javax.swing.text.DocumentFilter;
 
 /** Single-line styled text input that uses the emoji-aware editor kit. */
@@ -17,9 +23,36 @@ public final class SingleLineEmojiTextPane extends JTextPane {
   public SingleLineEmojiTextPane() {
     setEditorKit(EmojiEditorKits.singleLine());
     installEditorActionFallbacks();
+    installSelectionCollapseBinding(KeyEvent.VK_LEFT, DefaultEditorKit.backwardAction, true);
+    installSelectionCollapseBinding(KeyEvent.VK_RIGHT, DefaultEditorKit.forwardAction, false);
     if (getDocument() instanceof AbstractDocument doc) {
       doc.setDocumentFilter(new SingleLineDocumentFilter());
     }
+  }
+
+  private void installSelectionCollapseBinding(int key, String delegateName, boolean backward) {
+    String actionName = "ircafe.collapseSelection." + delegateName;
+    // Only plain arrows collapse a selection; modified arrows retain the LAF's navigation.
+    getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(key, 0), actionName);
+    getActionMap()
+        .put(
+            actionName,
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent event) {
+                int start = getSelectionStart();
+                int end = getSelectionEnd();
+                if (start != end) {
+                  setCaretPosition(backward ? start : end);
+                  return;
+                }
+                // Resolve at invocation time so theme changes and editor fallbacks still apply.
+                Action delegate = getActionMap().get(delegateName);
+                if (delegate != null && delegate.isEnabled()) {
+                  delegate.actionPerformed(event);
+                }
+              }
+            });
   }
 
   private void installEditorActionFallbacks() {

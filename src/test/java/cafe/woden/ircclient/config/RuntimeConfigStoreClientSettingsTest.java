@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.runtime.RuntimeConfigStore;
@@ -12,6 +13,39 @@ import org.junit.jupiter.api.io.TempDir;
 class RuntimeConfigStoreClientSettingsTest {
 
   @TempDir Path tempDir;
+
+  @Test
+  void legacyRsaPreferencePersistsSeparatelyAndReloadsThroughSpringBinding() throws Exception {
+    Path config = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        config,
+        "irc:\n  client:\n    tls:\n      trustAllCertificates: false\n      futureOption: keep\n");
+    try (RuntimeConfigStore store = RuntimeConfigStoreTestFixtures.store(config)) {
+      assertFalse(store.readClientTlsAllowLegacyRsa());
+      store.rememberClientTlsAllowLegacyRsa(true);
+      assertTrue(store.readClientTlsAllowLegacyRsa());
+      assertTrue(
+          StartupTlsSettings.readAllowLegacyRsa(
+              new String[] {"--ircafe.runtime-config=" + config}));
+      var env = new org.springframework.core.env.StandardEnvironment();
+      var source =
+          new org.springframework.boot.env.YamlPropertySourceLoader()
+              .load("test", new org.springframework.core.io.FileSystemResource(config))
+              .getFirst();
+      env.getPropertySources().addFirst(source);
+      IrcProperties rebound =
+          org.springframework.boot.context.properties.bind.Binder.get(env)
+              .bind("irc", IrcProperties.class)
+              .get();
+      assertTrue(rebound.client().tls().allowLegacyRsa());
+      assertFalse(rebound.client().tls().trustAllCertificates());
+      assertTrue(Files.readString(config).contains("futureOption: keep"));
+      store.rememberClientTlsAllowLegacyRsa(false);
+      assertFalse(
+          StartupTlsSettings.readAllowLegacyRsa(
+              new String[] {"--ircafe.runtime-config=" + config}));
+    }
+  }
 
   @Test
   void persistsFloodPreferencesAndReloadsThemThroughSpringBinding() throws Exception {

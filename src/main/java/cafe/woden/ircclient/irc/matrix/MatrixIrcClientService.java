@@ -1,6 +1,11 @@
 package cafe.woden.ircclient.irc.matrix;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.matrix.MatrixHistoryCursorCoordinator.parseHistoryMessageIdSelector;
+import static cafe.woden.ircclient.irc.matrix.MatrixHistoryCursorCoordinator.parseHistoryTimestampSelector;
+import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixRoomAlias;
+import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixRoomId;
+import static cafe.woden.ircclient.irc.matrix.MatrixRoomTargetResolver.looksLikeMatrixUserId;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.BackendDescriptorCatalog;
@@ -18,10 +23,8 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,15 +58,9 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   private static final String RAW_TAG_MATRIX_MEDIA_URL = MatrixProtocol.RAW_TAG_MATRIX_MEDIA_URL;
   private static final String RAW_TAG_MATRIX_UPLOAD_PATH =
       MatrixProtocol.RAW_TAG_MATRIX_UPLOAD_PATH;
-  private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX =
-      MatrixProtocol.HISTORY_SELECTOR_TIMESTAMP_PREFIX;
-  private static final String HISTORY_SELECTOR_MSGID_PREFIX =
-      MatrixProtocol.HISTORY_SELECTOR_MSGID_PREFIX;
   private static final int MATRIX_TYPING_TIMEOUT_MS = 30_000;
   private static final int SYNC_INTERVAL_SECONDS = 3;
   private static final int SYNC_TIMEOUT_MS = 0;
-  private static final int UNREACT_LOOKUP_HISTORY_PAGE_LIMIT = 200;
-  private static final int UNREACT_LOOKUP_MAX_PAGES = 10;
   private static final String MATRIX_PASSWORD_AUTH_MECHANISM = "MATRIX_PASSWORD";
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -81,16 +78,19 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   private final MatrixRoomRosterClient roomRosterClient;
   private final MatrixRoomHistoryClient roomHistoryClient;
   private final MatrixRoomTypingClient roomTypingClient;
-  private final MatrixDirectRoomResolver directRoomResolver;
+  private final MatrixRoomTargetResolver roomTargetResolver;
   private final MatrixMediaUploadClient mediaUploadClient;
   private final MatrixRoomMessageSender roomMessageSender;
   private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixRawModeCommandHandler rawModeCommandHandler;
   private final MatrixRawLookupCommandHandler rawLookupCommandHandler;
+  private final MatrixRawChatHistoryCommandHandler rawChatHistoryCommandHandler;
   private final MatrixSyncTimelineEventProjector syncTimelineEventProjector;
   private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncMutationEventProjector syncMutationEventProjector;
   private final MatrixHistoryCursorCoordinator historyCursorCoordinator;
+  private final MatrixHistoryRequestCoordinator historyRequests;
+  private final MatrixReactionEventResolver reactionEventResolver;
   private final MatrixLocalEchoEmitter localEchoEmitter;
   private final MatrixSyncClient syncClient;
   private final MatrixIrcv3RuntimeSupport ircv3RuntimeSupport;
@@ -132,7 +132,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
     this.roomRosterClient = Objects.requireNonNull(roomRosterClient, "roomRosterClient");
     this.roomHistoryClient = Objects.requireNonNull(roomHistoryClient, "roomHistoryClient");
     this.roomTypingClient = Objects.requireNonNull(roomTypingClient, "roomTypingClient");
-    this.directRoomResolver = Objects.requireNonNull(directRoomResolver, "directRoomResolver");
+    MatrixDirectRoomResolver directRooms =
+        Objects.requireNonNull(directRoomResolver, "directRoomResolver");
     this.mediaUploadClient = Objects.requireNonNull(mediaUploadClient, "mediaUploadClient");
     this.roomMessageSender = Objects.requireNonNull(roomMessageSender, "roomMessageSender");
     this.rawRoomAdminCommandHandler =
@@ -155,13 +156,40 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
             bus::onNext);
     this.rawLookupCommandHandler =
         new MatrixRawLookupCommandHandler(this::whois, this::requestNames, this::whowas);
+    this.rawChatHistoryCommandHandler =
+        new MatrixRawChatHistoryCommandHandler(
+            this::requestChatHistoryBefore,
+            this::requestChatHistoryLatest,
+            this::requestChatHistoryBetween,
+            this::requestChatHistoryAround);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
     this.ircv3RuntimeSupport = Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
+    this.roomTargetResolver =
+        new MatrixRoomTargetResolver(
+            this.roomDirectoryClient,
+            directRooms,
+            this.syncClient,
+            MatrixIrcClientService::eventHost);
     this.syncTimelineEventProjector = new MatrixSyncTimelineEventProjector(bus::onNext);
     this.syncSignalEventProjector = new MatrixSyncSignalEventProjector(bus::onNext);
     this.syncMutationEventProjector = new MatrixSyncMutationEventProjector(bus::onNext);
     this.historyCursorCoordinator =
         new MatrixHistoryCursorCoordinator(this.roomHistoryClient, this.syncClient);
+    this.historyRequests =
+        new MatrixHistoryRequestCoordinator(
+            this.serverCatalog,
+            roomTargetResolver,
+            historyCursorCoordinator,
+            sessionsByServer::get,
+            this::backendAvailabilityReason,
+            this::historySessionView,
+            this::emitHistoryBatch);
+    this.reactionEventResolver =
+        new MatrixReactionEventResolver(
+            this.roomHistoryClient,
+            this.syncClient,
+            historyCursorCoordinator,
+            this::historySessionView);
     this.localEchoEmitter = new MatrixLocalEchoEmitter(bus::onNext);
   }
 
@@ -413,7 +441,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, channel, server, session);
+              String roomId =
+                  roomTargetResolver.resolveAliasOrRoomId(sid, channel, server, session);
               MatrixRoomRosterClient.RosterResult result =
                   roomRosterClient.fetchJoinedMembers(sid, server, session.accessToken, roomId);
               if (!result.success()) {
@@ -453,7 +482,7 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomIdOrAlias = normalizeJoinTarget(channel, server);
+              String roomIdOrAlias = roomTargetResolver.normalizeJoinTarget(channel, server);
               MatrixRoomMembershipClient.JoinResult result =
                   roomMembershipClient.joinRoom(sid, server, session.accessToken, roomIdOrAlias);
               if (!result.joined()) {
@@ -548,7 +577,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolvePartRoomId(sid, channel, server, session);
+              String roomId =
+                  roomTargetResolver.resolveAliasOrRoomId(sid, channel, server, session);
               MatrixRoomMembershipClient.LeaveResult result =
                   roomMembershipClient.leaveRoom(sid, server, session.accessToken, roomId);
               if (!result.left()) {
@@ -592,7 +622,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
 
               String txnId = nextTransactionId(sid);
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, channel, server, session);
+              String roomId =
+                  roomTargetResolver.resolveAliasOrRoomId(sid, channel, server, session);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomMessage(
                       sid, server, session.accessToken, roomId, txnId, text);
@@ -637,7 +668,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveDirectRoomId(sid, server, session, peerUserId);
+              String roomId =
+                  roomTargetResolver.resolveDirectRoomId(sid, server, session, peerUserId);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomMessage(
@@ -677,7 +709,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
 
               String txnId = nextTransactionId(sid);
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, channel, server, session);
+              String roomId =
+                  roomTargetResolver.resolveAliasOrRoomId(sid, channel, server, session);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomNotice(
                       sid, server, session.accessToken, roomId, txnId, text);
@@ -727,7 +760,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveDirectRoomId(sid, server, session, peerUserId);
+              String roomId =
+                  roomTargetResolver.resolveDirectRoomId(sid, server, session, peerUserId);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomNotice(
@@ -798,7 +832,7 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
       case "MARKREAD" -> sendRawMarkRead(sid, raw);
       case "TAGMSG" -> sendRawTagmsg(sid, line, raw);
       case "REDACT" -> sendRawRedact(sid, raw);
-      case "CHATHISTORY" -> sendRawChatHistory(sid, raw);
+      case "CHATHISTORY" -> rawChatHistoryCommandHandler.handle(sid, raw.arguments());
       default -> rawCommandUnsupported(sid, raw.command());
     };
   }
@@ -926,7 +960,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId =
-                  resolveRealtimeSignalRoomId(sid, requestedTarget, server, session, false);
+                  roomTargetResolver.resolveRealtimeSignalRoomId(
+                      sid, requestedTarget, server, session, false);
               if (roomId.isEmpty()) {
                 return;
               }
@@ -972,7 +1007,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId =
-                  resolveRealtimeSignalRoomId(sid, requestedTarget, server, session, true);
+                  roomTargetResolver.resolveRealtimeSignalRoomId(
+                      sid, requestedTarget, server, session, true);
               if (roomId.isEmpty()) {
                 return;
               }
@@ -986,252 +1022,31 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
-    String token = normalize(selector);
-    if (token.isEmpty()) {
-      return requestChatHistoryBefore(serverId, target, Instant.now(), limit);
-    }
-
-    Instant ts = parseHistoryTimestampSelector(token);
-    if (ts != null) {
-      return requestChatHistoryBefore(serverId, target, ts, limit);
-    }
-
-    String messageId = parseHistoryMessageIdSelector(token);
-    if (!messageId.isEmpty()) {
-      return requestChatHistoryBeforeByMessageId(
-          serverId, target, messageId, limit, "chat-history-before");
-    }
-
-    return Completable.error(
-        new IllegalArgumentException("selector must be msgid=... or timestamp=..."));
+    return historyRequests.requestBefore(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
-    String token = normalize(selector);
-    if (token.isEmpty() || "*".equals(token)) {
-      return requestChatHistoryBefore(serverId, target, Instant.now(), limit);
-    }
-    Instant ts = parseHistoryTimestampSelector(token);
-    if (ts != null) {
-      return requestChatHistoryBefore(serverId, target, ts, limit);
-    }
-    String messageId = parseHistoryMessageIdSelector(token);
-    if (!messageId.isEmpty()) {
-      return requestChatHistoryBeforeByMessageId(
-          serverId, target, messageId, limit, "chat-history-latest");
-    }
-    return Completable.error(
-        new IllegalArgumentException("selector must be *, msgid=..., or timestamp=..."));
+    return historyRequests.requestLatest(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBetween(
       String serverId, String target, String startSelector, String endSelector, int limit) {
-    String startToken = normalize(startSelector);
-    String endToken = normalize(endSelector);
-    if (startToken.isEmpty() || endToken.isEmpty()) {
-      return Completable.error(
-          new IllegalArgumentException(
-              "CHATHISTORY BETWEEN requires <start-selector> <end-selector>"));
-    }
-
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history-between",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
-              Instant startAt =
-                  historyCursorCoordinator.resolveHistorySelectorInstant(
-                      sid,
-                      server,
-                      historySession,
-                      roomId,
-                      startToken,
-                      "chat-history-between",
-                      "start selector");
-              Instant endAt =
-                  historyCursorCoordinator.resolveHistorySelectorInstant(
-                      sid,
-                      server,
-                      historySession,
-                      roomId,
-                      endToken,
-                      "chat-history-between",
-                      "end selector");
-              Instant endExclusive = endAt == null ? Instant.now() : endAt;
-              if (startAt != null && !startAt.isBefore(endExclusive)) {
-                throw new IllegalArgumentException(
-                    "start selector must be earlier than end selector");
-              }
-
-              Instant startInclusive = startAt == null ? Instant.EPOCH : startAt;
-              String forwardCursor =
-                  historyCursorCoordinator.resolveForwardCursorForTimestamp(
-                      sid, server, historySession, roomId, startInclusive.toEpochMilli());
-              List<ChatHistoryEntry> entries =
-                  historyCursorCoordinator.fetchHistoryEntriesForwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      startInclusive,
-                      endExclusive,
-                      requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestBetween(serverId, target, startSelector, endSelector, limit);
   }
 
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-              String token = normalize(selector);
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history-around",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
-
-              Instant centerAt;
-              if (token.isEmpty() || "*".equals(token)) {
-                centerAt = Instant.now();
-              } else {
-                centerAt =
-                    historyCursorCoordinator.resolveHistorySelectorInstant(
-                        sid,
-                        server,
-                        historySession,
-                        roomId,
-                        token,
-                        "chat-history-around",
-                        "selector");
-              }
-
-              String forwardCursor =
-                  historyCursorCoordinator.resolveForwardCursorForTimestamp(
-                      sid, server, historySession, roomId, centerAt.toEpochMilli());
-              int scanLimit = Math.min(200, Math.max(requestedLimit * 4, requestedLimit + 20));
-              List<ChatHistoryEntry> backwardCandidates =
-                  historyCursorCoordinator.fetchHistoryEntriesBackwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      null,
-                      null,
-                      scanLimit);
-              List<ChatHistoryEntry> forwardCandidates =
-                  historyCursorCoordinator.fetchHistoryEntriesForwardFromCursor(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      forwardCursor,
-                      null,
-                      null,
-                      scanLimit);
-              List<ChatHistoryEntry> candidates =
-                  MatrixHistoryCursorCoordinator.mergeHistoryCandidates(
-                      backwardCandidates, forwardCandidates);
-              List<ChatHistoryEntry> entries =
-                  MatrixHistoryCursorCoordinator.selectEntriesAroundTimestamp(
-                      candidates, centerAt, requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestAround(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, Instant beforeExclusive, int limit) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              String requestedTarget = normalize(target);
-              if (requestedTarget.isEmpty()) {
-                throw new IllegalArgumentException("target is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "chat-history",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-
-              MatrixHistoryCursorCoordinator.SessionView historySession =
-                  historySessionView(session);
-              int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
-              long beforeEpochMs =
-                  beforeExclusive == null
-                      ? System.currentTimeMillis()
-                      : beforeExclusive.toEpochMilli();
-              List<ChatHistoryEntry> entries =
-                  historyCursorCoordinator.fetchHistoryEntriesBefore(
-                      sid,
-                      server,
-                      historySession,
-                      requestedTarget,
-                      roomId,
-                      beforeEpochMs,
-                      requestedLimit);
-              emitHistoryBatch(sid, requestedTarget, entries);
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return historyRequests.requestBefore(serverId, target, beforeExclusive, limit);
   }
 
   @Override
@@ -1585,84 +1400,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
     };
   }
 
-  private Completable unsupportedChatHistoryMode(String operation, String serverId, String detail) {
-    String sid = normalizeServerId(serverId);
-    String message = normalize(detail);
-    if (message.isEmpty()) {
-      message = UNSUPPORTED_OPERATION_REASON;
-    }
-    if (!sid.isEmpty() && !sessionsByServer.containsKey(sid)) {
-      message = backendAvailabilityReason(sid);
-    }
-    return Completable.error(
-        new BackendNotAvailableException(
-            IrcProperties.Server.Backend.MATRIX, operation, sid, message));
-  }
-
-  private static Instant parseHistoryTimestampSelector(String selector) {
-    String token = normalize(selector);
-    if (!token.toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_TIMESTAMP_PREFIX)) {
-      return null;
-    }
-    String value = normalize(token.substring(HISTORY_SELECTOR_TIMESTAMP_PREFIX.length()));
-    if (value.isEmpty()) {
-      throw new IllegalArgumentException("timestamp selector is blank");
-    }
-    try {
-      return Instant.parse(value);
-    } catch (DateTimeParseException ex) {
-      throw new IllegalArgumentException("timestamp selector is invalid: " + value, ex);
-    }
-  }
-
-  private static boolean historyMsgidSelector(String selector) {
-    return normalize(selector).toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_MSGID_PREFIX);
-  }
-
-  private static String parseHistoryMessageIdSelector(String selector) {
-    String token = normalize(selector);
-    if (!historyMsgidSelector(token)) {
-      return "";
-    }
-    String messageId = normalize(token.substring(HISTORY_SELECTOR_MSGID_PREFIX.length()));
-    if (messageId.isEmpty()) {
-      throw new IllegalArgumentException("msgid selector is blank");
-    }
-    return messageId;
-  }
-
-  private Completable requestChatHistoryBeforeByMessageId(
-      String serverId, String target, String messageId, int limit, String operation) {
-    return Completable.defer(
-        () -> {
-          String sid = normalizeServerId(serverId);
-          if (sid.isEmpty()) {
-            return Completable.error(new IllegalArgumentException(SERVER_ID_BLANK));
-          }
-          String requestedTarget = normalize(target);
-          if (requestedTarget.isEmpty()) {
-            return Completable.error(new IllegalArgumentException("target is blank"));
-          }
-
-          MatrixSession session = sessionsByServer.get(sid);
-          if (session == null) {
-            return Completable.error(
-                new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    operation,
-                    sid,
-                    backendAvailabilityReason(sid)));
-          }
-
-          IrcProperties.Server server = serverCatalog.require(sid);
-          String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
-          Instant marker =
-              historyCursorCoordinator.resolveHistoryMessageIdInstant(
-                  sid, server, historySessionView(session), roomId, messageId, operation);
-          return requestChatHistoryBefore(sid, requestedTarget, marker, limit);
-        });
-  }
-
   private Completable sendRawPrivmsg(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "PRIVMSG requires target and message");
     String message = joinArgs(raw.arguments(), 1);
@@ -1777,7 +1514,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
 
               String txnId = nextTransactionId(sid);
               if (looksLikeMatrixUserId(rawTarget)) {
-                String roomId = resolveDirectRoomId(sid, server, session, rawTarget);
+                String roomId =
+                    roomTargetResolver.resolveDirectRoomId(sid, server, session, rawTarget);
                 MatrixRoomMessageSender.SendResult result =
                     roomMessageSender.sendRoomMediaMessage(
                         sid, server, session.accessToken, roomId, txnId, text, mediaType, mediaRef);
@@ -1800,7 +1538,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
                 return;
               }
 
-              String roomId = resolveAliasOrRoomId(sid, rawTarget, server, session);
+              String roomId =
+                  roomTargetResolver.resolveAliasOrRoomId(sid, rawTarget, server, session);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomMediaMessage(
                       sid, server, session.accessToken, roomId, txnId, text, mediaType, mediaRef);
@@ -1894,7 +1633,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
+              String roomId =
+                  roomTargetResolver.resolveHistoryRoomId(sid, requestedTarget, server, session);
               historyCursorCoordinator.resolveHistoryMessageIdInstant(
                   sid, server, historySessionView(session), roomId, markerMessageId, "markread");
               sendReadMarkerForEventId(sid, server, session, roomId, markerMessageId);
@@ -1976,7 +1716,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String roomId =
+                  roomTargetResolver.resolveMutationRoomId(sid, target, server, session);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomReply(
@@ -2017,7 +1758,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String roomId =
+                  roomTargetResolver.resolveMutationRoomId(sid, target, server, session);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomEdit(
@@ -2055,7 +1797,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String roomId =
+                  roomTargetResolver.resolveMutationRoomId(sid, target, server, session);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomReaction(
@@ -2094,9 +1837,10 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String roomId =
+                  roomTargetResolver.resolveMutationRoomId(sid, target, server, session);
               String reactionEventId =
-                  resolveReactionEventIdForUnreact(
+                  reactionEventResolver.resolveForUnreact(
                       sid, server, session, roomId, reactTarget, react, session.userId);
               if (reactionEventId.isEmpty()) {
                 throw new IllegalStateException(
@@ -2114,310 +1858,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               session.consumeReactionEvent(roomId, reactionEventId);
             })
         .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private String resolveReactionEventIdForUnreact(
-      String serverId,
-      IrcProperties.Server server,
-      MatrixSession session,
-      String roomId,
-      String targetEventId,
-      String reaction,
-      String sender) {
-    String sid = normalize(serverId);
-    String rid = normalize(roomId);
-    String targetId = normalize(targetEventId);
-    String key = normalize(reaction);
-    String from = normalize(sender);
-    if (session == null
-        || sid.isEmpty()
-        || rid.isEmpty()
-        || targetId.isEmpty()
-        || key.isEmpty()
-        || from.isEmpty()) {
-      return "";
-    }
-
-    String reactionEventId = session.findReactionEventId(rid, targetId, key, from);
-    if (!reactionEventId.isEmpty()) {
-      return reactionEventId;
-    }
-
-    rememberReactionMutationsFromSync(sid, server, session, rid);
-    reactionEventId = session.findReactionEventId(rid, targetId, key, from);
-    if (!reactionEventId.isEmpty()) {
-      return reactionEventId;
-    }
-
-    return findReactionEventIdFromHistory(sid, server, session, rid, targetId, key, from);
-  }
-
-  private void rememberReactionMutationsFromSync(
-      String serverId, IrcProperties.Server server, MatrixSession session, String roomId) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String rid = normalize(roomId);
-    if (sid.isEmpty() || rid.isEmpty()) return;
-    String since = normalize(session.sinceToken.get());
-    MatrixSyncClient.SyncResult sync =
-        syncClient.sync(sid, server, session.accessToken, since, SYNC_TIMEOUT_MS);
-    if (sync == null || !sync.success()) {
-      return;
-    }
-    rememberSyncReactionMutations(
-        session, rid, sync.reactionEvents(), sync.redactionEvents(), new LinkedHashSet<>());
-  }
-
-  private String findReactionEventIdFromHistory(
-      String serverId,
-      IrcProperties.Server server,
-      MatrixSession session,
-      String roomId,
-      String targetEventId,
-      String reaction,
-      String sender) {
-    if (session == null) return "";
-    String sid = normalize(serverId);
-    String rid = normalize(roomId);
-    String targetId = normalize(targetEventId);
-    String key = normalize(reaction);
-    String from = normalize(sender);
-    if (sid.isEmpty() || rid.isEmpty() || targetId.isEmpty() || key.isEmpty() || from.isEmpty()) {
-      return "";
-    }
-
-    MatrixHistoryCursorCoordinator.SessionView historySession = historySessionView(session);
-    String fromToken =
-        historyCursorCoordinator.resolveHistoryFromToken(
-            sid, server, historySession, rid, System.currentTimeMillis());
-    if (fromToken.isEmpty()) {
-      return "";
-    }
-
-    String reactionEventId =
-        findReactionEventIdByScanningHistoryBackward(
-            sid, server, session, rid, fromToken, targetId, key, from);
-    if (!reactionEventId.isEmpty()) {
-      return reactionEventId;
-    }
-
-    long targetTimestampMs = session.roomEventTimestampMs(rid, targetId);
-    if (targetTimestampMs <= 0L) {
-      try {
-        Instant targetInstant =
-            historyCursorCoordinator.resolveHistoryMessageIdInstant(
-                sid, server, historySession, rid, targetId, "unreact");
-        if (targetInstant != null) {
-          targetTimestampMs = targetInstant.toEpochMilli();
-        }
-      } catch (RuntimeException ignored) {
-        return "";
-      }
-    }
-    if (targetTimestampMs <= 0L) {
-      return "";
-    }
-
-    String cursorNearTarget;
-    try {
-      cursorNearTarget =
-          historyCursorCoordinator.resolveForwardCursorForTimestamp(
-              sid, server, historySession, rid, targetTimestampMs);
-    } catch (RuntimeException ignored) {
-      return "";
-    }
-    if (cursorNearTarget.isEmpty()) {
-      return "";
-    }
-
-    return findReactionEventIdByScanningHistoryForward(
-        sid, server, session, rid, cursorNearTarget, targetId, key, from);
-  }
-
-  private String findReactionEventIdByScanningHistoryBackward(
-      String serverId,
-      IrcProperties.Server server,
-      MatrixSession session,
-      String roomId,
-      String fromToken,
-      String targetEventId,
-      String reaction,
-      String sender) {
-    String sid = normalize(serverId);
-    String rid = normalize(roomId);
-    String cursor = normalize(fromToken);
-    String targetId = normalize(targetEventId);
-    String key = normalize(reaction);
-    String from = normalize(sender);
-    if (session == null
-        || sid.isEmpty()
-        || rid.isEmpty()
-        || cursor.isEmpty()
-        || targetId.isEmpty()
-        || key.isEmpty()
-        || from.isEmpty()) {
-      return "";
-    }
-
-    Set<String> redactedReactionIds = new LinkedHashSet<>();
-    for (int page = 0; page < UNREACT_LOOKUP_MAX_PAGES; page++) {
-      MatrixRoomHistoryClient.HistoryResult result =
-          roomHistoryClient.fetchMessagesBefore(
-              sid, server, session.accessToken, rid, cursor, UNREACT_LOOKUP_HISTORY_PAGE_LIMIT);
-      if (result == null || !result.success()) {
-        return "";
-      }
-      session.rememberHistoryEvents(rid, result.events());
-      rememberHistoryReactionMutations(
-          session, rid, result.reactionEvents(), result.redactionEvents(), redactedReactionIds);
-      String reactionEventId = session.findReactionEventId(rid, targetId, key, from);
-      if (!reactionEventId.isEmpty()) {
-        return reactionEventId;
-      }
-
-      String nextToken = normalize(result.endToken());
-      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
-        return "";
-      }
-      cursor = nextToken;
-    }
-    return "";
-  }
-
-  private String findReactionEventIdByScanningHistoryForward(
-      String serverId,
-      IrcProperties.Server server,
-      MatrixSession session,
-      String roomId,
-      String fromToken,
-      String targetEventId,
-      String reaction,
-      String sender) {
-    String sid = normalize(serverId);
-    String rid = normalize(roomId);
-    String cursor = normalize(fromToken);
-    String targetId = normalize(targetEventId);
-    String key = normalize(reaction);
-    String from = normalize(sender);
-    if (session == null
-        || sid.isEmpty()
-        || rid.isEmpty()
-        || cursor.isEmpty()
-        || targetId.isEmpty()
-        || key.isEmpty()
-        || from.isEmpty()) {
-      return "";
-    }
-
-    Set<String> redactedReactionIds = new LinkedHashSet<>();
-    for (int page = 0; page < UNREACT_LOOKUP_MAX_PAGES; page++) {
-      MatrixRoomHistoryClient.HistoryResult result =
-          roomHistoryClient.fetchMessagesAfter(
-              sid, server, session.accessToken, rid, cursor, UNREACT_LOOKUP_HISTORY_PAGE_LIMIT);
-      if (result == null || !result.success()) {
-        return "";
-      }
-      session.rememberHistoryEvents(rid, result.events());
-      rememberHistoryReactionMutations(
-          session, rid, result.reactionEvents(), result.redactionEvents(), redactedReactionIds);
-      String reactionEventId = session.findReactionEventId(rid, targetId, key, from);
-      if (!reactionEventId.isEmpty()) {
-        return reactionEventId;
-      }
-
-      String nextToken = normalize(result.endToken());
-      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
-        return "";
-      }
-      cursor = nextToken;
-    }
-    return "";
-  }
-
-  private static void rememberSyncReactionMutations(
-      MatrixSession session,
-      String roomId,
-      List<MatrixSyncClient.RoomReactionEvent> reactionEvents,
-      List<MatrixSyncClient.RoomRedactionEvent> redactionEvents,
-      Set<String> redactedReactionIds) {
-    if (session == null) return;
-    String rid = normalize(roomId);
-    if (rid.isEmpty()) return;
-    Set<String> tombstones =
-        redactedReactionIds == null ? new LinkedHashSet<>() : redactedReactionIds;
-
-    for (MatrixSyncClient.RoomRedactionEvent redactionEvent :
-        redactionEvents == null
-            ? List.<MatrixSyncClient.RoomRedactionEvent>of()
-            : redactionEvents) {
-      if (redactionEvent == null) continue;
-      if (!rid.equals(normalize(redactionEvent.roomId()))) continue;
-      String redactsEventId = normalize(redactionEvent.redactsEventId());
-      if (redactsEventId.isEmpty()) continue;
-      tombstones.add(redactsEventId);
-      session.consumeReactionEvent(rid, redactsEventId);
-    }
-
-    for (MatrixSyncClient.RoomReactionEvent reactionEvent :
-        reactionEvents == null ? List.<MatrixSyncClient.RoomReactionEvent>of() : reactionEvents) {
-      if (reactionEvent == null) continue;
-      if (!rid.equals(normalize(reactionEvent.roomId()))) continue;
-      String eventId = normalize(reactionEvent.eventId());
-      String sender = normalize(reactionEvent.sender());
-      String targetMessageId = normalize(reactionEvent.targetEventId());
-      String reaction = normalize(reactionEvent.reaction());
-      if (eventId.isEmpty()
-          || sender.isEmpty()
-          || targetMessageId.isEmpty()
-          || reaction.isEmpty()
-          || tombstones.contains(eventId)) {
-        continue;
-      }
-      session.rememberReactionEvent(rid, eventId, targetMessageId, reaction, sender);
-    }
-  }
-
-  private static void rememberHistoryReactionMutations(
-      MatrixSession session,
-      String roomId,
-      List<MatrixRoomHistoryClient.RoomReactionEvent> reactionEvents,
-      List<MatrixRoomHistoryClient.RoomRedactionEvent> redactionEvents,
-      Set<String> redactedReactionIds) {
-    if (session == null) return;
-    String rid = normalize(roomId);
-    if (rid.isEmpty()) return;
-    Set<String> tombstones =
-        redactedReactionIds == null ? new LinkedHashSet<>() : redactedReactionIds;
-
-    for (MatrixRoomHistoryClient.RoomRedactionEvent redactionEvent :
-        redactionEvents == null
-            ? List.<MatrixRoomHistoryClient.RoomRedactionEvent>of()
-            : redactionEvents) {
-      if (redactionEvent == null) continue;
-      String redactsEventId = normalize(redactionEvent.redactsEventId());
-      if (redactsEventId.isEmpty()) continue;
-      tombstones.add(redactsEventId);
-      session.consumeReactionEvent(rid, redactsEventId);
-    }
-
-    for (MatrixRoomHistoryClient.RoomReactionEvent reactionEvent :
-        reactionEvents == null
-            ? List.<MatrixRoomHistoryClient.RoomReactionEvent>of()
-            : reactionEvents) {
-      if (reactionEvent == null) continue;
-      String eventId = normalize(reactionEvent.eventId());
-      String sender = normalize(reactionEvent.sender());
-      String targetMessageId = normalize(reactionEvent.targetEventId());
-      String reaction = normalize(reactionEvent.reaction());
-      if (eventId.isEmpty()
-          || sender.isEmpty()
-          || targetMessageId.isEmpty()
-          || reaction.isEmpty()
-          || tombstones.contains(eventId)) {
-        continue;
-      }
-      session.rememberReactionEvent(rid, eventId, targetMessageId, reaction, sender);
-    }
   }
 
   private Completable sendRawRedact(String serverId, RawCommand raw) {
@@ -2440,7 +1880,8 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
                     backendAvailabilityReason(sid));
               }
               IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String roomId =
+                  roomTargetResolver.resolveMutationRoomId(sid, target, server, session);
               String txnId = nextTransactionId(sid);
               MatrixRoomMessageSender.SendResult result =
                   roomMessageSender.sendRoomRedaction(
@@ -2460,97 +1901,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
               }
             })
         .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private Completable sendRawChatHistory(String serverId, RawCommand raw) {
-    List<String> args = raw == null ? List.of() : raw.arguments();
-    if (args.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY requires a mode (BEFORE|LATEST|BETWEEN|AROUND)");
-    }
-    String mode = normalize(args.get(0)).toUpperCase(Locale.ROOT);
-    return switch (mode) {
-      case "BEFORE" -> sendRawChatHistoryBefore(serverId, args);
-      case "LATEST" -> sendRawChatHistoryLatest(serverId, args);
-      case "BETWEEN" -> sendRawChatHistoryBetween(serverId, args);
-      case "AROUND" -> sendRawChatHistoryAround(serverId, args);
-      default ->
-          throw new IllegalArgumentException(
-              "CHATHISTORY mode must be BEFORE, LATEST, BETWEEN, or AROUND");
-    };
-  }
-
-  private Completable sendRawChatHistoryBefore(String serverId, List<String> args) {
-    if (args.size() < 3 || args.size() > 4) {
-      throw new IllegalArgumentException("CHATHISTORY BEFORE requires <target> <selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String selector = normalize(args.get(2));
-    if (target.isEmpty() || selector.isEmpty()) {
-      throw new IllegalArgumentException("CHATHISTORY BEFORE requires <target> <selector> [limit]");
-    }
-    int limit = args.size() > 3 ? parseRawChatHistoryLimit(args.get(3)) : 50;
-    return requestChatHistoryBefore(serverId, target, selector, limit);
-  }
-
-  private Completable sendRawChatHistoryLatest(String serverId, List<String> args) {
-    if (args.size() < 2 || args.size() > 4) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-    }
-    String target = normalize(args.get(1));
-    if (target.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-    }
-
-    String selector = "*";
-    int limit = 50;
-    if (args.size() >= 3) {
-      String third = normalize(args.get(2));
-      if (args.size() == 3 && looksLikeInteger(third)) {
-        limit = parseRawChatHistoryLimit(third);
-      } else {
-        selector = third;
-        if (selector.isEmpty()) {
-          throw new IllegalArgumentException(
-              "CHATHISTORY LATEST requires <target> [selector|*] [limit]");
-        }
-        if (args.size() >= 4) {
-          limit = parseRawChatHistoryLimit(args.get(3));
-        }
-      }
-    }
-    return requestChatHistoryLatest(serverId, target, selector, limit);
-  }
-
-  private Completable sendRawChatHistoryBetween(String serverId, List<String> args) {
-    if (args.size() < 4 || args.size() > 5) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY BETWEEN requires <target> <start-selector> <end-selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String startSelector = normalize(args.get(2));
-    String endSelector = normalize(args.get(3));
-    if (target.isEmpty() || startSelector.isEmpty() || endSelector.isEmpty()) {
-      throw new IllegalArgumentException(
-          "CHATHISTORY BETWEEN requires <target> <start-selector> <end-selector> [limit]");
-    }
-    int limit = args.size() > 4 ? parseRawChatHistoryLimit(args.get(4)) : 50;
-    return requestChatHistoryBetween(serverId, target, startSelector, endSelector, limit);
-  }
-
-  private Completable sendRawChatHistoryAround(String serverId, List<String> args) {
-    if (args.size() < 3 || args.size() > 4) {
-      throw new IllegalArgumentException("CHATHISTORY AROUND requires <target> <selector> [limit]");
-    }
-    String target = normalize(args.get(1));
-    String selector = normalize(args.get(2));
-    if (target.isEmpty() || selector.isEmpty()) {
-      throw new IllegalArgumentException("CHATHISTORY AROUND requires <target> <selector> [limit]");
-    }
-    int limit = args.size() > 3 ? parseRawChatHistoryLimit(args.get(3)) : 50;
-    return requestChatHistoryAround(serverId, target, selector, limit);
   }
 
   private static String argOrBlank(RawCommand raw, int index, String error) {
@@ -2573,40 +1923,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
         .map(MatrixIrcClientService::normalize)
         .filter(s -> !s.isEmpty())
         .collect(java.util.stream.Collectors.joining(" "));
-  }
-
-  private static int parseRawChatHistoryLimit(String rawValue) {
-    String token = normalize(rawValue);
-    if (!looksLikeInteger(token)) {
-      throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer");
-    }
-    try {
-      int parsed = Integer.parseInt(token);
-      if (parsed <= 0) {
-        throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer");
-      }
-      return parsed;
-    } catch (NumberFormatException ex) {
-      throw new IllegalArgumentException("CHATHISTORY limit must be a positive integer", ex);
-    }
-  }
-
-  private static boolean looksLikeInteger(String rawValue) {
-    String token = normalize(rawValue);
-    if (token.isEmpty()) {
-      return false;
-    }
-    for (int i = 0; i < token.length(); i++) {
-      char c = token.charAt(i);
-      if (i == 0 && c == '+') {
-        if (token.length() == 1) return false;
-        continue;
-      }
-      if (c < '0' || c > '9') {
-        return false;
-      }
-    }
-    return true;
   }
 
   private static String rawMatrixMsgType(Map<String, String> tags) {
@@ -2729,147 +2045,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
     return sid + "-" + nowMs + "-" + seq;
   }
 
-  private static boolean looksLikeMatrixRoomId(String token) {
-    String value = normalize(token);
-    if (!value.startsWith("!")) return false;
-    int colon = value.indexOf(':');
-    return colon > 1 && colon < value.length() - 1;
-  }
-
-  private static boolean looksLikeMatrixUserId(String token) {
-    String value = normalize(token);
-    if (!value.startsWith("@")) return false;
-    int colon = value.indexOf(':');
-    return colon > 1 && colon < value.length() - 1;
-  }
-
-  private static boolean looksLikeMatrixRoomAlias(String token) {
-    String value = normalize(token);
-    if (!value.startsWith("#")) return false;
-    int colon = value.indexOf(':');
-    return colon > 1 && colon < value.length() - 1;
-  }
-
-  private String normalizeJoinTarget(String rawTarget, IrcProperties.Server server) {
-    String target = normalize(rawTarget);
-    if (target.isEmpty()) {
-      throw new IllegalArgumentException("channel is blank");
-    }
-    if (looksLikeMatrixRoomId(target) || looksLikeMatrixRoomAlias(target)) {
-      return target;
-    }
-    if (target.startsWith("#") && target.indexOf(':') < 0) {
-      String host = eventHost(server);
-      if (!host.isEmpty()) {
-        return target + ":" + host;
-      }
-    }
-    throw new IllegalArgumentException("target is not a Matrix room id or alias");
-  }
-
-  private String resolveAliasOrRoomId(
-      String serverId, String rawTarget, IrcProperties.Server server, MatrixSession session) {
-    String target = normalizeJoinTarget(rawTarget, server);
-    if (looksLikeMatrixRoomId(target)) {
-      return target;
-    }
-
-    String mapped = session == null ? "" : session.roomForAlias(target);
-    if (!mapped.isEmpty()) {
-      return mapped;
-    }
-
-    MatrixRoomDirectoryClient.ResolveResult resolved =
-        roomDirectoryClient.resolveRoomAlias(serverId, server, session.accessToken, target);
-    if (!resolved.resolved()) {
-      throw new IllegalStateException(
-          "Matrix room alias lookup failed at " + resolved.endpoint() + ": " + resolved.detail());
-    }
-
-    String roomId = normalize(resolved.roomId());
-    if (!looksLikeMatrixRoomId(roomId)) {
-      throw new IllegalStateException("Matrix room alias lookup returned invalid room id");
-    }
-    session.rememberJoinedAlias(target, roomId);
-    return roomId;
-  }
-
-  private String resolvePartRoomId(
-      String serverId, String rawTarget, IrcProperties.Server server, MatrixSession session) {
-    return resolveAliasOrRoomId(serverId, rawTarget, server, session);
-  }
-
-  private String resolveHistoryRoomId(
-      String serverId, String requestedTarget, IrcProperties.Server server, MatrixSession session) {
-    String target = normalize(requestedTarget);
-    if (looksLikeMatrixUserId(target)) {
-      String roomId = session == null ? "" : session.roomForPeer(target);
-      if (roomId.isEmpty() && session != null) {
-        MatrixSyncClient.SyncResult sync =
-            syncClient.sync(serverId, server, session.accessToken, "", SYNC_TIMEOUT_MS);
-        if (sync != null && sync.success()) {
-          String nextBatch = normalize(sync.nextBatch());
-          if (!nextBatch.isEmpty()) {
-            session.sinceToken.set(nextBatch);
-          }
-          session.rememberDirectRooms(sync.directPeerByRoom());
-          roomId = session.roomForPeer(target);
-        }
-      }
-      if (roomId.isEmpty()) {
-        throw new IllegalStateException("Matrix direct room is unknown for target");
-      }
-      return roomId;
-    }
-    return resolveAliasOrRoomId(serverId, target, server, session);
-  }
-
-  private String resolveRealtimeSignalRoomId(
-      String serverId,
-      String requestedTarget,
-      IrcProperties.Server server,
-      MatrixSession session,
-      boolean resolveAliasByLookup) {
-    String target = normalize(requestedTarget);
-    if (target.isEmpty()) {
-      throw new IllegalArgumentException("target is blank");
-    }
-    if (looksLikeMatrixUserId(target)) {
-      return session == null ? "" : session.roomForPeer(target);
-    }
-    if (looksLikeMatrixRoomId(target)) {
-      return target;
-    }
-    String alias = normalizeJoinTarget(target, server);
-    if (!looksLikeMatrixRoomAlias(alias)) {
-      return "";
-    }
-    String cachedRoom = session == null ? "" : session.roomForAlias(alias);
-    if (!cachedRoom.isEmpty()) {
-      return cachedRoom;
-    }
-    if (!resolveAliasByLookup) {
-      return "";
-    }
-    return resolveAliasOrRoomId(serverId, alias, server, session);
-  }
-
-  private String resolveMutationRoomId(
-      String serverId, String requestedTarget, IrcProperties.Server server, MatrixSession session) {
-    String target = normalize(requestedTarget);
-    if (target.isEmpty()) {
-      throw new IllegalArgumentException("target is blank");
-    }
-    if (looksLikeMatrixUserId(target)) {
-      String roomId = session == null ? "" : session.roomForPeer(target);
-      if (roomId.isEmpty()) {
-        throw new IllegalStateException("Matrix direct room is unknown for target");
-      }
-      return roomId;
-    }
-    return resolveAliasOrRoomId(serverId, target, server, session);
-  }
-
   private void emitHistoryBatch(String serverId, String target, List<ChatHistoryEntry> entries) {
     String sid = normalize(serverId);
     String normalizedTarget = normalize(target);
@@ -2939,32 +2114,6 @@ public class MatrixIrcClientService implements IrcBackendRuntimeClientService {
       lines.add("no profile fields published");
     }
     return List.copyOf(lines);
-  }
-
-  private String resolveDirectRoomId(
-      String serverId, IrcProperties.Server server, MatrixSession session, String peerUserId) {
-    String peer = normalize(peerUserId);
-    String cachedRoomId = session.roomForPeer(peer);
-    if (!cachedRoomId.isEmpty()) {
-      return cachedRoomId;
-    }
-
-    MatrixDirectRoomResolver.ResolveResult resolve =
-        directRoomResolver.resolveDirectRoom(serverId, server, session.accessToken, peer);
-    if (!resolve.resolved()) {
-      throw new IllegalStateException(
-          "Matrix direct room resolution failed at "
-              + resolve.endpoint()
-              + ": "
-              + resolve.detail());
-    }
-
-    String roomId = normalize(resolve.roomId());
-    if (!looksLikeMatrixRoomId(roomId)) {
-      throw new IllegalStateException("Matrix direct room resolution returned invalid room id");
-    }
-    session.rememberDirectRoom(peer, roomId);
-    return roomId;
   }
 
   private void startSyncPolling(

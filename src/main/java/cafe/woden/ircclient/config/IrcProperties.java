@@ -44,10 +44,16 @@ public record IrcProperties(Client client, List<Server> servers) {
       Translation translation,
       FloodProtection floodProtection) {
 
-    /** TLS settings for outbound connections (IRC-over-TLS and HTTPS fetching). */
-    public record Tls(boolean trustAllCertificates) {
-      public Tls {
-        // default false
+    /**
+     * TLS settings for outbound connections (IRC-over-TLS and HTTPS fetching). Legacy RSA
+     * compatibility is applied at startup; changing it requires a restart.
+     */
+    public record Tls(boolean trustAllCertificates, boolean allowLegacyRsa) {
+      @ConstructorBinding
+      public Tls {}
+
+      public Tls(boolean trustAllCertificates) {
+        this(trustAllCertificates, false);
       }
     }
 

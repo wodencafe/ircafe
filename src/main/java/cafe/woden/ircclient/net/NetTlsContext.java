@@ -54,7 +54,7 @@ public final class NetTlsContext {
   }
 
   public static void configure(boolean trustAllCertificates) {
-    configure(new IrcProperties.Client.Tls(trustAllCertificates));
+    configure(new IrcProperties.Client.Tls(trustAllCertificates, settings.allowLegacyRsa()));
   }
 
   public static IrcProperties.Client.Tls normalize(IrcProperties.Client.Tls cfg) {

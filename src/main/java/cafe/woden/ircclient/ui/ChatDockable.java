@@ -315,9 +315,6 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.nickContextCoordinator =
         createNickContextCoordinator(ignoreListService, ignoreStatusService, userListStore);
 
-    // Show something harmless on startup; first selection will swap it.
-    setDocument(new DefaultStyledDocument());
-
     TopicCoordinatorBundle topicBundle =
         createTopicCoordinatorBundle(notificationStore, channelMetadata);
     this.topicCoordinator = topicBundle.topicCoordinator();
@@ -396,6 +393,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
+    // Document setup queues scroll callbacks on the EDT, which may run while Spring is still
+    // constructing this bean. Initialize their read-marker coordinator before publishing the view.
+    setDocument(new DefaultStyledDocument());
     refreshOutboundTranslationButtonVisibility();
     updateDockTitle();
     applyMainDockVisualIdentity();

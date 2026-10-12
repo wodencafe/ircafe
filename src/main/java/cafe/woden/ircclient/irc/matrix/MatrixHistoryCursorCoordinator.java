@@ -481,7 +481,7 @@ final class MatrixHistoryCursorCoordinator {
     return session.roomEventTimestampMs(rid, mid);
   }
 
-  private static Instant parseHistoryTimestampSelector(String selector) {
+  static Instant parseHistoryTimestampSelector(String selector) {
     String token = normalize(selector);
     if (!token.toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_TIMESTAMP_PREFIX)) {
       return null;
@@ -497,7 +497,7 @@ final class MatrixHistoryCursorCoordinator {
     }
   }
 
-  private static String parseHistoryMessageIdSelector(String selector) {
+  static String parseHistoryMessageIdSelector(String selector) {
     String token = normalize(selector);
     if (!token.toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_MSGID_PREFIX)) {
       return "";
