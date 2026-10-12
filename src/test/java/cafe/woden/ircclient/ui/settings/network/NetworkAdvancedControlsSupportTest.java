@@ -105,6 +105,9 @@ class NetworkAdvancedControlsSupportTest {
     assertTrue(settings.bouncer().preferLoginHint());
     assertEquals("{base}/{network}", settings.bouncer().loginTemplate());
     assertTrue(settings.trustAllTlsCertificates());
+    assertFalse(settings.allowLegacyRsaTls());
+    controls.allowLegacyRsaTls().setSelected(true);
+    assertTrue(NetworkAdvancedControlsSupport.readSettings(controls).allowLegacyRsaTls());
   }
 
   @Test
@@ -121,6 +124,7 @@ class NetworkAdvancedControlsSupportTest {
             heartbeat,
             new IrcProperties.FloodProtection(2000, 7000),
             new NetworkAdvancedControlsSupport.BouncerSettings(true, "{base}/{network}"),
+            true,
             true);
 
     NetworkAdvancedControlsSupport.rememberSettings(runtimeConfig, heartbeatMaintenance, settings);
@@ -134,6 +138,7 @@ class NetworkAdvancedControlsSupportTest {
     verify(runtimeConfig).rememberGenericBouncerPreferLoginHint(true);
     verify(runtimeConfig).rememberGenericBouncerLoginTemplate("{base}/{network}");
     verify(runtimeConfig).rememberClientTlsTrustAllCertificates(true);
+    verify(runtimeConfig).rememberClientTlsAllowLegacyRsa(true);
   }
 
   private static ProxyControls proxyControls(
@@ -195,6 +200,7 @@ class NetworkAdvancedControlsSupportTest {
         bouncer,
         null,
         trustAllTlsCertificatesBox,
+        new JCheckBox(),
         null,
         null);
   }

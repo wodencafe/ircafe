@@ -26,11 +26,17 @@ import javax.net.ssl.SSLSocket;
 /** Local TLS echo fixture, optionally preceded by a SOCKS5 negotiation. Test keys only. */
 public final class SelfSignedTlsServer implements AutoCloseable {
   private final SSLContext context;
+  private final String cipherSuite;
   private final ServerSocket listener;
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final Future<?> worker;
 
   public SelfSignedTlsServer(boolean socks) throws Exception {
+    this(socks, null);
+  }
+
+  public SelfSignedTlsServer(boolean socks, String cipherSuite) throws Exception {
+    this.cipherSuite = cipherSuite;
     context = serverContext();
     listener = new ServerSocket(0, 10, InetAddress.getByName("127.0.0.1"));
     worker =
@@ -58,6 +64,7 @@ public final class SelfSignedTlsServer implements AutoCloseable {
             (SSLSocket) context.getSocketFactory().createSocket(tcp, host(), port(), true)) {
           tls.setUseClientMode(false);
           tls.setSoTimeout(5_000);
+          if (cipherSuite != null) tls.setEnabledCipherSuites(new String[] {cipherSuite});
           tls.startHandshake();
           int value = tls.getInputStream().read();
           if (value >= 0) {

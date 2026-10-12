@@ -32,6 +32,7 @@ final class NetworkConnectionPanelSupport {
       IrcProperties.FloodProtection floodSettings,
       List<AutoCloseable> closeables,
       boolean trustAllTlsCertificatesSelected,
+      boolean allowLegacyRsaTlsSelected,
       boolean preferLoginHintDefault,
       String loginTemplateDefault) {
     JPanel networkPanel = new JPanel(MigLayouts.singleColumnFill(0, "[]0[grow,fill]"));
@@ -193,6 +194,18 @@ final class NetworkConnectionPanelSupport {
         PreferencesUiSupport.wrapCheckBox(
             trustAllTlsCertificates, MESSAGES.text("preferences.network.tls.trustAll"));
     tlsTab.add(trustAllTlsRow, MigConstraints.growXMinWidth0Wrap());
+
+    JCheckBox allowLegacyRsaTls = new JCheckBox();
+    allowLegacyRsaTls.setName("preferences.network.tls.allowLegacyRsa");
+    allowLegacyRsaTls.setSelected(allowLegacyRsaTlsSelected);
+    allowLegacyRsaTls.setToolTipText(MESSAGES.text("preferences.network.tls.legacyRsa.help"));
+    tlsTab.add(
+        PreferencesUiSupport.wrapCheckBox(
+            allowLegacyRsaTls, MESSAGES.text("preferences.network.tls.legacyRsa")),
+        MigConstraints.growXMinWidth0Wrap());
+    JTextArea legacyRsaNotice = PreferencesUiSupport.subtleInfoText();
+    legacyRsaNotice.setText(MESSAGES.text("preferences.network.tls.legacyRsa.help"));
+    tlsTab.add(legacyRsaNotice, MigConstraints.growXMinWidth0Wrap());
 
     JPanel heartbeatTab = new JPanel(MigLayouts.twoColumnForm(12, MigLayouts.rows(2, 6)));
     heartbeatTab.setOpaque(false);
@@ -356,6 +369,7 @@ final class NetworkConnectionPanelSupport {
         new FloodProtectionControls(floodEnabled, commandIntervalMs, autoJoinDelaySeconds),
         bouncerControls,
         trustAllTlsCertificates,
+        allowLegacyRsaTls,
         networkPanel);
   }
 }

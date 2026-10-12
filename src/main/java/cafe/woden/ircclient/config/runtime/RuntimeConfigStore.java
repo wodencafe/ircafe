@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config.runtime;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.StartupTlsSettings;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
@@ -47,9 +48,7 @@ public class RuntimeConfigStore implements AutoCloseable {
   private final RuntimeConfigStoreDelegates stores;
 
   public RuntimeConfigStore(
-      @Value("${ircafe.runtime-config:${XDG_CONFIG_HOME:${user.home}/.config}/ircafe/ircafe.yml}")
-          String filePath,
-      IrcProperties defaults) {
+      @Value(StartupTlsSettings.RUNTIME_CONFIG_PATH) String filePath, IrcProperties defaults) {
     this.file = Paths.get(Objects.requireNonNullElse(filePath, "").trim());
     this.stores = new RuntimeConfigStoreDelegates(this.file, defaults);
 
@@ -1359,6 +1358,14 @@ public class RuntimeConfigStore implements AutoCloseable {
   public synchronized void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
     stores.connectionStores.clientSettingsStore.rememberTlsTrustAllCertificates(
         trustAllCertificates);
+  }
+
+  public synchronized boolean readClientTlsAllowLegacyRsa() {
+    return stores.connectionStores.clientSettingsStore.readTlsAllowLegacyRsa();
+  }
+
+  public synchronized void rememberClientTlsAllowLegacyRsa(boolean allowLegacyRsa) {
+    stores.connectionStores.clientSettingsStore.rememberTlsAllowLegacyRsa(allowLegacyRsa);
   }
 
   public synchronized void rememberClientHeartbeat(IrcProperties.Heartbeat heartbeat) {

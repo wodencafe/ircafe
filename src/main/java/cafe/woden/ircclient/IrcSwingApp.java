@@ -3,6 +3,7 @@ package cafe.woden.ircclient;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.StartupTlsSettings;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.properties.IgnoreProperties;
 import cafe.woden.ircclient.config.properties.LogProperties;
@@ -11,6 +12,7 @@ import cafe.woden.ircclient.config.properties.SojuProperties;
 import cafe.woden.ircclient.config.properties.UiProperties;
 import cafe.woden.ircclient.config.properties.ZncProperties;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.net.LegacyTlsStartupPolicy;
 import cafe.woden.ircclient.ui.FirstRunSetupCoordinator;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.settings.theme.ThemeIdUtils;
@@ -52,7 +54,15 @@ public class IrcSwingApp {
   private static final Logger log = LoggerFactory.getLogger(IrcSwingApp.class);
 
   public static void main(String[] args) {
+    boolean legacyRsaTls =
+        LegacyTlsStartupPolicy.configureFromArguments(
+            args, StartupTlsSettings.readAllowLegacyRsa(args));
     ConsoleTeeHub.install();
+    if (legacyRsaTls) {
+      log.warn(
+          "Legacy RSA TLS compatibility enabled for this IRCafe process; "
+              + "all TLS connections may use RSA key exchange without forward secrecy");
+    }
     installSwingSafetyDefaults();
 
     new SpringApplicationBuilder(IrcSwingApp.class).headless(false).run(args);

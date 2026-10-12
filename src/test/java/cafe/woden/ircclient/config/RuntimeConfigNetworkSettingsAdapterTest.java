@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,12 +16,14 @@ class RuntimeConfigNetworkSettingsAdapterTest {
   void readsBouncerDefaultsFromRuntimeStore() {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     when(runtimeConfig.readGenericBouncerPreferLoginHint(true)).thenReturn(false);
+    when(runtimeConfig.readClientTlsAllowLegacyRsa()).thenReturn(true);
     when(runtimeConfig.readGenericBouncerLoginTemplate("{base}/{network}"))
         .thenReturn("{account}@{network}");
     RuntimeConfigNetworkSettingsAdapter adapter =
         new RuntimeConfigNetworkSettingsAdapter(runtimeConfig);
 
     assertFalse(adapter.readGenericBouncerPreferLoginHint(true));
+    assertTrue(adapter.readClientTlsAllowLegacyRsa());
     assertEquals(
         "{account}@{network}", adapter.readGenericBouncerLoginTemplate("{base}/{network}"));
   }
@@ -40,6 +43,7 @@ class RuntimeConfigNetworkSettingsAdapterTest {
     adapter.rememberGenericBouncerPreferLoginHint(false);
     adapter.rememberGenericBouncerLoginTemplate("{account}@{network}");
     adapter.rememberClientTlsTrustAllCertificates(true);
+    adapter.rememberClientTlsAllowLegacyRsa(true);
 
     verify(runtimeConfig).rememberClientProxy(proxy);
     verify(runtimeConfig).rememberClientHeartbeat(heartbeat);
@@ -47,5 +51,6 @@ class RuntimeConfigNetworkSettingsAdapterTest {
     verify(runtimeConfig).rememberGenericBouncerPreferLoginHint(false);
     verify(runtimeConfig).rememberGenericBouncerLoginTemplate("{account}@{network}");
     verify(runtimeConfig).rememberClientTlsTrustAllCertificates(true);
+    verify(runtimeConfig).rememberClientTlsAllowLegacyRsa(true);
   }
 }

@@ -24,4 +24,8 @@ public interface NetworkSettingsRuntimeConfigPort {
   void rememberGenericBouncerLoginTemplate(String template);
 
   void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates);
+
+  boolean readClientTlsAllowLegacyRsa();
+
+  void rememberClientTlsAllowLegacyRsa(boolean allowLegacyRsa);
 }
