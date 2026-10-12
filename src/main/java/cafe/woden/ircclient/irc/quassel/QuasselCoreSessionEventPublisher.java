@@ -42,6 +42,12 @@ final class QuasselCoreSessionEventPublisher {
                 session.nicks.lastObservedNick())));
   }
 
+  void emitError(QuasselCoreSession session, String reason, Throwable cause) {
+    if (session == null) return;
+    events.accept(
+        new ServerIrcEvent(session.serverId, new IrcEvent.Error(Instant.now(), reason, cause)));
+  }
+
   void emitDisconnectedOnce(QuasselCoreSession session, String reason) {
     if (session == null) return;
     session.readiness.close();

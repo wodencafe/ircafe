@@ -48,8 +48,7 @@ class QuasselCoreSessionLifecycleTest {
           },
           shuttingDown::get,
           reconnects,
-          sessionEvents,
-          publish);
+          sessionEvents);
   private final QuasselCoreSession session = session();
   private final Socket socket = mock(Socket.class);
 

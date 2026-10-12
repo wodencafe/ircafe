@@ -85,9 +85,34 @@ class QuasselCoreSessionEventPublisherTest {
   void missingSessionIsANoopForPhaseAndDisconnectPublication() {
     publisher.emitConnecting(null);
     publisher.emitConnected(null);
+    publisher.emitError(null, "failure", new IllegalStateException("failure"));
     publisher.emitConnectionPhase(null, "setup-required", "detail");
     publisher.emitDisconnectedOnce(null, "reason");
     assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void errorNotificationPreservesCauseReasonTimestampAndSessionState() {
+    var cause = new IllegalStateException("failure");
+    var fallback = Disposable.empty();
+    session.readiness.fallbackTask.set(fallback);
+    var phase = session.phase.get();
+    Instant before = Instant.now();
+    publisher.emitError(session, " raw reason ", cause);
+    Instant after = Instant.now();
+    assertEquals(1, events.size());
+    assertEquals("core", events.getFirst().serverId());
+    var event = assertInstanceOf(IrcEvent.Error.class, events.getFirst().event());
+    assertEquals(" raw reason ", event.message());
+    assertSame(cause, event.cause());
+    assertFalse(event.at().isBefore(before));
+    assertFalse(event.at().isAfter(after));
+    assertEquals(phase, session.phase.get());
+    assertFalse(session.closeRequested.get());
+    assertFalse(session.disconnectedEmitted.get());
+    assertSame(fallback, session.readiness.fallbackTask.get());
+    assertFalse(fallback.isDisposed());
+    session.readiness.close();
   }
 
   @ParameterizedTest

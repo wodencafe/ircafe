@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
+import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.renderThrowableMessage;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
@@ -19,15 +20,18 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Owns pending Core setup prompts and coordinates submission after service-owned session teardown.
+ * Owns pending Core setup prompts, reports setup requirements, and coordinates submission after
+ * service-owned session teardown.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSetupCoordinator {
+  private static final String PHASE_SETUP_REQUIRED = "setup-required";
   private final Map<String, QuasselCoreSetupPrompt> pendingPrompts = new ConcurrentHashMap<>();
   @NonNull private final ServerCatalog serverCatalog;
   @NonNull private final QuasselCoreHandshakeCoordinator handshakes;
   @NonNull private final Consumer<String> beforeSetup;
   @NonNull private final BiConsumer<String, String> availabilityReason;
+  @NonNull private final QuasselCoreSessionEventPublisher sessionEvents;
 
   boolean isPending(String serverId) {
     String sid = normalizeServerId(serverId);
@@ -72,6 +76,17 @@ final class QuasselCoreSetupCoordinator {
     availabilityReason.accept(serverId, reason);
     pendingPrompts.put(
         serverId, QuasselCoreSetupSupport.buildSetupPrompt(serverId, reason, setupFields));
+  }
+
+  void reportRequired(
+      QuasselCoreSession session, QuasselCoreAuthHandshake.CoreSetupRequiredException failure) {
+    String sid = session.serverId;
+    String detail = renderThrowableMessage(failure);
+    String reason = detail.isEmpty() ? "Quassel Core setup is required before login" : detail;
+    rememberRequired(sid, reason, failure.setupFields());
+    sessionEvents.emitConnectionPhase(session, PHASE_SETUP_REQUIRED, reason);
+    sessionEvents.emitError(session, reason, failure);
+    sessionEvents.emitDisconnectedOnce(session, reason);
   }
 
   void forget(String serverId) {

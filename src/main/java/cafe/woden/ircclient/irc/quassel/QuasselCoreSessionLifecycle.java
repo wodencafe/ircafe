@@ -2,15 +2,11 @@ package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 
-import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.ServerIrcEvent;
 import java.net.Socket;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +23,6 @@ final class QuasselCoreSessionLifecycle {
   @NonNull private final BooleanSupplier shuttingDown;
   @NonNull private final QuasselCoreReconnectCoordinator reconnects;
   @NonNull private final QuasselCoreSessionEventPublisher sessionEvents;
-  @NonNull private final Consumer<ServerIrcEvent> events;
 
   void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
     if (session == null) return;
@@ -87,7 +82,7 @@ final class QuasselCoreSessionLifecycle {
     String sid = session.serverId;
     rememberAvailability.accept(sid, reason);
     if (cause != null) {
-      events.accept(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, cause)));
+      sessionEvents.emitError(session, reason, cause);
     }
     sessionEvents.emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);

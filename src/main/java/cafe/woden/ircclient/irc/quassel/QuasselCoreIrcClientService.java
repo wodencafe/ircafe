@@ -3,7 +3,6 @@ package cafe.woden.ircclient.irc.quassel;
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.renderProbeSource;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionLifecycle.renderThrowableMessage;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -53,7 +52,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       BackendDescriptorCatalog.builtIns();
 
   private static final String PHASE_PROTOCOL_NEGOTIATED = "protocol-negotiated";
-  private static final String PHASE_SETUP_REQUIRED = "setup-required";
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -166,8 +164,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             availabilityReasonByServer::put,
             shuttingDown::get,
             reconnects,
-            sessionEvents,
-            bus::onNext);
+            sessionEvents);
     QuasselCoreSessionReader sessionReader =
         new QuasselCoreSessionReader(
             readLoop,
@@ -180,7 +177,11 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             RxVirtualSchedulers::io);
     this.setups =
         new QuasselCoreSetupCoordinator(
-            serverCatalog, handshakes, this::prepareCoreSetup, availabilityReasonByServer::put);
+            serverCatalog,
+            handshakes,
+            this::prepareCoreSetup,
+            availabilityReasonByServer::put,
+            sessionEvents);
     this.sessionBootstrap =
         new QuasselCoreSessionBootstrap(
             stateObservations, networkManagement, sessionReader, this::onSessionEstablished);
@@ -610,7 +611,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   }
 
   private void establishSession(IrcProperties.Server server, QuasselCoreSession session) {
-    String sid = session.serverId;
     Socket openedSocket = null;
     try {
       if (sessionLifecycle.abortEstablishmentIfRequested(session, null)) return;
@@ -636,12 +636,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       sessionLifecycle.discardFailedConnection(session, openedSocket);
       if (session.closeRequested.get()) return;
 
-      String detail = renderThrowableMessage(e);
-      String reason = detail.isEmpty() ? "Quassel Core setup is required before login" : detail;
-      setups.rememberRequired(sid, reason, e.setupFields());
-      sessionEvents.emitConnectionPhase(session, PHASE_SETUP_REQUIRED, reason);
-      bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
-      sessionEvents.emitDisconnectedOnce(session, reason);
+      setups.reportRequired(session, e);
     } catch (Exception e) {
       sessionLifecycle.handleConnectFailure(session, openedSocket, e);
     }

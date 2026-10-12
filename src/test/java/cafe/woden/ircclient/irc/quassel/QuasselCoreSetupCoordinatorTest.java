@@ -7,8 +7,12 @@ import static org.mockito.Mockito.*;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.IrcPropertiesTestFixtures;
 import cafe.woden.ircclient.config.servers.ServerCatalog;
+import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreSetupRequest;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -28,6 +33,20 @@ class QuasselCoreSetupCoordinatorTest {
   private final IrcProperties.Server server =
       IrcPropertiesTestFixtures.serverBuilder("core").build();
   private final List<String> trace = new CopyOnWriteArrayList<>();
+  private final List<ServerIrcEvent> events = new CopyOnWriteArrayList<>();
+  private final AtomicReference<Consumer<ServerIrcEvent>> eventObserver =
+      new AtomicReference<>(ignored -> {});
+  private final QuasselCoreSessionEventPublisher sessionEvents =
+      new QuasselCoreSessionEventPublisher(
+          event -> {
+            String kind =
+                event.event() instanceof IrcEvent.ConnectionFeaturesUpdated
+                    ? "phase"
+                    : event.event() instanceof IrcEvent.Error ? "error" : "disconnected";
+            trace.add(kind);
+            events.add(event);
+            eventObserver.get().accept(event);
+          });
   private final Map<String, String> reasons = new ConcurrentHashMap<>();
   private final AtomicReference<Thread> worker = new AtomicReference<>();
   private final AtomicReference<Runnable> preparation = new AtomicReference<>(() -> {});
@@ -43,7 +62,8 @@ class QuasselCoreSetupCoordinatorTest {
           (serverId, reason) -> {
             trace.add("reason:" + serverId);
             reasons.put(serverId, reason);
-          });
+          },
+          sessionEvents);
   private final QuasselCoreSetupRequest request =
       new QuasselCoreSetupRequest(
           " admin ", " secret ", "", "", Map.of(" host ", "db.example"), null);
@@ -250,6 +270,138 @@ class QuasselCoreSetupCoordinatorTest {
     assertFalse(coordinator.isPending("other"));
     assertTrue(coordinator.prompt("other").isEmpty());
     assertEquals("other required", reasons.get("other"));
+  }
+
+  @Test
+  void setupRequirementRecordsPromptBeforeDiagnosticsAndCancelsReadinessAfterError() {
+    var session = reportingSession();
+    var fallback = Disposable.fromRunnable(() -> trace.add("readiness"));
+    session.readiness.fallbackTask.set(fallback);
+    var fields =
+        Map.<String, Object>of(
+            "StorageBackends", List.of("PostgreSQL"), "Authenticators", List.of("LDAP"));
+    var failure =
+        new QuasselCoreAuthHandshake.CoreSetupRequiredException(" setup required ", fields);
+    eventObserver.set(
+        event -> {
+          assertEquals("core", event.serverId());
+          assertEquals("setup required", reasons.get("core"));
+          var prompt = coordinator.prompt("core").orElseThrow();
+          assertEquals(List.of("PostgreSQL"), prompt.storageBackends());
+          assertEquals(List.of("LDAP"), prompt.authenticators());
+          if (event.event() instanceof IrcEvent.Disconnected) {
+            assertTrue(fallback.isDisposed());
+            assertNull(session.readiness.fallbackTask.get());
+          } else {
+            assertFalse(fallback.isDisposed());
+          }
+        });
+    coordinator.reportRequired(session, failure);
+    assertEquals(List.of("reason:core", "phase", "error", "readiness", "disconnected"), trace);
+    assertEquals(
+        "quassel-phase=setup-required;detail=setup required",
+        assertInstanceOf(IrcEvent.ConnectionFeaturesUpdated.class, events.get(0).event()).source());
+    assertSame(failure, assertInstanceOf(IrcEvent.Error.class, events.get(1).event()).cause());
+    assertEquals(
+        "setup required",
+        assertInstanceOf(IrcEvent.Disconnected.class, events.get(2).event()).reason());
+    assertEquals(QuasselSessionPhase.AUTHENTICATING, session.phase.get());
+    assertFalse(session.closeRequested.get());
+    assertFalse(session.reconnectScheduled.get());
+    assertTrue(session.disconnectedEmitted.get());
+    verifyNoInteractions(catalog, handshakes);
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   ", " setup required "})
+  void setupRequirementKeepsExceptionMessageDefaultsAndClassFallback(String message) {
+    var failure = new QuasselCoreAuthHandshake.CoreSetupRequiredException(message, null);
+    String expected =
+        message == null
+            ? "Quassel Core setup is required"
+            : message.isBlank() ? "CoreSetupRequiredException" : "setup required";
+    coordinator.reportRequired(reportingSession(), failure);
+    assertEquals(expected, reasons.get("core"));
+    var prompt = coordinator.prompt("core").orElseThrow();
+    assertEquals(expected, prompt.detail());
+    assertEquals(List.of("SQLite"), prompt.storageBackends());
+    assertEquals(List.of("Database"), prompt.authenticators());
+    assertEquals(expected, assertInstanceOf(IrcEvent.Error.class, events.get(1).event()).message());
+    assertSame(failure, assertInstanceOf(IrcEvent.Error.class, events.get(1).event()).cause());
+    assertEquals(
+        expected, assertInstanceOf(IrcEvent.Disconnected.class, events.get(2).event()).reason());
+    verifyNoInteractions(catalog, handshakes);
+  }
+
+  @Test
+  void repeatedRequirementUpdatesPromptAndDiagnosticsWhileDisconnectGuardStaysOnTheSession() {
+    var session = reportingSession();
+    coordinator.reportRequired(
+        session, new QuasselCoreAuthHandshake.CoreSetupRequiredException("first", Map.of()));
+    coordinator.reportRequired(
+        session,
+        new QuasselCoreAuthHandshake.CoreSetupRequiredException(
+            "updated", Map.of("StorageBackends", List.of("PostgreSQL"))));
+    assertEquals(5, events.size());
+    assertEquals(
+        1, events.stream().filter(event -> event.event() instanceof IrcEvent.Disconnected).count());
+    assertEquals("updated", reasons.get("core"));
+    assertEquals(List.of("PostgreSQL"), coordinator.prompt("core").orElseThrow().storageBackends());
+    coordinator.reportRequired(
+        reportingSession(),
+        new QuasselCoreAuthHandshake.CoreSetupRequiredException("replacement", Map.of()));
+    assertEquals(
+        2, events.stream().filter(event -> event.event() instanceof IrcEvent.Disconnected).count());
+    assertEquals("replacement", reasons.get("core"));
+    verifyNoInteractions(catalog, handshakes);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"phase", "error"})
+  void observerFailureRetainsPromptAndStopsBeforeLaterNotifications(String rejected) {
+    var session = reportingSession();
+    var fallback = Disposable.empty();
+    session.readiness.fallbackTask.set(fallback);
+    var observerFailure = new IllegalStateException("observer failed");
+    eventObserver.set(
+        event -> {
+          if (("phase".equals(rejected)
+                  && event.event() instanceof IrcEvent.ConnectionFeaturesUpdated)
+              || ("error".equals(rejected) && event.event() instanceof IrcEvent.Error)) {
+            throw observerFailure;
+          }
+        });
+    assertSame(
+        observerFailure,
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                coordinator.reportRequired(
+                    session,
+                    new QuasselCoreAuthHandshake.CoreSetupRequiredException(
+                        "required", Map.of()))));
+    assertEquals("required", reasons.get("core"));
+    assertTrue(coordinator.isPending("core"));
+    assertEquals("phase".equals(rejected) ? 1 : 2, events.size());
+    assertFalse(session.disconnectedEmitted.get());
+    assertFalse(fallback.isDisposed());
+    verifyNoInteractions(catalog, handshakes);
+    session.readiness.close();
+  }
+
+  private static QuasselCoreSession reportingSession() {
+    var session =
+        new QuasselCoreSession(
+            "core",
+            "alice",
+            "host",
+            4242,
+            (socket, operation) -> fail("setup reporting must not send"),
+            ignored -> {},
+            ignored -> {});
+    session.phase.set(QuasselSessionPhase.AUTHENTICATING);
+    return session;
   }
 
   private void pending() {
