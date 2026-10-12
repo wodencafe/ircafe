@@ -66,13 +66,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final QuasselCoreObservationMediator observations = new QuasselCoreObservationMediator();
   private final Map<String, QuasselCoreSession> sessions = new ConcurrentHashMap<>();
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
-  private final Map<String, QuasselCoreSetupPrompt> pendingSetupByServer =
-      new ConcurrentHashMap<>();
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
   private final ServerCatalog serverCatalog;
   private final QuasselCoreSocketConnector socketConnector;
   private final QuasselCoreHandshakeCoordinator handshakes;
+  private final QuasselCoreSetupCoordinator setups;
   private final QuasselCoreAuthHandshake authHandshake;
   private final QuasselCoreReadLoop readLoop;
   private final QuasselCoreSignalProxySender signalProxySender;
@@ -162,6 +161,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             sid -> connectInternal(sid, false),
             bus::onNext,
             RxVirtualSchedulers::io);
+    this.setups =
+        new QuasselCoreSetupCoordinator(
+            serverCatalog, handshakes, this::prepareCoreSetup, availabilityReasonByServer::put);
   }
 
   @PreDestroy
@@ -178,7 +180,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     sessions.clear();
     availabilityReasonByServer.clear();
-    pendingSetupByServer.clear();
+    setups.clear();
   }
 
   @Override
@@ -203,8 +205,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isQuasselCoreSetupPending(String serverId) {
-    String sid = normalizeServerId(serverId);
-    return !sid.isEmpty() && pendingSetupByServer.containsKey(sid);
+    return setups.isPending(serverId);
   }
 
   @Override
@@ -214,43 +215,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return Optional.empty();
-    return Optional.ofNullable(pendingSetupByServer.get(sid));
+    return setups.prompt(serverId);
   }
 
   @Override
   public Completable submitQuasselCoreSetup(String serverId, QuasselCoreSetupRequest request) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              QuasselCoreSetupPrompt prompt = pendingSetupByServer.get(sid);
-              if (prompt == null) {
-                throw new IllegalStateException("Quassel Core setup is not pending for " + sid);
-              }
-
-              IrcProperties.Server server = serverCatalog.require(sid);
-              QuasselCoreSetupRequest req =
-                  QuasselCoreSetupSupport.normalizeSetupRequest(
-                      prompt, Objects.requireNonNull(request, "request"));
-
-              reconnects.cancel(sid, true);
-              reconnects.reset(sid);
-              QuasselCoreSession removed = sessions.remove(sid);
-              if (removed != null) {
-                closeSession(removed, "Completing Quassel Core setup", false);
-              }
-
-              handshakes.performSetup(server, req);
-
-              pendingSetupByServer.remove(sid);
-              availabilityReasonByServer.put(
-                  sid, "Quassel Core setup completed. Reconnect to start a session.");
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return setups.submit(serverId, request);
   }
 
   @Override
@@ -679,7 +649,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
                   session, info.bufferName(), info.networkId(), false));
       session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
       availabilityReasonByServer.remove(sid);
-      pendingSetupByServer.remove(sid);
+      setups.forget(sid);
       reconnects.reset(sid);
       reconnects.cancel(sid, false);
 
@@ -698,9 +668,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
       String detail = renderThrowableMessage(e);
       String reason = detail.isEmpty() ? "Quassel Core setup is required before login" : detail;
-      availabilityReasonByServer.put(sid, reason);
-      pendingSetupByServer.put(
-          sid, QuasselCoreSetupSupport.buildSetupPrompt(sid, reason, e.setupFields()));
+      setups.rememberRequired(sid, reason, e.setupFields());
       sessionEvents.emitConnectionPhase(session, PHASE_SETUP_REQUIRED, reason);
       bus.onNext(new ServerIrcEvent(sid, new IrcEvent.Error(Instant.now(), reason, e)));
       sessionEvents.emitDisconnectedOnce(session, reason);
@@ -759,6 +727,15 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     }
     sessionEvents.emitDisconnectedOnce(session, reason);
     scheduleReconnectIfEligible(session, reason);
+  }
+
+  private void prepareCoreSetup(String serverId) {
+    reconnects.cancel(serverId, true);
+    reconnects.reset(serverId);
+    QuasselCoreSession removed = sessions.remove(serverId);
+    if (removed != null) {
+      closeSession(removed, "Completing Quassel Core setup", false);
+    }
   }
 
   private void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
