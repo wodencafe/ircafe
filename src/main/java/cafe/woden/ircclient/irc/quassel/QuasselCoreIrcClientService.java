@@ -127,12 +127,17 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             targets,
             (session, target, networkId) ->
                 stateObservations.observeTargetNetwork(session, target, networkId, true));
-    this.outboundSignals =
-        new QuasselCoreOutboundSignalCoordinator(
-            ircv3RuntimeSupport, targets, inputs, stateObservations);
     this.sessionQueries =
         new QuasselCoreSessionQueries(sessions::get, availabilityReasonByServer::get);
     this.sessionOperations = new QuasselCoreSessionOperations(sessionQueries, inputs);
+    this.outboundSignals =
+        new QuasselCoreOutboundSignalCoordinator(
+            ircv3RuntimeSupport,
+            targets,
+            inputs,
+            stateObservations,
+            sessionQueries,
+            sessionOperations);
     this.historyRequests =
         new QuasselCoreHistoryRequestCoordinator(
             ircv3RuntimeSupport, targets, sessionOperations::requireEstablishedSession);
@@ -407,38 +412,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable sendTyping(String serverId, String target, String state) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "send typing",
-        (sid, session) -> {
-          if (!isTypingAvailable(sid)) {
-            String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
-            String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
-            throw new IllegalStateException(
-                "Typing indicators not available (requires message-tags and server allowing +typing)"
-                    + suffix
-                    + ": "
-                    + sid);
-          }
-
-          outboundSignals.sendTyping(session, target, state);
-        });
+    return outboundSignals.sendTyping(serverId, target, state);
   }
 
   @Override
   public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "send read marker",
-        (sid, session) -> {
-          if (!isReadMarkerAvailable(sid)) {
-            throw new IllegalStateException(
-                "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
-                    + sid);
-          }
-
-          outboundSignals.sendReadMarker(session, target, markerAt);
-        });
+    return outboundSignals.sendReadMarker(serverId, target, markerAt);
   }
 
   @Override
@@ -528,23 +507,17 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public boolean isTypingAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return outboundSignals.isTypingAvailable(session);
+    return outboundSignals.typingAvailable(serverId);
   }
 
   @Override
   public String typingAvailabilityReason(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    if (session == null) {
-      return backendAvailabilityReason(serverId);
-    }
-    return outboundSignals.typingAvailabilityReason(session);
+    return outboundSignals.typingReason(serverId);
   }
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
-    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
-    return outboundSignals.isReadMarkerAvailable(session);
+    return outboundSignals.readMarkerAvailable(serverId);
   }
 
   @Override

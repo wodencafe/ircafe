@@ -7,16 +7,18 @@ import static cafe.woden.ircclient.util.Ircv3CapabilityNames.MESSAGE_TAGS;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.READ_MARKER;
 
 import cafe.woden.ircclient.irc.quassel.QuasselCoreTargetRouting.QualifiedTarget;
+import io.reactivex.rxjava3.core.Completable;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Routes typing and read markers through native Core commands or IRCv3 runtime providers. The
- * service validates the session and capability availability, then schedules writes on IO workers.
+ * Validates and routes typing and read markers through native Core commands or IRCv3 runtime
+ * providers. Session operations resolve the live session and schedule writes on IO workers.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreOutboundSignalCoordinator {
@@ -27,6 +29,56 @@ final class QuasselCoreOutboundSignalCoordinator {
   @NonNull private final QuasselCoreTargetResolver targets;
   @NonNull private final QuasselCoreInputCoordinator inputs;
   @NonNull private final QuasselCoreStateObservationCoordinator stateObservations;
+  @NonNull private final QuasselCoreSessionQueries sessionQueries;
+  @NonNull private final QuasselCoreSessionOperations sessionOperations;
+
+  Completable sendTyping(String serverId, String target, String state) {
+    return sessionOperations.withEstablishedSession(
+        serverId,
+        "send typing",
+        (sid, session) -> {
+          if (!typingAvailable(sid)) {
+            String reason = Objects.toString(typingReason(sid), "").trim();
+            String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
+            throw new IllegalStateException(
+                "Typing indicators not available (requires message-tags and server allowing +typing)"
+                    + suffix
+                    + ": "
+                    + sid);
+          }
+
+          sendTyping(session, target, state);
+        });
+  }
+
+  Completable sendReadMarker(String serverId, String target, Instant markerAt) {
+    return sessionOperations.withEstablishedSession(
+        serverId,
+        "send read marker",
+        (sid, session) -> {
+          if (!readMarkerAvailable(sid)) {
+            throw new IllegalStateException(
+                "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
+                    + sid);
+          }
+
+          sendReadMarker(session, target, markerAt);
+        });
+  }
+
+  boolean typingAvailable(String serverId) {
+    return isTypingAvailable(sessionQueries.findEstablished(serverId));
+  }
+
+  String typingReason(String serverId) {
+    QuasselCoreSession session = sessionQueries.findEstablished(serverId);
+    if (session == null) return sessionQueries.availabilityReason(serverId);
+    return typingAvailabilityReason(session);
+  }
+
+  boolean readMarkerAvailable(String serverId) {
+    return isReadMarkerAvailable(sessionQueries.findEstablished(serverId));
+  }
 
   void sendTyping(QuasselCoreSession session, String target, String state) throws IOException {
     QualifiedTarget dest = sanitizeHistoryTarget(target);

@@ -7,6 +7,8 @@ import static org.mockito.Mockito.*;
 import cafe.woden.ircclient.irc.ircv3.Ircv3RuntimeCatalogs;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.BufferInfoValue;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.UserTypeValue;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
+import io.reactivex.rxjava3.core.Completable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -14,6 +16,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -48,8 +53,185 @@ class QuasselCoreOutboundSignalCoordinatorTest {
           targets,
           (observed, target, networkId) ->
               observations.observeTargetNetwork(observed, target, networkId, true));
+  private final Map<String, QuasselCoreSession> sessions = new ConcurrentHashMap<>();
+  private final Map<String, String> reasons = new ConcurrentHashMap<>();
+  private final QuasselCoreSessionQueries queries =
+      new QuasselCoreSessionQueries(sessions::get, reasons::get);
+  private final QuasselCoreSessionOperations operations =
+      new QuasselCoreSessionOperations(queries, inputs);
   private final QuasselCoreOutboundSignalCoordinator coordinator =
-      new QuasselCoreOutboundSignalCoordinator(runtime, targets, inputs, observations);
+      new QuasselCoreOutboundSignalCoordinator(
+          runtime, targets, inputs, observations, queries, operations);
+
+  @ParameterizedTest
+  @ValueSource(strings = {"unobserved", "without-message-tags"})
+  void typingAvailabilityFailurePrecedesUnsafeTargetValidationAndRendering(String capabilities) {
+    establish(session);
+    if ("without-message-tags".equals(capabilities)) {
+      session.features.observeCapabilities(8, Map.of("capsEnabled", List.of("read-marker")));
+    }
+    String reason =
+        "unobserved".equals(capabilities)
+            ? "typing support status is not yet available from Quassel backend state"
+            : "message-tags not negotiated in Quassel backend network state";
+    coordinator
+        .sendTyping(" core ", "#room\r\nQUIT", "active")
+        .test()
+        .awaitDone(5, TimeUnit.SECONDS)
+        .assertError(
+            error ->
+                error instanceof IllegalStateException
+                    && ("Typing indicators not available (requires message-tags and server allowing +typing) ("
+                            + reason
+                            + "): core")
+                        .equals(error.getMessage()));
+    assertEquals(reason, coordinator.typingReason(" core "));
+    assertEquals(-1, session.targetNetworkHints.networkIdForTarget("#room"));
+    assertTrue(writes.isEmpty());
+    verifyNoInteractions(runtime, codec);
+  }
+
+  @Test
+  void markerAvailabilityFailurePrecedesUnsafeTargetValidationAndObservation() {
+    establish(session);
+    coordinator
+        .sendReadMarker(" core ", "#room\r\nQUIT", MARKER_AT)
+        .test()
+        .awaitDone(5, TimeUnit.SECONDS)
+        .assertError(
+            error ->
+                error instanceof IllegalStateException
+                    && "read-marker capability not negotiated (requires read-marker or draft/read-marker): core"
+                        .equals(error.getMessage()));
+    assertEquals(-1, session.targetNetworkHints.networkIdForTarget("#room"));
+    assertTrue(writes.isEmpty());
+    verifyNoInteractions(runtime, codec);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "TRANSPORT_CONNECTING, false, remembered",
+    "TRANSPORT_CONNECTED, false, 'Quassel transport connected, but protocol negotiation is incomplete'",
+    "PROTOCOL_NEGOTIATED, false, 'Quassel protocol negotiated, but login/session handshake is not complete'",
+    "AUTHENTICATING, false, 'Quassel protocol negotiated, but login/session handshake is not complete'",
+    "SESSION_ESTABLISHED, true, ''"
+  })
+  void serverAvailabilityRequiresAnEstablishedSessionAndPreservesBackendReasons(
+      QuasselSessionPhase phase, boolean available, String reason) {
+    establish(session);
+    reasons.put("core", " remembered ");
+    session.features.observeCapabilities(8, Map.of("capsEnabled", List.of("message-tags")));
+    session.nativeReadMarkerSupportObserved.set(true);
+    session.phase.set(phase);
+    assertEquals(available, coordinator.typingAvailable(" core "));
+    assertEquals(available, coordinator.readMarkerAvailable(" core "));
+    assertEquals(reason, coordinator.typingReason(" core "));
+    session.socketRef.set(null);
+    assertFalse(coordinator.typingAvailable("core"));
+    assertFalse(coordinator.readMarkerAvailable("core"));
+    assertEquals(reason, coordinator.typingReason("core"));
+    sessions.clear();
+    assertEquals("remembered", coordinator.typingReason("core"));
+    verifyNoInteractions(runtime, codec);
+  }
+
+  @Test
+  void typingRequestResolvesCapabilitiesAndReplacementSessionsAtSubscriptionOnIo()
+      throws Exception {
+    var writer = new AtomicReference<Thread>();
+    doAnswer(
+            invocation -> {
+              writer.set(Thread.currentThread());
+              return null;
+            })
+        .when(codec)
+        .writeSignalProxyRpcCall(eq(output), anyString(), anyList());
+    Completable command = coordinator.sendTyping(" core ", TARGET, "active");
+    assertTrue(writes.isEmpty());
+    verifyNoInteractions(runtime, codec);
+    establish(session);
+    session.features.observeCapabilities(8, Map.of("capsEnabled", List.of("message-tags")));
+    complete(command);
+    assertNotSame(Thread.currentThread(), writer.get());
+    var replacement = session();
+    establish(replacement);
+    replacement.features.observeCapabilities(8, Map.of("capsEnabled", List.of("message-tags")));
+    complete(command);
+    assertEquals(List.of(session.socketRef.get(), replacement.socketRef.get()), writes);
+    verify(runtime, times(2)).typingRawLines(TARGET, "active");
+    verify(codec, times(2))
+        .writeSignalProxyRpcCall(
+            output,
+            "2sendInput(BufferInfo,QString)",
+            List.of(buffer(22, 8, 2, "#room"), "/QUOTE @+typing=active TAGMSG #room"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"native", "read-marker", "draft/read-marker"})
+  void markerRequestUsesSupportObservedAfterCreationWithoutChangingNativeOrRawRouting(
+      String support) throws Exception {
+    Completable command = coordinator.sendReadMarker(" core ", TARGET, MARKER_AT);
+    assertTrue(writes.isEmpty());
+    verifyNoInteractions(runtime, codec);
+    establish(session);
+    if ("native".equals(support)) {
+      session.nativeReadMarkerSupportObserved.set(true);
+      session.history.observe(TARGET, 201, Instant.ofEpochSecond(10));
+    } else {
+      session.features.observeCapabilities(8, Map.of("capsEnabled", List.of(support)));
+    }
+    complete(command);
+    assertEquals(List.of(session.socketRef.get()), writes);
+    if ("native".equals(support)) {
+      verify(codec)
+          .writeSignalProxySync(
+              output, "BufferSyncer", "", "requestSetMarkerLine", markerParams(22, 201));
+      verify(codec)
+          .writeSignalProxySync(
+              output, "BufferSyncer", "", "requestSetLastSeenMsg", markerParams(22, 201));
+      verifyNoInteractions(runtime);
+    } else {
+      verifyInput(
+          buffer(22, 8, 2, "#room"), "/QUOTE MARKREAD #room timestamp=1970-01-01T00:00:11.000Z");
+      verify(runtime).readMarkerRawLines(TARGET, MARKER_AT);
+    }
+    verifyNoMoreInteractions(codec);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {" Socket closed ", ""})
+  void disconnectDuringTypingValidationUsesTheLatestBackendReasonWithoutWriting(String reason) {
+    establish(session);
+    session.features.observeCapabilities(8, Map.of("capsEnabled", List.of("message-tags")));
+    var changingQueries = mock(QuasselCoreSessionQueries.class);
+    when(changingQueries.findEstablished("core")).thenReturn(session, null, null);
+    when(changingQueries.availabilityReason("core")).thenReturn(reason);
+    var changing =
+        new QuasselCoreOutboundSignalCoordinator(
+            runtime,
+            targets,
+            inputs,
+            observations,
+            changingQueries,
+            new QuasselCoreSessionOperations(changingQueries, inputs));
+    String suffix = reason.isEmpty() ? "" : " (Socket closed)";
+    changing
+        .sendTyping(" core ", TARGET, "active")
+        .test()
+        .awaitDone(5, TimeUnit.SECONDS)
+        .assertError(
+            error ->
+                error instanceof IllegalStateException
+                    && ("Typing indicators not available (requires message-tags and server allowing +typing)"
+                            + suffix
+                            + ": core")
+                        .equals(error.getMessage()));
+    verify(changingQueries, times(3)).findEstablished("core");
+    verify(changingQueries).availabilityReason("core");
+    verifyNoMoreInteractions(changingQueries);
+    verifyNoInteractions(runtime, codec);
+    assertTrue(writes.isEmpty());
+  }
 
   @Test
   void nativeMarkerUsesLatestTimestampTieFromTheSelectedNetworkInOneWrite() throws Exception {
@@ -329,6 +511,15 @@ class QuasselCoreOutboundSignalCoordinatorTest {
     session.buffers.merge(buffer(11, 7, 2, "#room"));
     session.buffers.merge(buffer(22, 8, 2, "#room"));
     return session;
+  }
+
+  private void establish(QuasselCoreSession established) {
+    established.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+    sessions.put("core", established);
+  }
+
+  private void complete(Completable command) {
+    command.test().awaitDone(5, TimeUnit.SECONDS).assertComplete().assertNoErrors();
   }
 
   private static BufferInfoValue buffer(int id, int network, int type, String name) {
