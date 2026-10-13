@@ -10,8 +10,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Publishes connection notifications, phase diagnostics, and one disconnect event per session,
- * closing readiness before disconnect publication.
+ * Publishes connection notifications and phase diagnostics. Session disconnects close readiness and
+ * publish at most once; disconnects without a session are published on each request.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSessionEventPublisher {
@@ -52,10 +52,13 @@ final class QuasselCoreSessionEventPublisher {
     if (session == null) return;
     session.readiness.close();
     if (!session.disconnectedEmitted.compareAndSet(false, true)) return;
+    emitDisconnected(session.serverId, reason);
+  }
+
+  void emitDisconnected(String serverId, String reason) {
     events.accept(
         new ServerIrcEvent(
-            session.serverId,
-            new IrcEvent.Disconnected(Instant.now(), normalizeDisconnectReason(reason))));
+            serverId, new IrcEvent.Disconnected(Instant.now(), normalizeDisconnectReason(reason))));
   }
 
   static String normalizeDisconnectReason(String reason) {

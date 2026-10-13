@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
-import static cafe.woden.ircclient.irc.quassel.QuasselCoreSessionEventPublisher.normalizeDisconnectReason;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -171,7 +170,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
         new QuasselCoreSetupCoordinator(
             serverCatalog,
             handshakes,
-            this::prepareCoreSetup,
+            sessionLifecycle::prepareCoreSetup,
             availabilityReasonByServer::put,
             sessionEvents);
     QuasselCoreSessionBootstrap sessionBootstrap =
@@ -353,26 +352,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable disconnect(String serverId, String reason) {
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) return;
-              reconnects.cancel(sid, true);
-              reconnects.reset(sid);
-
-              QuasselCoreSession removed = sessions.remove(sid);
-              if (removed == null) {
-                availabilityReasonByServer.put(sid, normalizeDisconnectReason(reason));
-                bus.onNext(
-                    new ServerIrcEvent(
-                        sid,
-                        new IrcEvent.Disconnected(
-                            Instant.now(), normalizeDisconnectReason(reason))));
-                return;
-              }
-
-              sessionLifecycle.closeSession(removed, normalizeDisconnectReason(reason), true);
-            })
+    return Completable.fromAction(() -> sessionLifecycle.disconnect(serverId, reason))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -617,15 +597,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     setups.forget(serverId);
     reconnects.reset(serverId);
     reconnects.cancel(serverId, false);
-  }
-
-  private void prepareCoreSetup(String serverId) {
-    reconnects.cancel(serverId, true);
-    reconnects.reset(serverId);
-    QuasselCoreSession removed = sessions.remove(serverId);
-    if (removed != null) {
-      sessionLifecycle.closeSession(removed, "Completing Quassel Core setup", false);
-    }
   }
 
   private static String configuredNick(IrcProperties.Server server) {

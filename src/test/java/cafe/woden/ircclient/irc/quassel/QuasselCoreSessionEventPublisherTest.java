@@ -262,6 +262,18 @@ class QuasselCoreSessionEventPublisherTest {
   }
 
   @Test
+  void disconnectWithoutASessionPublishesEachRequestWithItsOwnReason() {
+    publisher.emitDisconnected("core", " first request ");
+    publisher.emitDisconnected("core", "second request");
+    assertEquals(
+        List.of("first request", "second request"),
+        events.stream().map(event -> ((IrcEvent.Disconnected) event.event()).reason()).toList());
+    assertTrue(events.stream().allMatch(event -> "core".equals(event.serverId())));
+    assertFalse(session.disconnectedEmitted.get());
+    assertTrue(readinessEvents.isEmpty());
+  }
+
+  @Test
   void disconnectKeepsTheFirstTrimmedReasonAndCurrentTimestamp() {
     Instant before = Instant.now();
     publisher.emitDisconnectedOnce(session, " Peer closed socket ");

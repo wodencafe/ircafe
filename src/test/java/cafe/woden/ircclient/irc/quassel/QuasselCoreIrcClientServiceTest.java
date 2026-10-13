@@ -90,6 +90,53 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void disconnectWithoutASessionIsDeferredAndPublishesEachRequestOnTheIoScheduler() {
+    var catalog = mock(ServerCatalog.class);
+    var connector = mock(QuasselCoreSocketConnector.class);
+    var probe = mock(QuasselCoreProtocolProbe.class);
+    var handshake = mock(QuasselCoreAuthHandshake.class);
+    var codec = mock(QuasselCoreDatastreamCodec.class);
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, handshake, codec);
+    Thread caller = Thread.currentThread();
+    var publishingThread = new java.util.concurrent.atomic.AtomicReference<Thread>();
+    var events =
+        service.events().doOnNext(ignored -> publishingThread.set(Thread.currentThread())).test();
+    try {
+      var disconnect = service.disconnect(" quassel ", " user close ");
+      events.assertNoValues();
+      assertEquals(
+          "Quassel Core backend is not connected", service.backendAvailabilityReason("quassel"));
+
+      disconnect.test().awaitDone(5, TimeUnit.SECONDS).assertComplete().assertNoErrors();
+      assertEquals("user close", service.backendAvailabilityReason("quassel"));
+      events.assertValueCount(1);
+      assertTrue(publishingThread.get() != caller);
+      assertEquals("quassel", events.values().getFirst().serverId());
+      assertEquals(
+          "user close",
+          assertInstanceOf(IrcEvent.Disconnected.class, events.values().getFirst().event())
+              .reason());
+
+      service
+          .disconnect("quassel")
+          .test()
+          .awaitDone(5, TimeUnit.SECONDS)
+          .assertComplete()
+          .assertNoErrors();
+      events.assertValueCount(2);
+      assertEquals(
+          "Client requested disconnect",
+          assertInstanceOf(IrcEvent.Disconnected.class, events.values().getLast().event())
+              .reason());
+      assertEquals("Client requested disconnect", service.backendAvailabilityReason("quassel"));
+      org.mockito.Mockito.verifyNoInteractions(catalog, connector, probe, handshake, codec);
+    } finally {
+      events.cancel();
+      service.shutdownNow();
+    }
+  }
+
+  @Test
   void connectAndDisconnectEmitLifecycleEvents() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);

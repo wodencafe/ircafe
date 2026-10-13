@@ -24,6 +24,32 @@ final class QuasselCoreSessionLifecycle {
   @NonNull private final QuasselCoreReconnectCoordinator reconnects;
   @NonNull private final QuasselCoreSessionEventPublisher sessionEvents;
 
+  void disconnect(String serverId, String reason) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    QuasselCoreSession removed = removeSessionForExplicitClose(sid);
+    String normalizedReason = normalizeDisconnectReason(reason);
+    if (removed == null) {
+      rememberAvailability.accept(sid, normalizedReason);
+      sessionEvents.emitDisconnected(sid, normalizedReason);
+      return;
+    }
+    closeSession(removed, normalizedReason, true);
+  }
+
+  void prepareCoreSetup(String serverId) {
+    QuasselCoreSession removed = removeSessionForExplicitClose(serverId);
+    if (removed != null) {
+      closeSession(removed, "Completing Quassel Core setup", false);
+    }
+  }
+
+  private QuasselCoreSession removeSessionForExplicitClose(String serverId) {
+    reconnects.cancel(serverId, true);
+    reconnects.reset(serverId);
+    return sessions.remove(serverId);
+  }
+
   void closeSession(QuasselCoreSession session, String reason, boolean emitDisconnected) {
     if (session == null) return;
     session.closeRequested.set(true);

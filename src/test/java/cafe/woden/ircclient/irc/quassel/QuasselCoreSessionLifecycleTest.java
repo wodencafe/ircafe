@@ -52,6 +52,132 @@ class QuasselCoreSessionLifecycleTest {
   private final QuasselCoreSession session = session();
   private final Socket socket = mock(Socket.class);
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   "})
+  void disconnectWithoutAServerIdLeavesSessionsAndReconnectsUntouched(String serverId) {
+    seed();
+    lifecycle.disconnect(serverId, "close");
+    assertSame(session, sessions.get("core"));
+    assertFalse(session.closeRequested.get());
+    assertTrue(trace.isEmpty());
+    assertTrue(reasons.isEmpty());
+    verifyNoInteractions(reconnects);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void explicitTeardownCancelsReconnectsBeforeRemovingAndClosingTheSession(boolean setup)
+      throws Exception {
+    seed();
+    session.socketRef.set(socket);
+    var readTask = Disposable.empty();
+    session.readLoopTask.set(readTask);
+    doAnswer(
+            invocation -> {
+              assertSame(session, sessions.get("core"));
+              assertFalse(session.closeRequested.get());
+              trace.add("cancel");
+              return null;
+            })
+        .when(reconnects)
+        .cancel("core", true);
+    doAnswer(
+            invocation -> {
+              assertSame(session, sessions.get("core"));
+              trace.add("reset");
+              return null;
+            })
+        .when(reconnects)
+        .reset("core");
+    doAnswer(
+            invocation -> {
+              assertFalse(sessions.containsKey("core"));
+              assertTrue(session.closeRequested.get());
+              assertTrue(readTask.isDisposed());
+              assertNull(session.socketRef.get());
+              trace.add("socket");
+              return null;
+            })
+        .when(socket)
+        .close();
+
+    if (setup) lifecycle.prepareCoreSetup("core");
+    else lifecycle.disconnect(" core ", " user close ");
+
+    assertEquals(
+        setup
+            ? List.of("cancel", "reset", "socket", "availability")
+            : List.of("cancel", "reset", "socket", "availability", "disconnected"),
+        trace);
+    String reason = setup ? "Completing Quassel Core setup" : "user close";
+    assertEquals(reason, reasons.get("core"));
+    assertEquals(reason, session.closeReason.get());
+    assertEquals(setup ? 0 : 1, events.size());
+    assertTrue(session.buffers.values().isEmpty());
+    assertEquals(-1, session.history.timestampForMsgId("#room", 99));
+    assertFalse(session.features.hasObservedCapabilities());
+    verify(reconnects).cancel("core", true);
+    verify(reconnects).reset("core");
+    verifyNoMoreInteractions(reconnects);
+    verify(socket).close();
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   "})
+  void disconnectWithoutASessionReportsEveryRequestEvenDuringShutdown(String reason) {
+    shuttingDown.set(true);
+    lifecycle.disconnect(" core ", reason);
+    lifecycle.disconnect("core", " next request ");
+    assertEquals(
+        List.of("Client requested disconnect", "next request"),
+        events.stream().map(event -> ((IrcEvent.Disconnected) event.event()).reason()).toList());
+    assertEquals("next request", reasons.get("core"));
+    assertEquals(List.of("availability", "disconnected", "availability", "disconnected"), trace);
+    assertTrue(sessions.isEmpty());
+    verify(reconnects, times(2)).cancel("core", true);
+    verify(reconnects, times(2)).reset("core");
+    verifyNoMoreInteractions(reconnects);
+  }
+
+  @Test
+  void setupWithoutASessionResetsReconnectsAndPreservesTheExistingAvailabilityReason() {
+    reasons.put("core", "Core setup is required");
+    lifecycle.prepareCoreSetup("core");
+    assertEquals("Core setup is required", reasons.get("core"));
+    assertTrue(trace.isEmpty());
+    assertTrue(events.isEmpty());
+    verify(reconnects).cancel("core", true);
+    verify(reconnects).reset("core");
+    verifyNoMoreInteractions(reconnects);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void reconnectResetFailurePropagatesBeforeExplicitTeardown(boolean setup) {
+    seed();
+    var failure = new IllegalStateException("reset failed");
+    doThrow(failure).when(reconnects).reset("core");
+    assertSame(
+        failure,
+        assertThrows(
+            IllegalStateException.class,
+            () -> {
+              if (setup) lifecycle.prepareCoreSetup("core");
+              else lifecycle.disconnect("core", "close");
+            }));
+    assertSame(session, sessions.get("core"));
+    assertFalse(session.closeRequested.get());
+    assertFalse(session.buffers.values().isEmpty());
+    assertTrue(trace.isEmpty());
+    assertTrue(events.isEmpty());
+    var order = inOrder(reconnects);
+    order.verify(reconnects).cancel("core", true);
+    order.verify(reconnects).reset("core");
+    verifyNoMoreInteractions(reconnects);
+  }
+
   @Test
   void explicitCloseSetsIntentThenCancelsReadinessAndReadTaskBeforeSocketAndStateCleanup()
       throws Exception {
