@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.irc.quassel;
 
-import static cafe.woden.ircclient.irc.backend.IrcBackendValidationMessages.SERVER_ID_BLANK;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_EDIT;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MESSAGE_REDACTION;
 import static cafe.woden.ircclient.util.Ircv3CapabilityNames.DRAFT_MULTILINE;
@@ -56,10 +55,8 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
-  private final ServerCatalog serverCatalog;
   private final QuasselCoreSetupCoordinator setups;
-  private final QuasselCoreSessionEstablisher sessionEstablisher;
-  private final QuasselCoreSignalProxySender signalProxySender;
+  private final QuasselCoreConnectionRequests connectionRequests;
   private final QuasselCoreReconnectCoordinator reconnects;
   private final QuasselCoreSessionLifecycle sessionLifecycle;
   private final QuasselCoreTargetResolver targets;
@@ -98,14 +95,15 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
       QuasselCoreDatastreamCodec datastreamCodec,
       IrcProperties props,
       QuasselIrcv3RuntimeSupport ircv3RuntimeSupport) {
-    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
+    Objects.requireNonNull(serverCatalog, "serverCatalog");
     Objects.requireNonNull(socketConnector, "socketConnector");
     QuasselCoreHandshakeCoordinator handshakes =
         new QuasselCoreHandshakeCoordinator(socketConnector, protocolProbe, authHandshake);
     Objects.requireNonNull(authHandshake, "authHandshake");
     QuasselCoreReadLoop readLoop =
         new QuasselCoreReadLoop(Objects.requireNonNull(datastreamCodec, "datastreamCodec"));
-    this.signalProxySender = new QuasselCoreDatastreamSender(datastreamCodec);
+    QuasselCoreSignalProxySender signalProxySender =
+        new QuasselCoreDatastreamSender(datastreamCodec);
     Objects.requireNonNull(ircv3RuntimeSupport, "ircv3RuntimeSupport");
     this.targets =
         new QuasselCoreTargetResolver(
@@ -176,7 +174,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     QuasselCoreSessionBootstrap sessionBootstrap =
         new QuasselCoreSessionBootstrap(
             stateObservations, networkManagement, sessionReader, this::onSessionEstablished);
-    this.sessionEstablisher =
+    QuasselCoreSessionEstablisher sessionEstablisher =
         new QuasselCoreSessionEstablisher(
             socketConnector,
             handshakes,
@@ -185,6 +183,27 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             sessionLifecycle,
             setups,
             sessionEvents);
+    this.connectionRequests =
+        new QuasselCoreConnectionRequests(
+            serverCatalog,
+            sessions,
+            availabilityReasonByServer::put,
+            shuttingDown::get,
+            reconnects,
+            (sid, server) ->
+                new QuasselCoreSession(
+                    sid,
+                    configuredNick(server),
+                    server.host(),
+                    server.port(),
+                    signalProxySender,
+                    observations::observeIdentity,
+                    event -> bus.onNext(new ServerIrcEvent(sid, event))),
+            (server, session) -> {
+              sessionEvents.emitConnecting(session);
+              RxVirtualSchedulers.io()
+                  .scheduleDirect(() -> sessionEstablisher.establish(server, session));
+            });
   }
 
   @PreDestroy
@@ -307,41 +326,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   private Completable connectInternal(String serverId, boolean resetReconnectAttempts) {
     return Completable.fromAction(
-            () -> {
-              if (shuttingDown.get()) return;
-
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException(SERVER_ID_BLANK);
-              }
-              reconnects.cancel(sid, false);
-              if (resetReconnectAttempts) {
-                reconnects.reset(sid);
-              }
-              availabilityReasonByServer.put(sid, "Quassel transport is connecting");
-
-              IrcProperties.Server server = serverCatalog.require(sid);
-              QuasselCoreSession existing = sessions.get(sid);
-              if (existing != null) return;
-
-              String nick = configuredNick(server);
-              QuasselCoreSession next =
-                  new QuasselCoreSession(
-                      sid,
-                      nick,
-                      server.host(),
-                      server.port(),
-                      signalProxySender,
-                      observations::observeIdentity,
-                      event -> bus.onNext(new ServerIrcEvent(sid, event)));
-              QuasselCoreSession previous = sessions.putIfAbsent(sid, next);
-              if (previous != null) return;
-
-              sessionEvents.emitConnecting(next);
-
-              RxVirtualSchedulers.io()
-                  .scheduleDirect(() -> sessionEstablisher.establish(server, next));
-            })
+            () -> connectionRequests.connect(serverId, resetReconnectAttempts))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 

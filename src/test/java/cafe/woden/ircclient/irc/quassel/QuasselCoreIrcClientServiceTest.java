@@ -46,6 +46,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -197,6 +198,75 @@ class QuasselCoreIrcClientServiceTest {
     verify(connector).connect(server);
     verify(protocolProbe).negotiate(socket);
     verify(authHandshake).authenticate(socket, server);
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   ", " alice "})
+  void connectionAdmissionIsDeferredAndDuplicatesDoNotOpenAnotherTransport(String configuredNick)
+      throws Exception {
+    var catalog = mock(ServerCatalog.class);
+    var connector = mock(QuasselCoreSocketConnector.class);
+    var probe = mock(QuasselCoreProtocolProbe.class);
+    var auth = mock(QuasselCoreAuthHandshake.class);
+    var codec = mock(QuasselCoreDatastreamCodec.class);
+    var server =
+        IrcPropertiesTestFixtures.serverBuilder("quassel")
+            .port(4242)
+            .nick(configuredNick)
+            .backend(IrcProperties.Server.Backend.QUASSEL_CORE)
+            .build();
+    var socket = mock(Socket.class);
+    var opening = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var closed = new CountDownLatch(1);
+    when(catalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server))
+        .thenAnswer(
+            invocation -> {
+              opening.countDown();
+              assertTrue(release.await(5, TimeUnit.SECONDS));
+              return socket;
+            });
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              closed.countDown();
+              return null;
+            })
+        .when(socket)
+        .close();
+    var service = QuasselRuntimeTestFixtures.service(catalog, connector, probe, auth, codec);
+    var events = service.events().test();
+    try {
+      var connect = service.connect(" quassel ");
+      events.assertNoValues();
+      org.mockito.Mockito.verifyNoInteractions(catalog, connector, probe, auth, codec);
+      connect.test().awaitDone(5, TimeUnit.SECONDS).assertComplete().assertNoErrors();
+      assertTrue(opening.await(5, TimeUnit.SECONDS));
+      events.assertValueCount(1);
+      var connecting =
+          assertInstanceOf(IrcEvent.Connecting.class, events.values().getFirst().event());
+      assertEquals("quassel", events.values().getFirst().serverId());
+      assertEquals(server.host(), connecting.serverHost());
+      assertEquals(server.port(), connecting.serverPort());
+      assertEquals(" alice ".equals(configuredNick) ? "alice" : "quassel-user", connecting.nick());
+
+      service
+          .connect("quassel")
+          .test()
+          .awaitDone(5, TimeUnit.SECONDS)
+          .assertComplete()
+          .assertNoErrors();
+      events.assertValueCount(1);
+      verify(catalog, times(2)).require("quassel");
+      verify(connector).connect(server);
+      org.mockito.Mockito.verifyNoInteractions(probe, auth, codec);
+    } finally {
+      service.shutdownNow();
+      release.countDown();
+      assertTrue(closed.await(5, TimeUnit.SECONDS));
+      events.cancel();
+    }
   }
 
   @Test
