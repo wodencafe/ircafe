@@ -189,6 +189,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             sessionLifecycle,
             setups,
             sessionEvents);
+    QuasselCoreSessionFactory sessionFactory =
+        new QuasselCoreSessionFactory(
+            signalProxySender, observations::observeIdentity, bus::onNext);
     this.connectionRequests =
         new QuasselCoreConnectionRequests(
             serverCatalog,
@@ -196,15 +199,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             availabilityReasonByServer::put,
             shuttingDown::get,
             reconnects,
-            (sid, server) ->
-                new QuasselCoreSession(
-                    sid,
-                    configuredNick(server),
-                    server.host(),
-                    server.port(),
-                    signalProxySender,
-                    observations::observeIdentity,
-                    event -> bus.onNext(new ServerIrcEvent(sid, event))),
+            sessionFactory::create,
             (server, session) -> {
               sessionEvents.emitConnecting(session);
               RxVirtualSchedulers.io()
@@ -537,10 +532,5 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     setups.forget(serverId);
     reconnects.reset(serverId);
     reconnects.cancel(serverId, false);
-  }
-
-  private static String configuredNick(IrcProperties.Server server) {
-    String nick = Objects.toString(server.nick(), "").trim();
-    return nick.isEmpty() ? "quassel-user" : nick;
   }
 }
