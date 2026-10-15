@@ -7,9 +7,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Completes authenticated session initialization before starting reads. The service owns
- * availability and reconnect bookkeeping; this collaborator owns no additional tasks or session
- * state.
+ * Completes authenticated initialization and connection bookkeeping before starting reads. Owns no
+ * additional tasks or session state.
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class QuasselCoreSessionBootstrap {
@@ -19,7 +18,9 @@ final class QuasselCoreSessionBootstrap {
   @NonNull private final QuasselCoreStateObservationCoordinator stateObservations;
   @NonNull private final QuasselCoreNetworkManagementCoordinator networkManagement;
   @NonNull private final QuasselCoreSessionReader sessionReader;
-  @NonNull private final Consumer<String> onEstablished;
+  @NonNull private final Consumer<String> clearAvailability;
+  @NonNull private final QuasselCoreSetupCoordinator setups;
+  @NonNull private final QuasselCoreReconnectCoordinator reconnects;
 
   void complete(QuasselCoreSession session, QuasselCoreAuthHandshake.AuthResult auth)
       throws Exception {
@@ -30,7 +31,10 @@ final class QuasselCoreSessionBootstrap {
             stateObservations.observeTargetNetwork(
                 session, info.bufferName(), info.networkId(), false));
     session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
-    onEstablished.accept(session.serverId);
+    clearAvailability.accept(session.serverId);
+    setups.forget(session.serverId);
+    reconnects.reset(session.serverId);
+    reconnects.cancel(session.serverId, false);
 
     session.networkCommands.requestInit(BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT);
     for (Integer networkId :

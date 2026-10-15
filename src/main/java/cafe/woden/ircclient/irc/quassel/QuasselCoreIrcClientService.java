@@ -179,7 +179,12 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             sessionEvents);
     QuasselCoreSessionBootstrap sessionBootstrap =
         new QuasselCoreSessionBootstrap(
-            stateObservations, networkManagement, sessionReader, this::onSessionEstablished);
+            stateObservations,
+            networkManagement,
+            sessionReader,
+            availabilityReasonByServer::remove,
+            setups,
+            reconnects);
     QuasselCoreSessionEstablisher sessionEstablisher =
         new QuasselCoreSessionEstablisher(
             socketConnector,
@@ -525,12 +530,5 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return lagProbes.lastMeasuredLagMs(serverId);
-  }
-
-  private void onSessionEstablished(String serverId) {
-    availabilityReasonByServer.remove(serverId);
-    setups.forget(serverId);
-    reconnects.reset(serverId);
-    reconnects.cancel(serverId, false);
   }
 }

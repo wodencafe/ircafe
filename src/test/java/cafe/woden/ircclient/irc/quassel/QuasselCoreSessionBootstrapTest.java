@@ -26,10 +26,13 @@ class QuasselCoreSessionBootstrapTest {
   private final QuasselCoreNetworkManagementCoordinator networks =
       mock(QuasselCoreNetworkManagementCoordinator.class);
   private final QuasselCoreSessionReader reader = mock(QuasselCoreSessionReader.class);
+  private final QuasselCoreSetupCoordinator setups = mock(QuasselCoreSetupCoordinator.class);
+  private final QuasselCoreReconnectCoordinator reconnects =
+      mock(QuasselCoreReconnectCoordinator.class);
   private final QuasselCoreDatastreamCodec codec = mock(QuasselCoreDatastreamCodec.class);
   private final ByteArrayOutputStream output = new ByteArrayOutputStream();
   private final List<String> trace = new ArrayList<>();
-  private final AtomicReference<Consumer<String>> established =
+  private final AtomicReference<Consumer<String>> availabilityCleared =
       new AtomicReference<>(ignored -> {});
   private final QuasselCoreSession session =
       new QuasselCoreSession(
@@ -48,14 +51,42 @@ class QuasselCoreSessionBootstrapTest {
           serverId -> {
             assertEquals("core", serverId);
             assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
-            trace.add("established");
-            established.get().accept(serverId);
-          });
+            trace.add("availability");
+            availabilityCleared.get().accept(serverId);
+          },
+          setups,
+          reconnects);
 
   @BeforeEach
   void configureSessionAndCollaborators() throws Exception {
     session.phase.set(QuasselSessionPhase.AUTHENTICATING);
     session.socketRef.set(mock(Socket.class));
+    doAnswer(
+            invocation -> {
+              assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
+              assertEquals("availability", trace.getLast());
+              verifyNoInteractions(reconnects, codec, networks, reader);
+              trace.add("forget setup");
+              return null;
+            })
+        .when(setups)
+        .forget("core");
+    doAnswer(
+            invocation -> {
+              assertEquals("forget setup", trace.getLast());
+              trace.add("reset reconnect");
+              return null;
+            })
+        .when(reconnects)
+        .reset("core");
+    doAnswer(
+            invocation -> {
+              assertEquals("reset reconnect", trace.getLast());
+              trace.add("cancel reconnect");
+              return null;
+            })
+        .when(reconnects)
+        .cancel("core", false);
     doAnswer(
             invocation -> {
               int networkId = invocation.getArgument(1);
@@ -79,7 +110,7 @@ class QuasselCoreSessionBootstrapTest {
     doAnswer(
             invocation -> {
               assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
-              assertTrue(trace.contains("established"));
+              assertEquals("cancel reconnect", trace.getLast());
               assertEquals("", invocation.getArgument(2));
               assertEquals(List.of(), invocation.getArgument(3));
               trace.add("init:" + invocation.getArgument(1));
@@ -113,13 +144,13 @@ class QuasselCoreSessionBootstrapTest {
     session.buffers.merge(new BufferInfoValue(99, 9, 0x02, -1, "#old"));
     session.networks.observe(9, "old");
     session.features.observeCapabilities(9, Map.of("capsEnabled", List.of("message-tags")));
-    established.set(
+    availabilityCleared.set(
         serverId -> {
           assertSame(auth, session.authResult.get());
           assertNull(session.buffers.get(99));
           assertSame(buffer, session.buffers.get(30));
           assertFalse(session.features.hasObservedCapabilities());
-          verifyNoInteractions(codec, networks, reader);
+          verifyNoInteractions(setups, reconnects, codec, networks, reader);
         });
     bootstrap.complete(session, auth);
     assertEquals(
@@ -129,7 +160,10 @@ class QuasselCoreSessionBootstrapTest {
             "observe:2",
             "observe:3",
             "buffer:#buffer-only:3",
-            "established",
+            "availability",
+            "forget setup",
+            "reset reconnect",
+            "cancel reconnect",
             "init:BufferSyncer",
             "network-init:2",
             "network-init:1",
@@ -142,6 +176,10 @@ class QuasselCoreSessionBootstrapTest {
     verify(networks).requestNetworkInitState(session, 3);
     verifyNoMoreInteractions(codec, networks);
     verify(reader).start(session);
+    verify(setups).forget("core");
+    verify(reconnects).reset("core");
+    verify(reconnects).cancel("core", false);
+    verifyNoMoreInteractions(setups, reconnects);
   }
 
   @ParameterizedTest
@@ -163,8 +201,8 @@ class QuasselCoreSessionBootstrapTest {
   }
 
   @Test
-  void networkInitSelectionUsesLiveStateAfterTheEstablishedCallback() throws Exception {
-    established.set(serverId -> session.networks.observe(7, "discovered"));
+  void networkInitSelectionUsesLiveStateAfterEstablishedBookkeeping() throws Exception {
+    availabilityCleared.set(serverId -> session.networks.observe(7, "discovered"));
     bootstrap.complete(session, auth());
     verify(networks).requestNetworkInitState(session, 2);
     verify(networks).requestNetworkInitState(session, 1);
@@ -182,14 +220,14 @@ class QuasselCoreSessionBootstrapTest {
         failure,
         assertThrows(IllegalStateException.class, () -> bootstrap.complete(session, auth())));
     assertEquals(QuasselSessionPhase.AUTHENTICATING, session.phase.get());
-    assertFalse(trace.contains("established"));
-    verifyNoInteractions(codec, networks, reader);
+    assertFalse(trace.contains("availability"));
+    verifyNoInteractions(setups, reconnects, codec, networks, reader);
   }
 
   @Test
   void bookkeepingFailureKeepsEstablishedPhaseAndStopsBeforeInitRequests() {
     var failure = new IllegalStateException("bookkeeping failed");
-    established.set(
+    availabilityCleared.set(
         serverId -> {
           throw failure;
         });
@@ -197,6 +235,31 @@ class QuasselCoreSessionBootstrapTest {
         failure,
         assertThrows(IllegalStateException.class, () -> bootstrap.complete(session, auth())));
     assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
+    verifyNoInteractions(setups, reconnects, codec, networks, reader);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"forget setup", "reset reconnect", "cancel reconnect"})
+  void cleanupFailureStopsLaterBookkeepingAndInitWithoutRollingBackEstablishedPhase(String stage) {
+    var failure = new IllegalStateException("cleanup failed");
+    switch (stage) {
+      case "forget setup" -> doThrow(failure).when(setups).forget("core");
+      case "reset reconnect" -> doThrow(failure).when(reconnects).reset("core");
+      case "cancel reconnect" -> doThrow(failure).when(reconnects).cancel("core", false);
+      default -> throw new AssertionError("Unknown stage");
+    }
+    assertSame(
+        failure,
+        assertThrows(IllegalStateException.class, () -> bootstrap.complete(session, auth())));
+    assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
+    var expected = new ArrayList<>(List.of("observe:2", "observe:1", "availability"));
+    if (!"forget setup".equals(stage)) expected.add("forget setup");
+    if ("cancel reconnect".equals(stage)) expected.add("reset reconnect");
+    assertEquals(expected, trace);
+    verify(setups).forget("core");
+    verify(reconnects, times("forget setup".equals(stage) ? 0 : 1)).reset("core");
+    verify(reconnects, times("cancel reconnect".equals(stage) ? 1 : 0)).cancel("core", false);
+    verifyNoMoreInteractions(setups, reconnects);
     verifyNoInteractions(codec, networks, reader);
   }
 
@@ -207,7 +270,7 @@ class QuasselCoreSessionBootstrapTest {
     doThrow(failure).when(codec).writeSignalProxyInitRequest(output, "BufferSyncer", "", List.of());
     assertSame(failure, assertThrows(IOException.class, () -> bootstrap.complete(session, auth())));
     assertEquals(QuasselSessionPhase.SESSION_ESTABLISHED, session.phase.get());
-    assertTrue(trace.contains("established"));
+    assertTrue(trace.contains("cancel reconnect"));
     verifyNoInteractions(networks, reader);
   }
 
@@ -233,7 +296,10 @@ class QuasselCoreSessionBootstrapTest {
         List.of(
             "observe:2",
             "observe:1",
-            "established",
+            "availability",
+            "forget setup",
+            "reset reconnect",
+            "cancel reconnect",
             "init:BufferSyncer",
             "network-init:2",
             "network-init:1"),
