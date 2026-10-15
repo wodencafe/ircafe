@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.BufferInfoValue;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec.UserTypeValue;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkCreateRequest;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest;
 import io.reactivex.rxjava3.core.Completable;
@@ -16,6 +17,9 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,14 +34,20 @@ class QuasselCoreNetworkManagementCoordinatorTest {
   private final ByteArrayOutputStream output = new ByteArrayOutputStream();
   private final List<Command> commands = new ArrayList<>();
   private final List<String> trace = new ArrayList<>();
+  private final List<Socket> writes = new ArrayList<>();
   private IOException writeFailure;
   private Consumer<Command> onCommand = ignored -> {};
   private final QuasselCoreSession session = session("core");
   private final QuasselCoreStateObservationCoordinator stateObservations =
       new QuasselCoreStateObservationCoordinator(
           mock(QuasselCoreTargetResolver.class), event -> trace.add(event.source()));
+  private final Map<String, QuasselCoreSession> sessions = new ConcurrentHashMap<>();
+  private final QuasselCoreSessionOperations operations =
+      new QuasselCoreSessionOperations(
+          new QuasselCoreSessionQueries(sessions::get, ignored -> "offline"),
+          mock(QuasselCoreInputCoordinator.class));
   private final QuasselCoreNetworkManagementCoordinator management =
-      new QuasselCoreNetworkManagementCoordinator(observations, stateObservations);
+      new QuasselCoreNetworkManagementCoordinator(observations, stateObservations, operations);
 
   @BeforeEach
   void configureTransport() throws Exception {
@@ -71,6 +81,58 @@ class QuasselCoreNetworkManagementCoordinatorTest {
         .thenReturn(Completable.complete());
     when(observations.whenIdentity(anyString(), anyLong(), any()))
         .thenReturn(Completable.complete());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"connect", "disconnect", "create", "update", "remove"})
+  void requestsResolveTheCurrentSessionOnIoForEverySubscription(String operation) {
+    var writer = new AtomicReference<Thread>();
+    onCommand = ignored -> writer.set(Thread.currentThread());
+    Completable request = request(operation, " core ");
+    assertTrue(commands.isEmpty());
+    assertTrue(writes.isEmpty());
+    verifyNoInteractions(codec, observations);
+
+    establish(session);
+    request.test().awaitDone(5, TimeUnit.SECONDS).assertComplete().assertNoErrors();
+    assertNotSame(Thread.currentThread(), writer.get());
+    var replacement = session("core");
+    replacement.socketRef.set(new Socket());
+    establish(replacement);
+    request.test().awaitDone(5, TimeUnit.SECONDS).assertComplete().assertNoErrors();
+
+    assertEquals(List.of(session.socketRef.get(), replacement.socketRef.get()), writes);
+    String slot =
+        switch (operation) {
+          case "connect" -> "requestConnect";
+          case "disconnect" -> "requestDisconnect";
+          case "create" -> "2createNetwork(NetworkInfo,QStringList)";
+          case "update" -> "requestSetNetworkInfo";
+          case "remove" -> "2removeNetwork(NetworkId)";
+          default -> throw new AssertionError("Unknown operation");
+        };
+    assertEquals(List.of(slot, slot), commands.stream().map(Command::slot).toList());
+    verifyNoInteractions(observations);
+  }
+
+  @Test
+  void failedRemovalReportsTheOriginalWriteFailureWithoutRetryOrClearingNetworkState() {
+    establish(session);
+    session.buffers.merge(new BufferInfoValue(11, 7, 2, -1, "#room"));
+    session.pendingReadMarkers.defer(11, 101);
+    writeFailure = new IOException("write failed");
+    management
+        .remove(" core ", "Home")
+        .test()
+        .awaitDone(5, TimeUnit.SECONDS)
+        .assertError(error -> error == writeFailure);
+    assertEquals(List.of(session.socketRef.get()), writes);
+    assertEquals("Home", session.networks.displayNames().get(7));
+    assertNotNull(session.buffers.get(11));
+    assertEquals(11, session.pendingReadMarkers.takeBufferForMessage(101));
+    assertTrue(commands.isEmpty());
+    assertTrue(trace.isEmpty());
+    verifyNoInteractions(codec, observations);
   }
 
   @ParameterizedTest
@@ -354,6 +416,26 @@ class QuasselCoreNetworkManagementCoordinatorTest {
     }
   }
 
+  private Completable request(String operation, String serverId) {
+    return switch (operation) {
+      case "connect" -> management.connect(serverId, "Home");
+      case "disconnect" -> management.disconnect(serverId, "Home");
+      case "create" -> management.create(serverId, create("New", 12));
+      case "update" -> management.update(serverId, "Home", update("Renamed", 12));
+      case "remove" -> management.remove(serverId, "Home");
+      default -> throw new AssertionError("Unknown operation");
+    };
+  }
+
+  private void establish(QuasselCoreSession established) {
+    established.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
+    established.networks.observe(7, "Home");
+    established.networks.observeState(7, Map.of("identity", 5));
+    established.identities.handleSync(
+        "5", List.of(Map.of("identityId", 5, "identityName", "Usable", "nicks", List.of("alice"))));
+    sessions.put("core", established);
+  }
+
   private QuasselCoreSession session(String serverId) {
     return new QuasselCoreSession(
         serverId,
@@ -361,6 +443,7 @@ class QuasselCoreNetworkManagementCoordinatorTest {
         "core.example",
         4242,
         (socket, operation) -> {
+          writes.add(socket);
           if (writeFailure != null) throw writeFailure;
           operation.write(codec, output);
         },

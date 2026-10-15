@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkCreateRequest;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkSummary;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest;
+import io.reactivex.rxjava3.core.Completable;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,8 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Coordinates network management against live session catalogs and existing command workflows. The
- * service validates the session and schedules calls on IO workers.
+ * Coordinates network management against live session catalogs and existing command workflows.
+ * Session operations resolve the current session and schedule requests on IO workers.
  */
 final class QuasselCoreNetworkManagementCoordinator {
   private static final Logger log =
@@ -28,12 +29,47 @@ final class QuasselCoreNetworkManagementCoordinator {
 
   private final QuasselCoreObservationMediator observations;
   private final QuasselCoreStateObservationCoordinator stateObservations;
+  private final QuasselCoreSessionOperations sessionOperations;
 
   QuasselCoreNetworkManagementCoordinator(
       QuasselCoreObservationMediator observations,
-      QuasselCoreStateObservationCoordinator stateObservations) {
+      QuasselCoreStateObservationCoordinator stateObservations,
+      QuasselCoreSessionOperations sessionOperations) {
     this.observations = Objects.requireNonNull(observations, "observations");
     this.stateObservations = Objects.requireNonNull(stateObservations, "stateObservations");
+    this.sessionOperations = Objects.requireNonNull(sessionOperations, "sessionOperations");
+  }
+
+  Completable connect(String serverId, String networkIdOrName) {
+    return sessionOperations.withEstablishedSession(
+        serverId,
+        "quassel connect network",
+        (ignored, session) -> connect(session, networkIdOrName));
+  }
+
+  Completable disconnect(String serverId, String networkIdOrName) {
+    return sessionOperations.withEstablishedSession(
+        serverId,
+        "quassel disconnect network",
+        (ignored, session) -> disconnect(session, networkIdOrName));
+  }
+
+  Completable create(String serverId, QuasselCoreNetworkCreateRequest request) {
+    return sessionOperations.withEstablishedSession(
+        serverId, "quassel create network", (ignored, session) -> create(session, request));
+  }
+
+  Completable update(
+      String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
+    return sessionOperations.withEstablishedSession(
+        serverId,
+        "quassel update network",
+        (ignored, session) -> update(session, networkIdOrName, request));
+  }
+
+  Completable remove(String serverId, String networkIdOrName) {
+    return sessionOperations.withEstablishedSession(
+        serverId, "quassel remove network", (ignored, session) -> remove(session, networkIdOrName));
   }
 
   void connect(QuasselCoreSession session, String networkIdOrName) throws Exception {

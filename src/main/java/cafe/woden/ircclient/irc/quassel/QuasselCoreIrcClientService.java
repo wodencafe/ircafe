@@ -120,8 +120,6 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
             });
     this.stateObservations =
         new QuasselCoreStateObservationCoordinator(targets, observations::observeNetwork);
-    this.networkManagement =
-        new QuasselCoreNetworkManagementCoordinator(observations, stateObservations);
     this.inputs =
         new QuasselCoreInputCoordinator(
             targets,
@@ -130,6 +128,9 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
     this.sessionQueries =
         new QuasselCoreSessionQueries(sessions::get, availabilityReasonByServer::get);
     this.sessionOperations = new QuasselCoreSessionOperations(sessionQueries, inputs);
+    this.networkManagement =
+        new QuasselCoreNetworkManagementCoordinator(
+            observations, stateObservations, sessionOperations);
     this.outboundSignals =
         new QuasselCoreOutboundSignalCoordinator(
             ircv3RuntimeSupport,
@@ -280,44 +281,29 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "quassel connect network",
-        (ignored, session) -> networkManagement.connect(session, networkIdOrName));
+    return networkManagement.connect(serverId, networkIdOrName);
   }
 
   @Override
   public Completable quasselCoreDisconnectNetwork(String serverId, String networkIdOrName) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "quassel disconnect network",
-        (ignored, session) -> networkManagement.disconnect(session, networkIdOrName));
+    return networkManagement.disconnect(serverId, networkIdOrName);
   }
 
   @Override
   public Completable quasselCoreCreateNetwork(
       String serverId, QuasselCoreNetworkCreateRequest request) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "quassel create network",
-        (ignored, session) -> networkManagement.create(session, request));
+    return networkManagement.create(serverId, request);
   }
 
   @Override
   public Completable quasselCoreUpdateNetwork(
       String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "quassel update network",
-        (ignored, session) -> networkManagement.update(session, networkIdOrName, request));
+    return networkManagement.update(serverId, networkIdOrName, request);
   }
 
   @Override
   public Completable quasselCoreRemoveNetwork(String serverId, String networkIdOrName) {
-    return sessionOperations.withEstablishedSession(
-        serverId,
-        "quassel remove network",
-        (ignored, session) -> networkManagement.remove(session, networkIdOrName));
+    return networkManagement.remove(serverId, networkIdOrName);
   }
 
   @Override
