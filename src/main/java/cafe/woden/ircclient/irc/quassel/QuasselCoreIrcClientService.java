@@ -270,11 +270,7 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
 
   @Override
   public List<QuasselCoreNetworkSummary> quasselCoreNetworks(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return List.of();
-    QuasselCoreSession session = sessions.get(sid);
-    if (session == null || session.socketRef.get() == null) return List.of();
-    return stateObservations.snapshot(session);
+    return sessionQueries.networks(serverId);
   }
 
   @Override
@@ -560,9 +556,5 @@ public class QuasselCoreIrcClientService implements IrcBackendRuntimeClientServi
   private static String configuredNick(IrcProperties.Server server) {
     String nick = Objects.toString(server.nick(), "").trim();
     return nick.isEmpty() ? "quassel-user" : nick;
-  }
-
-  private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
   }
 }

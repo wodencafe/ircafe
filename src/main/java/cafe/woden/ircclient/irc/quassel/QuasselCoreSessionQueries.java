@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc.quassel;
 
 import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkSummary;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -25,6 +27,14 @@ final class QuasselCoreSessionQueries {
     if (session == null || session.socketRef.get() == null) return Optional.empty();
     String nick = session.nicks.current();
     return nick.isEmpty() ? Optional.empty() : Optional.of(nick);
+  }
+
+  List<QuasselCoreNetworkSummary> networks(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return List.of();
+    QuasselCoreSession session = sessionLookup.apply(sid);
+    if (session == null || session.socketRef.get() == null) return List.of();
+    return session.networks.snapshot(session.authResult.get(), session.buffers.values());
   }
 
   String availabilityReason(String serverId) {

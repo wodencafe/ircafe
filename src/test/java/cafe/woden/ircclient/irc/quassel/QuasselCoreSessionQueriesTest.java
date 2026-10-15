@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreSession.QuasselSessionPhase;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort.QuasselCoreNetworkSummary;
 import java.net.Socket;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -103,6 +105,7 @@ class QuasselCoreSessionQueriesTest {
   @Test
   void missingSessionProducesEmptyNickAndNoEstablishedSession() {
     assertEquals(Optional.empty(), queries.currentNick("core"));
+    assertTrue(queries.networks("core").isEmpty());
     assertNull(queries.findEstablished("core"));
     assertFalse(queries.isEstablished("core"));
     assertFalse(queries.hasEstablished("core"));
@@ -123,6 +126,55 @@ class QuasselCoreSessionQueriesTest {
     assertEquals(Optional.of("alice"), queries.currentNick(" core "));
     session.socketRef.set(null);
     assertEquals(Optional.empty(), queries.currentNick("core"));
+    assertTrue(events.isEmpty());
+  }
+
+  @ParameterizedTest
+  @EnumSource(QuasselSessionPhase.class)
+  void networksUseTheSocketGateInEveryPhaseAndIncludeAuthenticationAndBufferMetadata(
+      QuasselSessionPhase phase) {
+    sessions.put("core", session);
+    session.phase.set(phase);
+    session.authResult.set(
+        new QuasselCoreAuthHandshake.AuthResult("core", 7, List.of(8, 7), Map.of()));
+    session.buffers.merge(new QuasselCoreDatastreamCodec.BufferInfoValue(99, 9, 2, -1, "#room"));
+    session.networks.observe(8, "Work");
+    events.clear();
+
+    var snapshot = queries.networks(" core ");
+    assertEquals(
+        List.of(7, 8, 9), snapshot.stream().map(QuasselCoreNetworkSummary::networkId).toList());
+    assertEquals("Work", snapshot.get(1).networkName());
+    assertThrows(UnsupportedOperationException.class, snapshot::clear);
+    session.socketRef.set(null);
+    assertTrue(queries.networks("core").isEmpty());
+    assertEquals(
+        3, session.networks.snapshot(session.authResult.get(), session.buffers.values()).size());
+    assertEquals(List.of("session:core", "session:core"), lookups);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  void networkReadsFollowUpdatesReplacementAndRemovalWithoutSharingOrRetainingSnapshots() {
+    sessions.put("core", session);
+    session.networks.observe(7, "Home");
+    var other = session("other");
+    other.networks.observe(8, "Other");
+    sessions.put("other", other);
+    var original = queries.networks("core");
+    session.networks.observe(7, "Renamed");
+    assertEquals("Home", original.getFirst().networkName());
+    assertEquals("Renamed", queries.networks("core").getFirst().networkName());
+
+    var replacement = session("replacement");
+    replacement.networks.observe(9, "Replacement");
+    sessions.put("core", replacement);
+    var current = queries.networks("core");
+    assertEquals(List.of(9), current.stream().map(QuasselCoreNetworkSummary::networkId).toList());
+    assertEquals("Replacement", current.getFirst().networkName());
+    sessions.remove("core");
+    assertTrue(queries.networks("core").isEmpty());
+    assertEquals("Other", queries.networks("other").getFirst().networkName());
     assertTrue(events.isEmpty());
   }
 
@@ -188,11 +240,11 @@ class QuasselCoreSessionQueriesTest {
   @ParameterizedTest
   @NullAndEmptySource
   @ValueSource(strings = {"   "})
-  void explicitEstablishedControlQueryRejectsBlankIdsBeforeLookingUpEvenAnEmptyKey(
-      String serverId) {
+  void controlQueriesRejectBlankIdsBeforeLookingUpEvenAnEmptyKey(String serverId) {
     sessions.put("", session);
     session.phase.set(QuasselSessionPhase.SESSION_ESTABLISHED);
     assertFalse(queries.hasEstablished(serverId));
+    assertTrue(queries.networks(serverId).isEmpty());
     assertTrue(lookups.isEmpty());
   }
 
